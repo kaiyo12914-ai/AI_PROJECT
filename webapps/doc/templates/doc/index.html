@@ -1,0 +1,312 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>公文撰擬輔助生成系統（雛型）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+
+  <!-- =========================================================
+    Mandatory
+    1) Django urls.py 不得包含 proxy prefix，Template 禁止硬寫 /djangoai
+    2) static/media 由 Django static/media 提供，不得自行拼 prefix
+    3) baseUrl 由 body[data-base-url] 注入 (request.script_name)
+    4) JS 不綁 DOMContentLoaded 於 module 內
+    5) incoming_sybase partial 由 template data-* 注入
+  ========================================================== -->
+
+  <link rel="stylesheet" href="{% static 'doc/css/doc_index.css' %}?v=20260225c">
+  <style>
+    /* 防止舊快取造成全頁遮罩殘留 */
+    #saveTplModalOverlay[aria-hidden="true"] { display: none !important; }
+    #saveTplModalOverlay[aria-hidden="false"] { display: flex !important; }
+  </style>
+
+  <script defer src="{% static 'portal/js/apiurl_factory.js' %}?v=20260302a"></script>
+  <script defer src="{% static 'doc/js/incoming_sybase.js' %}?v=20260302a"></script>
+  <script defer src="{% static 'doc/js/doc_index_templates.js' %}?v=20260302a"></script>
+  <script defer src="{% static 'doc/js/doc_index_editor.js' %}?v=20260312c"></script>
+  <script defer src="{% static 'doc/js/doc_index_bootstrap.js' %}?v=20260312c"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      var overlay = document.getElementById("saveTplModalOverlay");
+      if (!overlay) return;
+      overlay.setAttribute("aria-hidden", "true");
+      overlay.style.display = "none";
+    });
+  </script>
+</head>
+
+<body data-base-url="{{ app_base_url }}">
+  <div class="container">
+    <div class="page-head">
+      <h1>公文撰擬輔助生成系統（雛型）</h1>
+      <div class="loginbar right">
+        <span>歡迎：</span>
+        <span class="pill">
+          {% if request.login_user_name %}
+            {{ request.login_user_name }}
+          {% else %}
+            使用者
+          {% endif %}
+        </span>
+      </div>
+    </div>
+    <div class="subtitle"></div>
+
+    <div class="toolbar">
+      <div class="toolbar-group">
+      <!-- </div> -->
+      <!-- <div class="toolbar-divider" aria-hidden="true"></div> -->
+      <!-- <div class="toolbar-group"> -->
+        <input type="file" id="importTplFileInput" accept=".txt" style="display:none;">
+        <button id="btnOpenSybImport" class="primary" type="button">自公文系統轉入範例庫</button>
+        <button id="btnExportTplTxt" class="secondary" type="button">匯出範例 TXT</button>
+        <button id="btnImportTplFile" class="secondary" type="button">匯入範例 TXT</button>
+        <button id="btnReloadTemplates" class="secondary" type="button">重新載入範例庫</button>
+        <button id="btnCopyPrompt" class="secondary" type="button">複製 Prompt</button>
+        <button id="btnClearAll" class="danger" type="button">清除輸入</button>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div>
+        <h3 style="margin-top: 0px;margin-bottom: 0px;">來文及附件查詢（公文系統或個人下載檔案調閱擇一）</h3>
+        <div class="card">
+          {% include "doc/_incoming_sybase.html" %}
+          <textarea id="incomingText" style="display:none;" aria-hidden="true"></textarea>
+
+          <div style="margin-top:10px;">
+            <h3>來文及附件重點解析(個人檔案調閱)</h3>
+            <label class="muted">附件檔案重點解析（格式限DOCX / ODT / PDF）</label><br/>
+            <div class="row">
+              <input class="tight" type="file" id="attachInput" accept=".docx,.odt,.pdf" multiple>
+              <button class="secondary tight" id="btnParseAttach" type="button">解析附件</button>
+              <span class="muted" id="attachStatus"></span>
+            </div>
+          </div>
+
+          <div style="margin-top:10px;">
+            <label class="muted">附件內容（貼上附件文字亦可）</label>
+            <textarea id="attachmentsText" placeholder="可貼上附件文字內容..."></textarea>
+          </div>
+
+          <div id="focusPickWrap" class="focus-pick-wrap" style="display:none;">
+            <div class="focus-pick-head">
+              <label class="muted" style="margin:0;">重點勾選清單（生成時只納入勾選項目）</label>
+              <div class="focus-pick-actions">
+                <button id="btnFocusPickAll" class="secondary tight" type="button">全選</button>
+                <button id="btnFocusPickNone" class="secondary tight" type="button">全不選</button>
+              </div>
+            </div>
+            <div id="focusPickList" class="focus-pick-list"></div>
+            <div id="focusPickHint" class="muted"></div>
+          </div>
+
+          <div style="margin-top:10px;">
+            <label class="muted">重點解析提示詞（審閱用Prompt）</label>
+            <textarea id="promptFocusOut" placeholder="這裡會顯示重點解析用的 Prompt 內容..."></textarea>
+            <div class="download-area">
+              <button id="btnDownloadFocusPromptTxt" class="secondary" type="button">下載 Prompt TXT</button>
+              <button id="btnClearFocusPrompt" class="secondary" type="button">清除 Prompt</button>
+            </div>
+          </div>
+        </div>
+
+        <h3>創案公文選製</h3>
+        <div class="card">
+          <div>
+            <label class="muted">公文類型（勾選下列資訊後，右側會取用範例作為需求公文生成參考）</label>
+            <select id="docType">
+              <option value="sign_memo">簽呈</option>
+              <option value="order_draft">令</option>
+              <option value="submit_draft">呈</option>
+              <option value="letter_draft">函</option>
+              <option value="note">便籤</option>
+            </select>
+          </div>
+
+          <div style="margin-top:10px;">
+            <label class="muted">範例庫類別（請下拉選擇範例庫類別）</label>
+            <select id="tplScope">
+              <option value="">公開範例庫 + 個人範例庫</option>
+              <option value="public">公開範例庫</option>
+              <option value="personal">個人範例庫</option>
+            </select>
+            <!-- <div class="muted" style="margin-top:6px;">
+              個人範例庫需登入本 AI 輔助系統，未登入時會自動只顯示公開範例庫。
+            </div> -->
+          </div>
+
+          <div style="margin-top:10px;">
+            <label class="muted">業務類別（請下拉選擇業務類別）</label>
+            <select id="tagFilter">
+              <option value="">全部</option>
+            </select>
+          </div>
+
+          <!-- <div style="margin-top:10px;" class="muted">
+            勾選範例後，右側會取用範例作為需求公文生成參考。
+          </div> -->
+
+          <div style="margin-top:8px;" class="muted" id="exampleHint">已選擇 0 筆範例（建議 1~3 筆）</div>
+          <div id="tplList" style="margin-top:12px;"></div>
+        </div>
+
+        <h3>引用範例預覽</h3>
+        <div id="examplePreview" class="card preview-list">
+          <div class="muted">尚未選擇範例</div>
+        </div>
+
+
+        <h3>參考前案（曾下載公文可自行補充至範例庫）</h3>
+        <div class="card">
+          <label class="muted">
+            系統會依照此參考前案進行草稿生成；如需更多說明可在此補充。
+          </label>
+          <textarea
+            id="referenceText"
+            placeholder="主旨：...&#10;說明：...&#10;擬辦：..."
+            style="min-height:200px;"
+          ></textarea>
+
+          <div class="download-area">
+            <button id="btnSaveReferenceAsTemplate" class="secondary" type="button">存成範例（保存為範例）</button>
+            <span class="muted">此功能需登入，範例會存入個人範例庫。</span>
+          </div>
+        </div>
+
+        <h3>提示</h3>
+        <div class="card" style="font-size:14px; line-height:1.6;">
+          <ul style="padding-left:20px; margin:0;">
+            <li>AI 生成內容僅供參考，請自行審閱與修正。</li>
+            <li>建議先自公文系統轉入個人常用類案當範例。
+            <li>如有涉及專業用語或法規，請再次確認。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div>
+
+
+        <h3 style="margin-top: 0px;margin-bottom: 0px;">撰寫重點描述(個人擬案規劃要項補充)</h3>
+        <div class="card">
+          <div style="margin-bottom:10px;">
+            <label class="muted">生成文別（依選定文別簽擬）</label>
+            <select id="docTypeQuick">
+              <option value="sign_memo">簽呈</option>
+              <option value="order_draft">令</option>
+              <option value="submit_draft">呈</option>
+              <option value="letter_draft">函</option>
+              <option value="note">便籤</option>
+            </select>
+          </div>
+          <label class="muted">建議包含：主旨、背景、依據、辦法、經費、日期、期程、附件等</label>
+          <textarea id="requirement" placeholder="例：主旨：呈辦理本中心○○教育訓練計畫，請核示。"></textarea>
+
+          <div class="download-area">
+            <button id="btnGenerate" type="button">生成公文草稿</button>
+            <button id="btnCopyDraft" class="primary" type="button">複製草稿</button>
+          </div>
+        </div>
+
+        <h3>生成結果（公文草稿）</h3>
+        <div class="card">
+          <textarea id="docResult" placeholder="這裡會顯示生成的正式公文草稿..."></textarea>
+          <div class="download-area">
+            <button id="btnSaveDraftAsTemplate" class="secondary" type="button">存成範例（保存為範例）</button>
+            <button id="btnDownloadDraftTxt" class="secondary" type="button">下載草稿 TXT</button>
+            <button id="btnClearDraft" class="secondary" type="button">清除草稿</button>
+          </div>
+          <div class="muted" id="genMeta" style="margin-top:10px;"></div>
+        </div>
+
+        <h3>文稿生成提示詞（審閱用Prompt）</h3>
+        <div class="card">
+          <textarea id="promptOut" placeholder="這裡會顯示生成的 Prompt 內容..."></textarea>
+          <div class="download-area">
+            <button id="btnDownloadPromptTxt" class="secondary" type="button">下載 Prompt TXT</button>
+            <button id="btnClearPrompt" class="secondary" type="button">清除 Prompt</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div id="saveTplModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title">存成範例（保存為範例）</div>
+          <div class="mini" id="saveTplModalSub">範例將存入個人範例庫</div>
+        </div>
+        <button class="modal-close-x" id="btnCloseSaveTplModal" type="button">關閉</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="two-col">
+          <div class="field">
+            <label>標題（Title）</label>
+            <input id="saveTplTitle" class="input" placeholder="例：簽呈—資訊系統維運合約續約/重新招標範例">
+            <div class="mini">建議包含主旨與重點關鍵字。</div>
+          </div>
+
+          <div class="field">
+            <label>簡介（Description）</label>
+            <input id="saveTplDesc" class="input" placeholder="例：資訊系統維運合約續約/重新招標範例">
+            <div class="mini">可作為範例簡介與搜尋關鍵字。</div>
+          </div>
+        </div>
+
+        <div class="two-col" style="margin-top:10px;">
+          <div class="field">
+            <label>範例庫類別</label>
+            <select id="saveTplScope" class="input">
+              <option value="personal">個人範例庫</option>
+              <option value="public">公開範例庫</option>
+            </select>
+            <div class="mini">個人範例僅自己可見；公開範例會公開分享。</div>
+          </div>
+
+          <div class="field">
+            <label>衝突處理（on_conflict）</label>
+            <select id="saveTplConflict" class="input">
+              <option value="suffix">自動加尾碼（_1、_2...）</option>
+              <option value="overwrite">覆寫既有範例</option>
+            </select>
+            <div class="mini">公開範例請謹慎使用覆寫功能。</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>標籤（Tags）</label>
+          <div id="saveTplTagPills" class="tag-pills"></div>
+          <div class="mini">可多選或自訂標籤。</div>
+        </div>
+
+        <div class="field">
+          <label>自訂標籤（以分號分隔）</label>
+          <input id="saveTplCustomTags" class="input" placeholder="例：資訊;採購;合約">
+        </div>
+
+        <div class="field">
+          <label>內容預覽（content_text）</label>
+          <textarea id="saveTplContentPreview" style="min-height:180px;" readonly></textarea>
+          <div class="mini">此內容將作為範例文字保存。</div>
+        </div>
+
+        <div class="muted" id="saveTplHint" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="secondary" id="btnCancelSaveTpl" type="button">取消</button>
+        <button id="btnConfirmSaveTpl" type="button">確定</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

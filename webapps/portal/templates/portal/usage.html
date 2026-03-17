@@ -1,0 +1,116 @@
+{% load static %}
+{% load tz %}
+{% load portal_extras %}
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <title>Portal 使用紀錄</title>
+  <link rel="stylesheet" href="{% static 'portal/css/usage.css' %}">
+  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+</head>
+<body data-base-url="{{ request.script_name }}">
+<div class="wrap">
+  <h1>Portal 使用紀錄</h1>
+
+  <div class="cards">
+    <div class="card">
+      <h3>今日使用人數</h3>
+      <div class="kpi">{{ stats.today_user_count }}</div>
+      <div class="muted">日期：{{ stats.today }}</div>
+    </div>
+    <div class="card">
+      <h3>熱門功能 Top 5（今日）</h3>
+      <div class="muted">
+        {% for x in stats.top_programs|slice:":5" %}
+          <div><span class="pill">{{ x.program_code }}</span>　{{ x.cnt }}</div>
+        {% empty %}
+          <div class="muted">（尚無資料）</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <form method="get" style="margin-top:12px">
+    <div class="row">
+      <div>
+        <label>起日</label><br/>
+        <input name="date_from" value="{{ ui.date_from }}" placeholder="YYYY-MM-DD"/>
+      </div>
+      <div>
+        <label>迄日</label><br/>
+        <input name="date_to" value="{{ ui.date_to }}" placeholder="YYYY-MM-DD"/>
+      </div>
+      <div>
+        <label>人（姓名或關鍵字）</label><br/>
+        <input name="user_id" value="{{ ui.user_id }}" />
+      </div>
+      <div>
+        <label>功能（program_code）</label><br/>
+        <select name="program_code">
+          <option value="">（全部）</option>
+          {% for c in program_codes %}
+            <option value="{{ c }}" {% if ui.program_code == c %}selected{% endif %}>{{ c }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <button type="submit">查詢</button>
+        <a class="btn secondary" href="?">清除</a>
+        <a class="btn" href="export.xlsx?{{ request.GET.urlencode }}">一鍵匯出 Excel</a>
+      </div>
+    </div>
+    <div class="muted">總筆數：{{ total }}（每頁 {{ page_size }}）</div>
+  </form>
+
+  <table>
+    <thead>
+      <tr>
+        <th>時間</th>
+        <th>日期</th>
+        <th>功能</th>
+        <th>使用者</th>
+        <th>路徑</th>
+        <th>方法</th>
+        <th>IP</th>
+        <th>WhoAmI</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.created_at|localtime|date:"Y-m-d H:i:s" }}</td>
+        <td>{{ r.used_date }}</td>
+        <td><span class="pill">{{ r.program_code }}</span></td>
+        <td>
+          <a href="{% url 'portal:usage_user_acl' %}?user_id={{ r.user_id|urlencode }}{% if r.display_user_name %}&user_name={{ r.display_user_name|urlencode }}{% endif %}">
+            {{ r.display_user_name|default:"（姓名未註記）" }}
+          </a>
+        </td>
+        <td>{{ r.path }}</td>
+        <td>{{ r.method }}</td>
+        <td>{{ r.ip }}</td>
+        <td><a href="{% url 'portal:usage_whoami' %}?id={{ r.id }}">whoami</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8" class="muted">（無資料）</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="pager">
+    {% if has_prev %}
+      <a class="btn secondary" href="?{{ request.GET.urlencode|safe }}&page={{ page|add:"-1" }}">上一頁</a>
+    {% endif %}
+    <span class="muted">第 {{ page }} 頁</span>
+    {% if has_next %}
+      <a class="btn secondary" href="?{{ request.GET.urlencode|safe }}&page={{ page|add:"1" }}">下一頁</a>
+    {% endif %}
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,129 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <title>會議指裁事項擬答（RAG + LLM）</title>
+
+  <!-- ✅ 規範：CSS 外掛（static） -->
+  <link rel="stylesheet" href="{% static 'meetingreply/css/index.css' %}">
+
+  <!-- ✅ 規範：全專案共用 apiurl_factory（只讀 body.dataset.baseUrl） -->
+  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+</head>
+
+<!-- {# ============================================================
+✅ 專案規範（唯一真相）
+- 反代 prefix 一律由 <body data-base-url> 提供（request.script_name）
+- template 只提供「內部路徑」（不含反代 prefix、不 reverse、不依賴 url name）
+- JS 僅能：apiurl(path)
+============================================================ #} -->
+<body
+  data-base-url="{{ request.script_name|default:'' }}"
+  data-api-todo-path="meetingreply/api/todo_list/"
+  data-api-rag-path="meetingreply/api/rag_only/"
+  data-api-build-path="meetingreply/api/build_reply/"
+  data-env="{{ ENV_NAME|default:'' }}"
+  data-int-todo-url="{{ INT_TODO_URL|default:'' }}"
+  data-mock-todo-url="{% static 'meetingreply/mockMeetingItems.json' %}"
+>
+<div class="wrap">
+  <div class="card">
+    <h1>會議彙辦事項擬答（RAG + LLM 模式）</h1>
+    <div class="muted">
+      流程：1) 取得個人待辦清單 → 2) 指裁示事項 → 3) 參謀想法 → 4) 類案檢索（RAG 勾選） → 5) 產生詳答/簡答
+    </div>
+
+    <div class="sec">
+      <h2>1) 取得個人待辦清單</h2>
+      <div class="row">
+        <button id="btnTodoLoad" class="secondary" type="button">取得個人待辦清單</button>
+        <button id="btnTodoUse" class="ghost" type="button">帶入指裁示事項</button>
+      </div>
+      <div class="muted" style="margin-top:6px;" id="todoStatus"></div>
+      <div id="todoPickWrap" style="margin-top:8px;">
+        <label class="muted">待辦清單（選擇一筆）</label>
+        <select id="todoPick">
+          <option value="">（請選擇）</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2>2) 指裁示事項</h2>
+      <textarea id="directive" placeholder="請貼上裁示內容、會議結論、指示事項（必填）"></textarea>
+    </div>
+
+    <div class="sec">
+      <h2>3) 參謀想法（可空白）</h2>
+      <textarea id="staff" placeholder="請貼上參謀建議、分析想法、方案評估"></textarea>
+    </div>
+
+    <div class="sec">
+      <h2>4) 檢索類案清單並勾選（RAG 檢索）</h2>
+      <div class="row">
+        <input id="k" class="k" type="number" min="1" max="50" value="10" />
+        <button id="btnRag" class="secondary" type="button">執行 RAG 以往類案檢索</button>
+      </div>
+
+      <div id="ragStatus" class="status"></div>
+
+      <div class="picktools">
+        <div class="pickhead">
+          <div class="left">
+            <span class="pill">Hits: <b id="hitCount">0</b></span>
+            <span class="pill">Selected: <b id="selCount">0</b></span>
+            <span class="pill">Manual rule: <b>max2</b></span>
+          </div>
+          <div class="right">
+            <button id="btnSelectBest" class="ghost" type="button">勾選最適項（最多2筆）</button>
+            <button id="btnClearSel" class="ghost" type="button">清除勾選</button>
+          </div>
+        </div>
+
+        <div class="hint">
+          ✅ 請由下方勾選類案併入提示詞（未勾選則不注入類案）。
+        </div>
+
+        <div id="pickList" class="picklist">
+          <div class="muted">（尚未查詢）</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2>5) AI 擬答（會將您勾選的類案納入擬答；未勾選則以「參謀想法」為主擬答）</h2>
+      <div class="row">
+        <button id="btnGen" class="primary" style="flex:1;min-width:220px" type="button">產生 AI 擬答</button>
+      </div>
+
+      <div id="genStatus" class="status"></div>
+
+      <div class="tabs">
+        <div class="tab active" data-mode="long">詳答版（≤400字）</div>
+        <div class="tab" data-mode="short">簡要版（≤200字）</div>
+      </div>
+
+      <div id="genOut" class="box">（尚未生成）</div>
+
+      <details class="details">
+        <summary class="muted">RAG 勾選內容（debug用）</summary>
+        <pre id="ragInjected">（尚無）</pre>
+      </details>
+
+      <details class="details">
+        <summary class="muted">RAG 策略/勾選統計（debug用）</summary>
+        <pre id="ragMeta">（尚無）</pre>
+      </details>
+    </div>
+  </div>
+</div>
+
+<!-- ✅ 規範：JS 外掛（static + defer） -->
+<script defer src="{% static 'meetingreply/js/index.js' %}"></script>
+</body>
+</html>

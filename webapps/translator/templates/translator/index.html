@@ -1,0 +1,79 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>翻譯工具（免安裝版）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="stylesheet" href="{% static 'translator/css/index.css' %}">
+  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+</head>
+<body data-base-url="{{ request.script_name }}" data-pdfjs-src="{% static 'vendor/pdfjs/pdf.mjs' %}" data-pdfjs-worker="{% static 'vendor/pdfjs/pdf.worker.mjs' %}">
+  <div class="container">
+    <h1>翻譯工具（免安裝版）</h1>
+
+    <div class="toolbar">
+      <button id="btnTranslate">翻譯</button>
+      <button id="btnClear" class="secondary">清除內容</button>
+      <button id="btnResetAll" class="danger">重置全部</button>
+      <span class="badge">📄 支援 TXT/CSV/DOCX/PDF 匯入；TXT/CSV 匯出</span>
+    </div>
+
+    <div class="row">
+      <label>來源語言：</label>
+      <select id="sourceLang">
+        <option value="auto" selected>自動偵測</option>
+        <option value="zh">中文</option>
+        <option value="en">English</option>
+        <option value="ja">日本語</option>
+        <option value="ko">한국어</option>
+        <option value="vi">Tiếng Việt</option>
+      </select>
+
+      <label>目標語言：</label>
+      <select id="targetLang">
+        <option value="zh-Hant" selected>繁體中文</option>
+        <option value="zh-Hans">簡體中文</option>
+        <option value="en">English</option>
+        <option value="ja">日本語</option>
+        <option value="ko">한국어</option>
+        <option value="vi">Tiếng Việt</option>
+      </select>
+
+      <input type="file" id="fileInput" accept=".txt,.csv,.docx,.pdf" style="display:none;" />
+      <button id="btnImport" class="secondary">匯入檔案</button>
+      <button id="btnExportTxt" class="secondary">匯出 TXT</button>
+      <button id="btnExportCsv" class="secondary">匯出 CSV</button>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <label for="inputText"><b>原文輸入</b></label>
+        <textarea id="inputText" placeholder="貼上要翻譯的文字，或使用『匯入檔案』..."></textarea>
+        <div class="hint">
+          - DOCX：支援 .docx（不支援舊 .doc）<br>
+          - PDF：僅能抽取「文字型 PDF」；掃描影像型 PDF 需 OCR 才能抓字
+        </div>
+      </div>
+
+      <div class="card">
+        <label><b>翻譯結果</b></label>
+        <div class="outbox">
+          <pre id="outputText">（尚無結果）</pre>
+        </div>
+        <div id="status" class="status"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ✅ DOCX：mammoth -->
+  <script src="{% static 'vendor/mammoth/mammoth.browser.min.js' %}"></script>
+
+  <!-- ✅ PDF：pdf.js（你現在資料夾內是 pdf.mjs / pdf.worker.mjs） -->
+
+  <script type="module" src="{% static 'translator/js/index.js' %}"></script>
+</body>
+</html>

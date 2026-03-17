@@ -1,0 +1,56 @@
+{% load static %}
+<!-- webapps/excelproc/templates/excelproc/index.html -->
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+<title>ExcelProc｜人事資料處理</title>
+  <link rel="stylesheet" href="{% static 'excelproc/css/index.css' %}">
+  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+</head>
+
+<body data-base-url="{{ request.script_name }}" data-api-run-path="{% url 'excelproc:run' %}">
+  <!-- ✅ 讓 Django 下發 csrftoken cookie（給 JS 用） -->
+  <form style="display:none;">
+    {% csrf_token %}
+  </form>
+
+  <div class="wrap">
+    <h1>ExcelProc｜人事資料處理</h1>
+    <div class="muted">電話表比對更新／人事匯入／計資組人事匯出。完成後將直接下載報表。</div>
+
+    <div class="card">
+      <h3 style="margin:0 0 6px;">1) 電話表比對更新</h3>
+      <div class="row">
+        <input type="file" id="fCompare" accept=".xls,.xlsx,.xlsm" />
+        <button class="red" id="btnCompare">執行比對/更新</button>
+      </div>
+      <textarea id="oCompare" placeholder="結果..."></textarea>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 6px;">2) 人事資訊匯入（更新 CT_EMPLOY）</h3>
+      <div class="row">
+        <input type="file" id="fImport" accept=".xls,.xlsx,.xlsm" />
+        <button class="orange" id="btnImport">執行匯入</button>
+      </div>
+      <textarea id="oImport" placeholder="結果..."></textarea>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 6px;">3) 計資組人事資訊匯出</h3>
+      <div class="row">
+        <button class="secondary" id="btnExport">產生匯出檔</button>
+      </div>
+      <textarea id="oExport" placeholder="結果..."></textarea>
+    </div>
+  </div>
+  <script defer src="{% static 'excelproc/js/index.js' %}"></script>
+</body>
+</html>
+
+

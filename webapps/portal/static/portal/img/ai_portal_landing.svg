@@ -1,0 +1,93 @@
+﻿<svg class="portal-svg" viewBox="0 0 1280 820" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="portalTitle portalDesc" style="background:#ffffff;">
+  <title id="portalTitle">AI（雛形）輔助系統入口</title>
+  <desc id="portalDesc">中央面板與十個 AI 功能卡片入口</desc>
+
+  <defs>
+    <linearGradient id="flowGradientA" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#64b5f6" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#80cbc4" stop-opacity="0.15"/>
+    </linearGradient>
+    <linearGradient id="flowGradientB" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#90caf9" stop-opacity="0.32"/>
+      <stop offset="100%" stop-color="#a5d6a7" stop-opacity="0.14"/>
+    </linearGradient>
+    <filter id="panelShadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#9ea7b6" flood-opacity="0.22"/>
+    </filter>
+    <filter id="cardSoftGlow" x="-25%" y="-25%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#8aa0b6" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <style>
+    .portal-svg text { font-family: "Microsoft JhengHei", "Noto Sans TC", sans-serif; }
+    .bg { fill: #ffffff; opacity: 0; animation: bgFade 0.9s ease-out forwards; }
+    .flow-line { fill: none; stroke-width: 1.2; stroke-dasharray: 10 10; opacity: 0; }
+    .flow-a { stroke: url(#flowGradientA); animation: stream 8s linear infinite; }
+    .flow-b { stroke: url(#flowGradientB); animation: stream 8s linear infinite 2.2s; }
+    .dots circle { fill: #8eb9d9; opacity: 0.25; animation: dotPulse 3.2s ease-in-out infinite; }
+    .dots circle:nth-child(2n) { animation-delay: 0.9s; }
+    .dots circle:nth-child(3n) { animation-delay: 1.5s; }
+    .main-panel { fill: #f2f4f7; filter: url(#panelShadow); opacity: 0; transform-origin: center; animation: panelIn 0.75s cubic-bezier(0.2,0.9,0.25,1) 0.18s forwards; }
+    .title,.subtitle,.welcome-label,.welcome-pill,.welcome-name { opacity: 0; animation: textIn 0.7s ease-out 0.45s forwards; }
+    .title { font-size: 58px; font-weight: 700; fill: #273445; }
+    .subtitle { font-size: 26px; fill: #5f6f82; animation-delay: 0.55s; }
+    .welcome-label { font-size: 24px; fill: #4c6177; animation-delay: 0.65s; }
+    .welcome-pill { fill: #e5ecf7; animation-delay: 0.74s; }
+    .welcome-name { font-size: 20px; fill: #2d5fa8; animation-delay: 0.78s; }
+    .card { opacity: 0; transform-box: fill-box; transform-origin: center; animation: cardIn 0.56s cubic-bezier(0.22,1,0.34,1) forwards; }
+    .card-1 { animation-delay: 0.84s; } .card-2 { animation-delay: 0.91s; } .card-3 { animation-delay: 0.98s; }
+    .card-4 { animation-delay: 1.05s; } .card-5 { animation-delay: 1.12s; } .card-6 { animation-delay: 1.19s; }
+    .card-7 { animation-delay: 1.26s; } .card-8 { animation-delay: 1.33s; } .card-9 { animation-delay: 1.4s; }
+    .card-10 { animation-delay: 1.47s; }
+    .card-bg { filter: url(#cardSoftGlow); }
+    .card-title { font-size: 32px; font-weight: 700; fill: #ffffff; }
+    .card-sub { font-size: 24px; fill: #f3f8ff; }
+    .card-link .card { transition: transform 0.26s ease, filter 0.26s ease; }
+    .card-link:hover .card,.card-link:focus-visible .card { transform: translateY(-4px) scale(1.01); filter: brightness(1.05); }
+    .c-blue { fill: #2f7bda; } .c-blue2 { fill: #347bd6; } .c-green { fill: #1f8c59; } .c-blue3 { fill: #347bd6; }
+    .c-teal { fill: #20a6a8; } .c-blue4 { fill: #256fdf; } .c-red { fill: #df3246; } .c-orange { fill: #fb8113; }
+    .c-cyan { fill: #2ec09a; } .c-grayblue { fill: #6f7f95; }
+    @keyframes bgFade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes panelIn { from { opacity: 0; transform: translateY(8px) scale(0.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    @keyframes textIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes cardIn { from { opacity: 0; transform: translateY(16px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    @keyframes stream { 0% { opacity: 0; stroke-dashoffset: 120; } 20% { opacity: 0.55; } 90% { opacity: 0.1; } 100% { opacity: 0; stroke-dashoffset: 0; } }
+    @keyframes dotPulse { 0%,100% { opacity: 0.16; } 50% { opacity: 0.55; } }
+  </style>
+
+  <g id="layer-bg">
+    <rect class="bg" x="0" y="0" width="1280" height="820" fill="#ffffff" />
+    <path class="flow-line flow-a" d="M64 170 C 320 70, 620 130, 900 84 C 1070 56, 1190 92, 1240 156" fill="none" stroke="url(#flowGradientA)" stroke-width="1.2" />
+    <path class="flow-line flow-b" d="M40 720 C 290 662, 520 742, 770 702 C 986 668, 1110 732, 1248 684" fill="none" stroke="url(#flowGradientB)" stroke-width="1.2" />
+    <g class="dots"><circle cx="116" cy="128" r="4"/><circle cx="1190" cy="640" r="5"/><circle cx="1030" cy="104" r="3.5"/><circle cx="220" cy="712" r="3"/><circle cx="980" cy="724" r="2.8"/></g>
+  </g>
+
+  <g id="layer-panel" transform="translate(150,86)">
+    <rect class="main-panel" x="0" y="0" width="980" height="650" rx="28" fill="#f2f4f7" />
+    <g id="layer-header" transform="translate(490,104)">
+      <text class="title" x="0" y="0" text-anchor="middle">AI（雛形）輔助系統入口</text>
+      <text class="subtitle" x="0" y="46" text-anchor="middle">請選擇欲使用之系統功能</text>
+    </g>
+    <g id="layer-welcome" transform="translate(640,140)">
+      <text class="welcome-label" x="0" y="0">歡迎：</text>
+      <rect class="welcome-pill" x="56" y="-24" width="220" height="34" rx="17"/>
+      <text class="welcome-name" x="166" y="-2" text-anchor="middle">MPC-姚羿佑</text>
+    </g>
+
+    <g id="layer-cards" transform="translate(44,212)">
+      <a href="#" class="card-link"><g class="card card-1" transform="translate(0,0)"><rect class="card-bg c-blue" width="280" height="110" rx="12"/><text class="card-title" x="140" y="48" text-anchor="middle">翻譯工具</text><text class="card-sub" x="140" y="78" text-anchor="middle">中英 / 多語翻譯</text></g></a>
+      <a href="#" class="card-link"><g class="card card-2" transform="translate(306,0)"><rect class="card-bg c-blue2" width="280" height="110" rx="12"/><text class="card-title" x="140" y="48" text-anchor="middle">考績評量工具</text><text class="card-sub" x="140" y="78" text-anchor="middle">評語建議與文字優化</text></g></a>
+      <a href="#" class="card-link"><g class="card card-3" transform="translate(612,0)"><rect class="card-bg c-green" width="280" height="110" rx="12"/><text class="card-title" x="140" y="48" text-anchor="middle">指裁事項擬答</text><text class="card-sub" x="140" y="78" text-anchor="middle">RAG 輔助擬答</text></g></a>
+      <a href="#" class="card-link"><g class="card card-4" transform="translate(0,128)"><rect class="card-bg c-blue3" width="280" height="110" rx="12"/><text class="card-title" x="140" y="48" text-anchor="middle">簽文輔助系統</text><text class="card-sub" x="140" y="78" text-anchor="middle">公文、簽呈撰寫輔助</text></g></a>
+      <a href="#" class="card-link"><g class="card card-5" transform="translate(306,128)"><rect class="card-bg c-teal" width="280" height="110" rx="12"/><text class="card-title" x="140" y="48" text-anchor="middle">Vanna / SQL 問答</text><text class="card-sub" x="140" y="78" text-anchor="middle">智慧查詢</text></g></a>
+      <a href="#" class="card-link"><g class="card card-6" transform="translate(612,128)"><rect class="card-bg c-blue4" width="280" height="110" rx="12"/><text class="card-title" x="140" y="48" text-anchor="middle">截圖 → 文字檔</text><text class="card-sub" x="140" y="78" text-anchor="middle">圖表 / 流程圖轉文字</text></g></a>
+      <a href="#" class="card-link"><g class="card card-7" transform="translate(0,256)"><rect class="card-bg c-red" width="280" height="110" rx="12"/><text class="card-title" x="140" y="48" text-anchor="middle">PDF → TXT / DOCX</text><text class="card-sub" x="140" y="78" text-anchor="middle">PDF 轉文字 / Word</text></g></a>
+      <a href="#" class="card-link"><g class="card card-8" transform="translate(306,256)"><rect class="card-bg c-orange" width="280" height="110" rx="12"/><text class="card-title" x="140" y="48" text-anchor="middle">文字 → PPTX</text><text class="card-sub" x="140" y="78" text-anchor="middle">文字自動產生簡報</text></g></a>
+      <a href="#" class="card-link"><g class="card card-9" transform="translate(612,256)"><rect class="card-bg c-cyan" width="280" height="110" rx="12"/><text class="card-title" x="140" y="48" text-anchor="middle">語音 / 文字</text><text class="card-sub" x="140" y="78" text-anchor="middle">TTS / STT</text></g></a>
+      <a href="#" class="card-link"><g class="card card-10" transform="translate(0,384)"><rect class="card-bg c-grayblue" width="280" height="110" rx="12"/><text class="card-title" x="140" y="48" text-anchor="middle">Portal 使用紀錄</text><text class="card-sub" x="140" y="78" text-anchor="middle">使用紀錄查詢</text></g></a>
+    </g>
+  </g>
+</svg>
+
+

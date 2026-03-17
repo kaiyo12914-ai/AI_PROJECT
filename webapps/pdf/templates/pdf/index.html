@@ -1,0 +1,36 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <title>PDF → TXT / DOCX（OCR）</title>
+  <link rel="stylesheet" href="{% static 'pdf/css/index.css' %}">
+  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+</head>
+
+<body data-base-url="{{ request.script_name }}">
+  <div class="wrap">
+    <h1>PDF → TXT/DOCX（OCR 版）</h1>
+
+    <div class="muted">
+      文字型 PDF：抽字（快）｜掃描影像型 PDF：自動 OCR（較慢）。<br />
+      OCR 需安裝 Tesseract，並設定 TESSERACT_CMD。
+    </div>
+
+    <div class="row">
+      <input type="file" id="pdf" accept=".pdf" />
+      <button id="btnExtract">擷取</button>
+      <button id="btnTxt" class="secondary">下載 TXT</button>
+      <button id="btnDocx" class="secondary">下載 DOCX</button>
+    </div>
+
+    <div id="status"></div>
+    <textarea id="out" placeholder="擷取結果會顯示在這裡..."></textarea>
+  </div>
+  <script defer src="{% static 'pdf/js/index.js' %}"></script>
+</body>
+</html>

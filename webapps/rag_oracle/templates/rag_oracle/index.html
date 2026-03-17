@@ -1,0 +1,71 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <title>RAG（文件/知識庫）＋ 會議指裁事項擬答</title>
+  <link rel="stylesheet" href="{% static 'rag_oracle/css/index.css' %}">
+  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+</head>
+
+<!-- ✅ 專案規範：每頁掛 base-url（Django FORCE_SCRIPT_NAME / 反代前綴會反映在此） -->
+<body data-base-url="{{ request.script_name }}">
+<div class="wrap">
+  <div class="card">
+    <h1>會議指裁事項擬答（RAG 查詢）</h1>
+    <div class="muted">
+      流程：1) 輸入「指裁示事項」→ 2) 輸入「參謀想法」→ 3) 以指裁示事項做 RAG → 4) 產生簡要 / 詳答擬答。<br>
+      API：/rag/、/rag/health/、/rag/ask/（請先完成 rag_sync）
+    </div>
+
+    <div class="sec">
+      <h2>1) 指裁示事項（同時作為 RAG Query）</h2>
+      <textarea id="directive" placeholder="請貼上裁示內容、會議結論、指示事項（必填）"></textarea>
+    </div>
+
+    <div class="sec">
+      <h2>2) 參謀想法（可留空）</h2>
+      <textarea id="staff" placeholder="請貼上參謀建議、分析想法、方案評估"></textarea>
+    </div>
+
+    <div class="sec">
+      <h2>3) RAG 檢索結果</h2>
+      <div class="row">
+        <input id="k" class="k" type="number" min="1" max="50" value="10" />
+        <button id="btnRag" class="secondary">執行 RAG 檢索</button>
+      </div>
+      <div id="ragStatus" class="status"></div>
+      <div id="ragAns" class="box">（尚未查詢）</div>
+
+      <details>
+        <summary>sources（檢索結果 JSON）</summary>
+        <pre id="ragSrc">（尚無）</pre>
+      </details>
+    </div>
+
+    <div class="sec">
+      <h2>4) AI 擬答（使用 RAG sources）</h2>
+      <div class="row">
+        <button id="btnGen" class="primary" style="flex:1;min-width:220px">
+          產生 AI 擬答
+        </button>
+      </div>
+
+      <div id="genStatus" class="status"></div>
+
+      <div class="tabs">
+        <div class="tab active" data-mode="long">詳答版（≤400字）</div>
+        <div class="tab" data-mode="short">簡要版（≤120字）</div>
+      </div>
+
+      <div id="genOut" class="box">（尚未生成）</div>
+    </div>
+  </div>
+</div>
+  <script defer src="{% static 'rag_oracle/js/index.js' %}"></script>
+</body>
+</html>

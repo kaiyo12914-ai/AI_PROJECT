@@ -1,0 +1,40 @@
+[
+    {
+        "Target": "_blank",
+        "DeptCode": "EA",
+        "CaseID": "12697",
+        "Factory": "MPC",
+        "IsHandleManItem": false,
+        "From": "本中心114年第3季赴第209廠辦理主官一級督導一級<b style='color:blue'>(不定期)</b>",
+        "To": "F129195600",
+        "Title": "（三）購建固定資產\n1.查該廠高風險案項計「塗裝（聚?）設備」1案，其合約期已逾年度，已協調承商假日趕工並於11月15日前提前交貨，提請擇派專人盯辦，遇況立即妥處，務於年度內完成結案付款。\n2.該廠116年度規劃投資9000萬餘元，為歷年預算數之2-3倍，提請該廠應審視計畫合理性，預估寬放量，凡履約期超過210日曆天（工程案130工作天）投資案，應優先改以分年計畫辦理，俾降低執行風險；另請管制一旦同意建案，必戮力完成，不得隨意撤案。\n",
+        "NotifictionType": 8,
+        "TID": 21654,
+        "DeadlineDate": "2025-09-25T17:00:00",
+        "ReplyContent": "1.本組管制定期召開進度管制會議督管執行進度並要求需求部門主管列席提報，確保如期完成結案。\n2.賡續管制辦理各廠116年度投資計畫審查及彙整後，另案召會研討並呈局審辦。",
+        "Status": "計資組組長已審閱11409191306",
+        "NotifictionTypeName": "會議分辦",
+        "Type": "8",
+        "StatusType": 0,
+        "IsExpire": false
+    },
+    {
+        "Target": "_blank",
+        "DeptCode": "EA",
+        "CaseID": "12784",
+        "Factory": "MPC",
+        "IsHandleManItem": true,
+        "From": "固定資產管制會議<b style='color:blue'>(定期)</b>",
+        "To": "F129195600",
+        "Title": "本會議(<b>主席：兵工副主任</b>)指裁示事項有<b>25</b>項未結案，請於會後完成解管。(本項次於所有指裁示事項解管後消除)",
+        "NotifictionType": 8,
+        "TID": 12784,
+        "DeadlineDate": "2026-01-05T17:00:00",
+        "ReplyContent": "",
+        "Status": "辦況呈審中",
+        "NotifictionTypeName": "會議分辦",
+        "Type": "8",
+        "StatusType": 0,
+        "IsExpire": false
+    }
+]

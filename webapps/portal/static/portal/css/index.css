@@ -1,0 +1,293 @@
+﻿:root {
+  --bg: #ffffff;
+  --panel: #f2f4f7;
+  --text-main: #273445;
+  --text-sub: #5f6f82;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: #0b1e33;
+  background-image: url("../img/Digital-AI.png");
+  background-repeat: no-repeat;
+  background-position: center top;
+  background-size: contain;
+  image-rendering: auto;
+  font-family: "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+  color: var(--text-main);
+}
+
+.portal-stage {
+  width: min(1280px, 100vw);
+  margin: 0 auto;
+  padding: 12px 10px 24px;
+}
+
+.portal-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.portal-svg text {
+  font-family: "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+}
+
+.bg {
+  fill: var(--bg);
+  opacity: 0;
+}
+
+#bg-ai-image {
+  display: none;
+}
+
+.flow-line {
+  fill: none;
+  stroke-width: 1.2;
+  stroke-dasharray: 10 10;
+  opacity: 0;
+}
+
+.flow-a {
+  stroke: url(#flowGradientA);
+}
+
+.flow-b {
+  stroke: url(#flowGradientB);
+}
+
+.dots circle {
+  fill: #8eb9d9;
+  opacity: 0.25;
+}
+
+.dots circle:nth-child(2n) {
+  animation-delay: 0.9s;
+}
+
+.dots circle:nth-child(3n) {
+  animation-delay: 1.5s;
+}
+
+.title,
+.subtitle,
+#welcome-label,
+.welcome-label,
+.welcome-pill,
+.welcome-name {
+  opacity: 0;
+}
+
+.title {
+  font-size: 58px;
+  font-weight: 700;
+  fill: #ffd84d;
+}
+
+.subtitle {
+  font-size: 26px;
+  fill: #ffd84d;
+  animation-delay: 0.55s;
+}
+
+.welcome-label {
+  font-size: 24px;
+  fill: #ffd84d;
+  animation-delay: 0.65s;
+}
+
+.welcome-pill {
+  fill: #e5ecf7;
+  animation-delay: 0.74s;
+}
+
+.welcome-name {
+  font-size: 20px;
+  fill: #ffd84d;
+  animation-delay: 0.78s;
+}
+
+.card {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.card-1 { animation-delay: 0.84s; }
+.card-2 { animation-delay: 0.91s; }
+.card-3 { animation-delay: 0.98s; }
+.card-4 { animation-delay: 1.05s; }
+.card-5 { animation-delay: 1.12s; }
+.card-6 { animation-delay: 1.19s; }
+.card-7 { animation-delay: 1.26s; }
+.card-8 { animation-delay: 1.33s; }
+.card-9 { animation-delay: 1.40s; }
+.card-10 { animation-delay: 1.47s; }
+
+body.portal-animate #bg-ai-image {
+  animation: bgFade 1.2s ease-out forwards;
+}
+
+body.portal-animate .flow-a {
+  animation: stream 8s linear infinite;
+}
+
+body.portal-animate .flow-b {
+  animation: stream 8s linear infinite 2.2s;
+}
+
+body.portal-animate .dots circle {
+  animation: dotPulse 3.2s ease-in-out infinite;
+}
+
+body.portal-animate .title,
+body.portal-animate .subtitle,
+body.portal-animate #welcome-label,
+body.portal-animate .welcome-label,
+body.portal-animate .welcome-pill,
+body.portal-animate .welcome-name {
+  animation: textIn 0.7s ease-out 0.45s forwards;
+}
+
+body.portal-animate .card {
+  animation: cardIn 0.56s cubic-bezier(0.22, 1, 0.34, 1) forwards;
+}
+
+.card-bg {
+  filter: url(#cardSoftGlow);
+  stroke: rgba(255, 255, 255, 0.5);
+  stroke-width: 1.2;
+  fill: rgba(255, 255, 255, 0) !important;
+}
+
+.card-title {
+  font-size: 32px;
+  font-weight: 700;
+  fill: #ffd84d;
+}
+
+.card-title-tight {
+  font-size: 24px;
+}
+
+.card-sub {
+  font-size: 24px;
+  fill: #ffd84d;
+}
+
+.card-link .card {
+  transition: transform 0.26s ease, filter 0.26s ease;
+}
+
+.card-link:hover .card,
+.card-link:focus-visible .card {
+  transform: translateY(-4px) scale(1.01);
+  filter: brightness(1.05);
+}
+
+.card-link:focus-visible {
+  outline: none;
+}
+
+.c-blue { fill: rgba(47, 123, 218, 0); }
+.c-blue2 { fill: rgba(52, 123, 214, 0); }
+.c-green { fill: rgba(31, 140, 89, 0); }
+.c-blue3 { fill: rgba(52, 123, 214, 0); }
+.c-teal { fill: rgba(32, 166, 168, 0); }
+.c-blue4 { fill: rgba(37, 111, 223, 0); }
+.c-red { fill: rgba(223, 50, 70, 0); }
+.c-orange { fill: rgba(251, 129, 19, 0); }
+.c-cyan { fill: rgba(46, 192, 154, 0); }
+.c-grayblue { fill: rgba(111, 127, 149, 0); }
+
+@keyframes bgFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes panelIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes textIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes stream {
+  0% {
+    opacity: 0;
+    stroke-dashoffset: 120;
+  }
+  20% { opacity: 0.55; }
+  90% { opacity: 0.1; }
+  100% {
+    opacity: 0;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes dotPulse {
+  0%, 100% { opacity: 0.16; }
+  50% { opacity: 0.55; }
+}
+
+@media (max-width: 1024px) {
+  .portal-stage {
+    width: 100vw;
+    padding: 0;
+  }
+}
+
+
+
+
+
+/* Temporarily disable SVG effects */
+.flow-line, .dots { display: none !important; }
+.card-bg { filter: none !important; }
+* { animation: none !important; }
+
+
+.title,
+.subtitle,
+#welcome-label,
+.welcome-label,
+.welcome-pill,
+.welcome-name,
+.card {
+  opacity: 1 !important;
+}
+
+
+

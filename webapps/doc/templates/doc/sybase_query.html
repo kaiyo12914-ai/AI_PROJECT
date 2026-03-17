@@ -1,0 +1,341 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>公文查詢子程式</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+
+  <style>
+    :root {
+      --bg: #f4f6fb;
+      --surface: #ffffff;
+      --card: #f8fafc;
+      --line: #e5e7eb;
+      --line-soft: #d9e3f3;
+      --title: #1e3a8a;
+      --text: #111827;
+      --muted: #6b7280;
+      --accent: #2563eb;
+      --accent-strong: #1d4ed8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 1440px;
+      margin: 18px auto;
+      background: var(--surface);
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+      padding: 20px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+    .title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--title);
+      margin: 0 0 10px;
+      letter-spacing: 0.06em;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 13px;
+      margin: 0 0 12px;
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 100px 1fr 100px 1fr 100px;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .form-row label {
+      font-weight: 700;
+      color: #334155;
+    }
+    input[type="text"], input[type="number"], select, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 9px 10px;
+      font-size: 14px;
+      background: #fff;
+      color: var(--text);
+      font-family: inherit;
+    }
+    input[type="text"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
+      border-color: #93c5fd;
+      box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.35);
+      outline: none;
+    }
+    .input-limit {
+      width: 120px !important;
+      min-width: 120px;
+      max-width: 120px;
+      justify-self: start;
+    }
+    button {
+      appearance: none;
+      -webkit-appearance: none;
+      border: 1px solid #3b82f6;
+      background: #fff;
+      color: var(--accent);
+      border-radius: 999px;
+      padding: 10px 18px;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1.2;
+      font-family: inherit;
+      transition: transform 0.05s ease, box-shadow 0.1s ease, background 0.1s ease;
+    }
+    button.secondary {
+      background: #f8fafc;
+      color: var(--muted);
+      border: 1px solid var(--accent);
+      box-shadow: none;
+    }
+    button:hover {
+      background: #eff6ff;
+    }
+    button:active {
+      transform: translateY(1px);
+      box-shadow: none;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .status {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 6px;
+      white-space: pre-wrap;
+    }
+    .section-title {
+      margin: 0 0 8px;
+      font-size: 18px;
+      color: #111827;
+      font-weight: 700;
+      border-left: 4px solid var(--accent);
+      padding-left: 8px;
+    }
+    .tbl-wrap {
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 980px;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 6px 8px;
+      vertical-align: top;
+    }
+    th {
+      background: #edf2f8;
+      color: #193656;
+      text-align: left;
+      font-weight: 700;
+    }
+    .preview-box {
+      min-height: 180px;
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      background: #fafcff;
+    }
+    @media (max-width: 1100px) {
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+    }
+    @media (max-width: 768px) {
+      .wrap {
+        margin: 12px;
+        padding: 14px;
+      }
+      .title {
+        font-size: 20px;
+      }
+    }
+  </style>
+
+  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% static 'doc/js/sybase_query.js' %}?v=20260304b"></script>
+</head>
+<body data-base-url="{{ app_base_url }}" data-default-plant="{{ default_plant|default:'MPC' }}">
+  <div class="wrap">
+    <div class="card">
+      <h1 class="title">公文查詢子程式</h1>
+      <div class="sub">目前來源 IP：{{ client_ip }}</div>
+      {% if ip_debug_meta %}
+      <div class="sub" style="font-family:Consolas,monospace;white-space:pre-wrap;">
+        XFF={{ ip_debug_meta.HTTP_X_FORWARDED_FOR|default:"" }}
+        XRI={{ ip_debug_meta.HTTP_X_REAL_IP|default:"" }}
+        XOR={{ ip_debug_meta.HTTP_X_ORIGINAL_FOR|default:"" }}
+        REMOTE={{ ip_debug_meta.REMOTE_ADDR|default:"" }}
+        RESOLVED={{ ip_debug_meta.RESOLVED_CLIENT_IP|default:"" }}
+        POLICY={{ ip_debug_meta.POLICY_CLIENT_IP|default:"" }}
+      </div>
+      {% endif %}
+      {% if restricted_to_self %}
+      <div class="sub" style="color:#b42318;">目前 IP 不在白名單，查詢結果將限制為本人承辦資料。</div>
+      {% endif %}
+
+      <div class="form-row">
+        <label for="qGrsno">相關號</label>
+        <input id="qGrsno" type="text" placeholder="例如 1150000712" />
+        <label for="qSubject">主旨子字串</label>
+        <input id="qSubject" type="text" placeholder="例如 205" />
+        <button id="btnSearch" type="button">查詢</button>
+      </div>
+
+      <div class="form-row">
+        <label for="qLimit">筆數上限</label>
+        <input id="qLimit" class="input-limit" type="number" min="1" max="2000" value="300" />
+        <label for="qDaysAgo">迄今天數</label>
+        <select id="qDaysAgo" class="input-limit">
+          <option value="30" selected>30天</option>
+          <option value="60">60天</option>
+          <option value="90">90天</option>
+          <option value="180">180天</option>
+          <option value="">不限</option>
+        </select>
+        <span></span>
+      </div>
+
+      <div class="form-row">
+        <label for="qDocCategory">文件類別</label>
+        <select id="qDocCategory">
+          <option value="draft_docs">1. 查詢簽、稿主檔清單</option>
+          <option value="draft_attachments">2. 查詢簽、稿附件清單</option>
+          <option value="incoming_all">3. 查詢來文及附件清單</option>
+          <option value="all" selected>4. 全部併查</option>
+        </select>
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+
+      <div class="form-row">
+        <label for="qHandlerName">承辦人姓名</label>
+        <input id="qHandlerName" type="text" placeholder="例如 王小明" />
+        <label for="qPlant">廠別</label>
+        <select id="qPlant">
+          {% for plant in plants %}
+          <option value="{{ plant }}"{% if plant == default_plant or plant == 'MPC' and not default_plant %} selected{% endif %}>{{ plant }}</option>
+          {% endfor %}
+        </select>
+        <button id="btnClear" class="secondary" type="button">清除</button>
+      </div>
+      <div id="queryStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h2 class="section-title">查詢結果對照說明</h2>
+      <div class="sub" style="margin:0;">
+        1) 簽、稿主檔清單對應公文系統「文件種類 / 流程資訊」主體列（簽、呈、令、函、便籤）。<br>
+        2) 簽、稿附件清單對應公文系統「附件種類 / 附件檔名」區（非主體格式檔）。<br>
+        3) 來文主旨清單對應公文系統上方「電子來文」主旨 / 相關號資訊。<br>
+        4) 來文附件清單對應公文系統下方「電子來文附件」區。<br>        
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="section-title">1) 簽、稿主檔清單（DF BLOB）</h2>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>相關號</th>
+              <th>更新時間</th>
+              <th>承辦人</th>
+              <th>流程資訊</th>
+              <th>格式</th>
+              <th>主旨/摘要</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="tbDraftDocs"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="section-title">2) 簽、稿附件清單（DF BLOB）</h2>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>相關號</th>
+              <th>更新時間</th>
+              <th>承辦人</th>
+              <th>附件類型</th>
+              <th>檔名/摘要</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="tbDraftAttach"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="section-title">3) 來文主旨清單</h2>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>相關號</th>
+              <th>承辦人</th>
+              <th>主旨/案情摘要</th>
+              <th>附件數</th>
+            </tr>
+          </thead>
+          <tbody id="tbIncomingDocs"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="section-title">4) 來文附件清單（EF BLOB）</h2>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>相關號</th>
+              <th>主旨</th>
+              <th>附件檔名</th>
+              <th>頁數</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="tbIncomingAttach"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="section-title">BLOB 內容預覽</h2>
+      <textarea id="previewText" class="preview-box" placeholder="點選上方清單的「預覽」後，這裡會顯示擷取文字內容。" readonly></textarea>
+    </div>
+  </div>
+</body>
+</html>

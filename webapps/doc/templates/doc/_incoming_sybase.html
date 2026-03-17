@@ -1,0 +1,106 @@
+{# webapps/doc/templates/doc/_incoming_sybase.html #}
+{% load static %}
+{% load portal_extras %}
+
+<!-- {# ============================================================
+  規範重點（Mandatory）
+  1) 子模組（incoming_sybase）不得自行推導路由；端點一律由 template data-* 注入
+  2) partial 內不得自行綁 DOMContentLoaded / 不得內嵌初始化 script（避免重複初始化互相干擾）
+  3) incoming_sybase.js 不可在 partial 內重複載入；由 doc/index.html 統一 defer 載入一次
+  4) __KEY__/__TOKEN__ 僅做字串置換，不做 prefix 推導
+============================================================ #} -->
+
+<div
+  id="incomingSybase"
+  data-module="incomingSybase"
+  style="margin-bottom:10px;"
+
+  {# ✅ API URLs：全部由 Django reverse 產生；前端不可自行拼 prefix #}
+  data-lookup-url="{% url 'doc:incoming_lookup' %}"
+  data-files-url="{% url 'doc:incoming_files' %}"
+
+  {# ✅ 提供完整 template（含 __KEY__/__TOKEN__），JS 只做置換，不推導路由 #}
+  data-file-url-template="{% url 'doc:incoming_file_query' %}?attach_key=__KEY__"
+  data-blob-stash-url="{% url 'doc:api_sybase_blob_stash' %}"
+  data-blob-download-template="{% url 'doc:api_sybase_blob_download' token='__TOKEN__' %}"
+  data-todo-url="{% url 'doc:api_todo_lookup' %}"
+>
+  <label class="muted"></label>
+
+  <div class="card" style="margin:0 0 12px 0;">
+    <label class="muted">個人待辦公文查詢</label>
+    <div class="row" style="margin-top:6px;">
+      <button class="secondary tight todo-button" id="btnTodoLoad" type="button">取得個人待辦公文</button>
+      <input
+        type="text"
+        id="qTodoFilter"
+        class="input"
+        placeholder="可輸入相關號/主旨關鍵字"
+        autocomplete="off"
+      />
+    </div>
+
+    <div class="muted" style="margin-top:6px;" id="todoStatus"></div>
+
+    <div style="margin-top:8px;">
+      <label class="muted">待辦清單（選擇一筆）</label>
+      <select id="todoPick">
+        <option value="">（請選擇）</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:6px;">
+    <input
+      type="text"
+      id="qEmGrsno"
+      class="input"
+      placeholder="請輸入收文號碼，例如 1150001261"
+      inputmode="numeric"
+      autocomplete="off"
+    />
+
+    {# 相容欄位（已停用） #}
+    <input
+      type="text"
+      id="qEmSno"
+      class="input"
+      placeholder="（已停用）"
+      style="display:none;"
+      disabled
+      aria-hidden="true"
+    />
+
+    <button class="secondary tight" id="btnLookupIncoming" type="button">查詢附件</button>
+  </div>
+
+  <div class="muted" style="margin-top:6px;" id="incomingLookupStatus"></div>
+
+  <div style="margin-top:8px;">
+    <label class="muted">查詢結果（選擇一筆）</label>
+    <select id="incomingPick">
+      <option value="">（請選擇）</option>
+    </select>
+  </div>
+
+  <div id="incomingAttachBox" class="att-box" style="display:none;">
+    <div id="incomingAttachList" class="att-list">
+      <div class="muted">尚未載入附件</div>
+    </div>
+
+    <div class="download-area" style="margin-top:8px;">
+      <button class="secondary" id="btnStashIncomingAttachments" type="button">
+        勾選附件 → 解析附件
+      </button>
+    </div>
+  </div>
+
+  {# ✅ 規範：hidden token 欄位可放在 partial，供整頁共用（editor 會用 document.getElementById 讀取） #}
+  <input type="hidden" id="sybAttachTokens" value="" />
+
+  <!-- {# =========================================================
+     ✅ 規範：partial 不可重複載入 incoming_sybase.js，也不可內嵌初始化 script
+     - incoming_sybase.js 由 doc/index.html 統一 defer 載入一次
+     - 初始化由 doc_index_bootstrap.js -> editor.initIncomingSybaseOnce() 統一入口觸發
+     ========================================================= #} -->
+</div>

@@ -1,0 +1,45 @@
+{
+  "version": "1.0",
+  "source": "mock",
+  "owner_org": "生產製造中心",
+  "sql_example": {
+    "dialect": "sybase",
+    "query": "SELECT TOP 100 TM.TM_GRSNO, TM.TM_DATE, TM.TM_RSTP, TM.TM_SUBJ, TM.TM_PSID, TM.TM_NAME, TD.TD_SUBJ, TD.TD_PATH FROM mnda.dbo.DCS3_TRST_MST TM LEFT JOIN mnda.dbo.DCS3_TRST_DAT TD ON TM.TM_SNO = TD.TD_SNO WHERE TM.TM_PSID = :login_user AND (TM.TM_GRSNO LIKE :q OR TM.TM_SUBJ LIKE :q) ORDER BY TM.TM_DATE DESC",
+    "params": {
+      "login_user": "登入者帳號或身分證號",
+      "q": "%關鍵字%"
+    }
+  },
+  "items": [
+    {
+      "tm_grsno": "1150000712",
+      "subject": "呈本廠公務用無線掃描槍納管申請事宜，請鑒核。",
+      "from_org": "國防部軍備局生產製造中心第二○五廠",
+      "doc_type": "呈",
+      "doc_date": "中華民國115年1月9日",
+      "doc_no": "備二五策字第1150000426號",
+      "status": "待辦",
+      "assignee_idno": "A123456789"
+    },
+    {
+      "tm_grsno": "1150000810",
+      "subject": "設備管理作業規定補正事項說明",
+      "from_org": "國防部軍備局生產製造中心",
+      "doc_type": "函",
+      "doc_date": "中華民國115年1月12日",
+      "doc_no": "備製計資字第1150000810號",
+      "status": "待辦",
+      "assignee_idno": "A123456789"
+    },
+    {
+      "tm_grsno": "1150000999",
+      "subject": "修訂採購作業流程",
+      "from_org": "規格鑑測中心",
+      "doc_type": "函",
+      "doc_date": "中華民國115年1月20日",
+      "doc_no": "規鑑字第1150000999號",
+      "status": "待辦",
+      "assignee_idno": "B987654321"
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+AI 修正提示詞（依專案規範｜強制）
+
+你是一位 **Django + Reverse Proxy（IIS / Caddy）專案重構專家**。
+
+請依據本 ZIP 內以下文件 **強制修正所有程式碼**在打包修正程式碼為ZIP檔給我：
+
+- docs/專案規範.docx
+- 本檔案（AI_PROMPT.md）
+- MANIFEST.txt 所列之所有檔案
+
+--------------------------------------------------
+【一、總體目標（不可違反）】
+
+1. Django **urls.py 永遠不得包含 proxy prefix**（如 /djangoai）
+2. 前端 JavaScript **不得硬寫任何 proxy / node prefix**
+3. 全專案 **只能使用 document.body.dataset.baseUrl**
+4. 所有 API URL **必須透過 apiurl_factory() 組合**
+5. 禁止：
+   - window.__PROXY_PREFIX__
+   - window.__FORCE_SCRIPT_NAME__
+   - 自行拼接 request.path
+   - 在 JS / HTML 出現 "/djangoai"
+
+--------------------------------------------------
+【二、API URL 組合（唯一正確實作）】
+
+```javascript
+function apiurl_factory(path) {
+  const base = document.body.dataset.baseUrl || "";
+  if (!path.startsWith("/")) path = "/" + path;
+  return base + path;
+}
+
+

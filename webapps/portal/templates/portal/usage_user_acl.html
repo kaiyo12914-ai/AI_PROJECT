@@ -1,0 +1,55 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <title>Usage ACL 查詢</title>
+  <link rel="stylesheet" href="{% static 'portal/css/usage_user_acl.css' %}">
+</head>
+<body data-base-url="{{ request.script_name }}">
+<div class="wrap">
+  <h1>Usage ACL 查詢</h1>
+  <div class="muted">{% if user_name %}NAME：{{ user_name }}{% else %}（姓名未註記）{% endif %}</div>
+  {% if error %}
+    <div class="muted" style="color:#b91c1c;">查詢錯誤：{{ error }}</div>
+  {% endif %}
+
+  <h3 style="margin:12px 0 4px;">ACL 群組</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>GROUP_NAME</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for g in groups %}
+      <tr>
+        <td>{{ g.group_name }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="1" class="muted">查無群組</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3 style="margin:12px 0 4px;">Portal 可用子系統</h3>
+  {% if allowed_nodes %}
+    <div>
+      {% for n in allowed_nodes %}
+        <span class="pill">{{ n }}</span>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="muted">無可用子系統</div>
+  {% endif %}
+
+  <div style="margin-top:12px;">
+    <a class="btn" href="javascript:history.back();">返回</a>
+  </div>
+</div>
+</body>
+</html>

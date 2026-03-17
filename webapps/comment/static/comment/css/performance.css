@@ -1,0 +1,257 @@
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", sans-serif;
+  background: #f4f6fb;
+  margin: 0;
+  padding: 0;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 24px auto;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+  padding: 24px 28px 32px;
+}
+
+h1 {
+  margin-top: 0;
+  font-size: 24px;
+  text-align: center;
+  letter-spacing: 0.08em;
+  color: #1e3a8a;
+}
+
+h3 {
+  margin-top: 24px;
+  font-size: 18px;
+  border-left: 4px solid #2563eb;
+  padding-left: 8px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+button {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 14px;
+  cursor: pointer;
+  background: #2563eb;
+  color: white;
+  transition: transform 0.05s ease, box-shadow 0.1s ease;
+  box-shadow: 0 2px 4px rgba(37,99,235,0.3);
+}
+
+button.secondary {
+  background: #f8fafc;
+  color: #6b7280;
+  border: 1px solid #2563eb;
+  box-shadow: none;
+}
+
+button.danger {
+  background: #f09e9e;
+  box-shadow: 0 2px 4px rgba(239,68,68,0.3);
+}
+
+button:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+textarea {
+  width: 100%;
+  min-height: 120px;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  padding: 10px 12px;
+  font-size: 14px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.import-row {
+  margin-top: 8px;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 20px;
+}
+
+.card {
+  background: #f8fafc;
+  border-radius: 6px;
+  padding: 12px 14px;
+  border: 1px solid #e5e7eb;
+}
+
+.pill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.pill {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  background: white;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: black;
+}
+
+.pill:hover { transform: translateY(-1px); }
+
+.pill.selected {
+  background: #2f65da;
+  border-color: white;
+  color: white;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.inline-input {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+input[type="text"] {
+  flex: 1;
+  border-radius: 999px;
+  border: 1px solid #e5e7eb;
+  padding: 6px 10px;
+  font-size: 14px;
+}
+
+.student-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.student-btn {
+  background: white;
+  color: #2563eb;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid #e5e7eb;
+  box-shadow: none;
+}
+
+.student-btn.active {
+  background: #2563eb;
+  color: white;
+  border-color: #2563eb;
+}
+
+.preview-list {
+  max-height: 300px;
+  overflow-y: auto;
+  font-size: 14px;
+}
+
+.preview-item {
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: white;
+  margin-bottom: 6px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.download-area {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: rgba(37,99,235,0.1);
+  color: #2563eb;
+}
+
+.performance-grade {
+  margin: 4px !important;
+  font-size: 13px !important;
+  min-width: 70px !important;
+  text-align: center;
+}
+
+.passitive { background-color: rgba(34, 197, 94, 0.1); }
+.negitive { background-color: rgba(244, 63, 94, 0.1); }
+
+/* tabs */
+.tabs .tab-btn {
+  background: #f8fafc;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+  box-shadow: none;
+}
+.tabs .tab-btn.active {
+  background: #2563eb;
+  color: white;
+  border-color: #2563eb;
+}
+
+.hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #374151;
+}
+
+.center-actions {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.primary-wide {
+  width: 180px;
+}
+
+.mt-20 {
+  margin-top: 20px;
+}
+
+.note {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.note ul {
+  padding-left: 20px;
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .container { margin: 12px; padding: 16px; }
+  .grid-2 { grid-template-columns: minmax(0, 1fr); }
+}

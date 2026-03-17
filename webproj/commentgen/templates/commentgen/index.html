@@ -1,0 +1,1012 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>生製中心人員績效考核系統(雛型系統)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+    <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
+    <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+   <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", sans-serif;
+            background: #f4f6fb;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 24px auto;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+            padding: 24px 28px 32px;
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 24px;
+            text-align: center;
+            letter-spacing: 0.08em;
+            color: #1e3a8a; /* 萬用青色調 */
+        }
+
+        .military-badge {
+            display: inline-block;
+            background: linear-gradient(90deg, #1e3a8a 0%, #2563eb 100%);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-left: 8px;
+        }
+
+        h3 {
+            margin-top: 24px;
+            font-size: 18px;
+            border-left: 4px solid #2563eb; /* 較深的藍色 */
+            padding-left: 8px;
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+
+        button {
+            border: none;
+            border-radius: 999px;
+            padding: 6px 14px;
+            font-size: 14px;
+            cursor: pointer;
+            background: #2563eb; /* 萬用青色 */
+            color: white;
+            transition: transform 0.05s ease, box-shadow 0.1s ease;
+            box-shadow: 0 2px 4px rgba(37,99,235,0.3);
+        }
+
+        button.secondary {
+            background: #f8fafc;
+            color: #6b7280;
+            border: 1px solid #2563eb;
+            box-shadow: none;
+        }
+
+        button.danger {
+            background: #f09e9e;
+            box-shadow: 0 2px 4px rgba(239,68,68,0.3);
+        }
+
+        button:active {
+            transform: translateY(1px);
+            box-shadow: none;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 120px;
+            border-radius: 6px;
+            border: 1px solid #e5e7eb;
+            padding: 10px 12px;
+            font-size: 14px;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+            gap: 20px;
+        }
+
+        .card {
+            background: #f8fafc; /* 較淡的藍灰色 */
+            border-radius: 6px;
+            padding: 12px 14px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .pill-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .pill {
+            padding: 6px 12px;
+            border-radius: 999px;
+            border: 1px solid #e5e7eb;
+            background: white;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: black;
+        }
+
+        .pill:hover {
+            transform: translateY(-1px);
+        }
+
+        .pill.selected {
+            background: #2f65da;
+            border-color: white;
+            color: white;
+        }
+
+        .negative-trait {
+            background: #2563eb;
+            border-color: white;
+            color: white;
+        }
+
+        .special-trait {
+            background-color: #fffaf0 !important;
+            border-color: #fde68a !important;
+            color: #92400e !important;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .inline-input {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            border-radius: 999px;
+            border: 1px solid #e5e7eb;
+            padding: 6px 10px;
+            font-size: 14px;
+        }
+
+        .student-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .student-btn {
+            background: white;
+            color: #2563eb;
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 13px;
+            cursor: pointer;
+            border: 1px solid #e5e7eb;
+        }
+
+        .student-btn.active {
+            background: #2563eb;
+            color: white;
+            border-color: #2563eb;
+        }
+
+        .preview-list {
+            max-height: 300px;
+            overflow-y: auto;
+            font-size: 14px;
+        }
+
+        .preview-item {
+            padding: 8px 10px;
+            border-radius: 4px;
+            background: white;
+            margin-bottom: 6px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .download-area {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: 12px;
+            background: rgba(37,99,235,0.1);
+            color: #2563eb;
+        }
+
+        /* 績效評等特定樣式 */
+        .performance-grade {
+            margin: 4px !important;
+            font-size: 13px !important;
+            min-width: 70px !important;
+            text-align: center;
+        }
+
+        .passitive{
+            background-color: rgba(34, 197, 94, 0.1);
+        }
+
+        .negitive{
+            background-color: rgba(244, 63, 94, 0.1);
+        }
+        @media (max-width: 768px) {
+            .container {
+                margin: 12px;
+                padding: 16px;
+            }
+            .grid-2 {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+    </style>
+  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+</head>
+<body data-base-url="{{ request.script_name }}">
+<div class="container">
+    <h1>生製中心人員績效考核系統(雛型系統)</h1>
+
+    <!-- 上方工具列 -->
+    <div class="toolbar">
+        <button id="btnResetAll" class="danger">重置所有<i class="fas fa-redo-alt"></i></button>
+    </div>
+
+    <!-- 人員清單 & 人員按鈕 -->
+    <h3>人員列表</h3>
+    <textarea id="studentList" placeholder="例：&#10;1.王小明&#10;2.林小華&#10;3.陳小美"></textarea>
+    <div style="margin-top: 8px;">
+        <!-- 新增匯入按鈕 -->
+        <input type="file" id="importFileInput" accept=".txt,.csv" style="display: none;">
+        <button id="btnImportFile" class="secondary">匯入人員名單<i class="fas fa-file-import"></i></button>
+        <button id="btnGenerateStudents">生成人員按鈕</button>
+    </div>
+    <div id="studentButtons" class="student-buttons"></div>
+
+    <div class="grid-2">
+        <!-- 左側：特質選擇區 -->
+        <div>
+            <h3 class="section-header">
+                <span>評量維度選擇</span>
+                <button id="btnResetTraits" class="secondary">重置選擇</button>
+            </h3>
+
+            <!-- 分頁標籤 -->
+            <div id="tabs" class="pill-list">
+                <button class="tab-btn active" data-tab="all">所有維度</button>
+                <button class="tab-btn" data-tab="thought">思想</button>
+                <button class="tab-btn" data-tab="character">品德</button>
+                <button class="tab-btn" data-tab="performance">績效</button>
+                <button class="tab-btn" data-tab="ability">才能</button>
+                <button class="tab-btn" data-tab="knowledge">學識</button>
+                <button class="tab-btn" data-tab="special">其他</button>
+            </div>
+
+            <!-- 特質列表 -->
+            <div id="traitList" class="card pill-list"></div>
+
+            <h3 class="section-header">
+                <span>績效評等選擇</span>
+                <button id="btnResetPerformance" class="secondary">重置選擇</button>
+            </h3>
+            <div id="performanceGradeList" class="card pill-list"></div>
+
+            <h3 class="section-header">
+                <span>自訂評量指標（最多10項）</span>
+                <button id="btnClearCustomTraits" class="secondary">清除自訂</button>
+            </h3>
+            <div class="card">
+                <div class="inline-input">
+                    <input type="text" id="customTraitInput" placeholder="輸入自訂指標，例如：團隊合作">
+                    <button id="btnAddCustomTrait">新增</button>
+                </div>
+                <div id="customTraitList" class="pill-list"></div>
+                <div style="margin-top: 6px; font-size: 12px;">
+                    已新增：<span id="customTraitCount">0</span>/10
+                </div>
+            </div>
+
+            <h3 class="section-header">
+                <span>已選擇指標：</span>
+                <button id="btnClearSelectedTraits" class="secondary">清空選擇</button>
+            </h3>
+            <div id="selectedTraits" class="card pill-list"></div>
+
+            <div style="margin-top: 20px; display: flex; justify-content: center;">
+                <button id="btnGenerateComment" style="width: 180px;">生成評語</button>
+            </div>
+        </div>
+
+        <!-- 右側：評語預覽 & 下載 -->
+        <div>
+            <h3 class="section-header">
+                <span>評語預覽：</span>
+                <button id="btnClearComments" class="secondary">清除記錄</button>
+            </h3>
+            <div id="commentPreview" class="card preview-list"></div>
+
+            <h3 style="margin-top: 20px;">匯出選項</h3>
+            <div class="download-area">
+                <button id="btnDownloadTxt" class="secondary">匯出 TXT</button>
+                <button id="btnDownloadCsv" class="secondary">匯出 CSV</button>
+                <span class="badge">
+                    💾 考績表產生（待擴充）
+                </span>
+            </div>
+
+            <!-- 使用說明 -->
+            <h3 style="margin-top: 20px;">使用注意事項</h3>
+            <div class="card" style="font-size:14px; line-height:1.5;">
+                <ul style="padding-left:20px;">
+                    <li>評語為自動生成範本，需人工校核後使用</li>
+                    <li>請依實際考核情況選擇合適指標</li>
+                    <li>保持專業用語，避免主觀說法</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 維度數據
+    const thoughtCharacteristics = [
+        { name: "聰敏機靈", color: "#3b82f6" },
+        { name: "個性均衡", color: "#3b82f6" },
+        { name: "任事積極", color: "#3b82f6" },
+        { name: "思維活絡", color: "#3b82f6" },
+        { name: "樂觀進取", color: "#3b82f6" },
+        { name: "進取心強", color: "#3b82f6" },
+        { name: "主動向上", color: "#3b82f6" },
+        { name: "主動積極", color: "#3b82f6" },
+        { name: "具企圖心與朝氣活力", color: "#3b82f6" },
+        { name: "思慮周深", color: "#3b82f6" },
+
+        { name: "處事保守", color: "#f43f5e" },
+    ];
+
+    const characterCharacteristics = [
+        { name: "服從命令", color: "#3b82f6" },
+        { name: "貫徹命令", color: "#3b82f6" },
+        { name: "遵守規範", color: "#3b82f6" },
+        { name: "職業操守佳", color: "#3b82f6" },
+        { name: "人際關係佳", color: "#3b82f6" },
+        { name: "服從紀律", color: "#3b82f6" },
+        { name: "誠信與奉獻", color: "#3b82f6" },
+        { name: "負責盡職", color: "#3b82f6" },
+        { name: "謹守本份", color: "#3b82f6" },
+        { name: "為人忠厚木訥", color: "#3b82f6" },
+        { name: "認真負責", color: "#3b82f6" },
+        { name: "奉公守法", color: "#3b82f6" },
+        { name: "任勞任怨", color: "#3b82f6" },
+        { name: "待人誠懇踏實", color: "#3b82f6" },
+        { name: "和藹親切", color: "#3b82f6" },
+        { name: "個性剛直", color: "#f43f5e" },
+        { name: "主觀意識稍強", color: "#f43f5e" },
+        { name: "安份守己", color: "#3b82f6" },
+        { name: "遇事沉著", color: "#3b82f6" },
+        { name: "缺乏擔當", color: "#f43f5e" }
+    ];
+
+    const performanceCharacteristics = [
+        { name: "成果表現佳", color: "#3b82f6" },
+        { name: "績效卓越", color: "#3b82f6" },
+        { name: "工作效率高", color: "#3b82f6" },
+        { name: "圓滿達成任務", color: "#3b82f6" },
+        { name: "對命令全力貫徹", color: "#3b82f6" },
+        { name: "成效優異", color: "#3b82f6" },
+        { name: "本職學能優異", color: "#3b82f6" },
+        { name: "處事主動積極", color: "#3b82f6" },
+        { name: "作事態度欠積極", color: "#f43f5e" },
+        { name: "表現待加強", color: "#f43f5e" },
+        { name: "工作效率待加強", color: "#f43f5e" }
+    ];
+
+    const abilityCharacteristics = [
+        { name: "本職才能精湛", color: "#3b82f6" },
+        { name: "專業技術強", color: "#3b82f6" },
+        { name: "溝通能力佳", color: "#3b82f6" },
+        { name: "表達能力佳", color: "#3b82f6" },
+        { name: "解決問題能力", color: "#3b82f6" },
+        { name: "說服力強", color: "#3b82f6" },
+        { name: "參謀作業能力佳", color: "#3b82f6" },
+        { name: "業務嫻熟", color: "#3b82f6" },
+        { name: "思維縝密", color: "#3b82f6" },
+        { name: "反應敏捷", color: "#3b82f6" },
+        { name: "表達伶俐", color: "#3b82f6" },
+        { name: "協調能力佳", color: "#3b82f6" },
+        { name: "思慮清晰", color: "#3b82f6" },
+        { name: "個性較保守", color: "#f43f5e" },
+        { name: "表達能力待加強", color: "#f43f5e" },
+        { name: "應變能力待加強", color: "#f43f5e" },
+        { name: "協調能力欠圓融", color: "#f43f5e" },
+        { name: "體能待加強", color: "#f43f5e" }
+    ];
+
+    const knowledgeCharacteristics = [
+        { name: "學習能力佳", color: "#3b82f6" },
+        { name: "知識淵博", color: "#3b82f6" },
+        { name: "專業素養高", color: "#3b82f6" },
+        { name: "專業學養豐富", color: "#3b82f6" },
+        { name: "業務法律嫻熟", color: "#3b82f6" },
+        { name: "學有專長", color: "#3b82f6" },
+        { name: "主動學習進取", color: "#3b82f6" },
+        { name: "思維邏輯清晰", color: "#3b82f6" },
+        { name: "學習能力不足", color: "#f43f5e" },
+        { name: "專業素養不足", color: "#f43f5e" },
+        { name: "個人學識待精進", color: "#f43f5e" },
+        { name: "學習領域待拓展", color: "#f43f5e" },
+        { name: "理論與實務需更平衡", color: "#f43f5e" },
+        { name: "思維邏輯待加強", color: "#f43f5e" }
+    ];
+
+    const specialNotes = [
+        { name: "缺乏運動", color: "#f43f5e" },
+        { name: "應注意身心健康", color: "#f43f5e" },
+        { name: "應多安排休閒活動", color: "#3b82f6" },
+        { name: "缺乏生涯規劃", color: "#f43f5e" }
+    ];
+
+    // 績效評等選項
+    const performanceGrades = [
+        { name: "特優", color: "#3b82f6" },  // 綠色
+        { name: "優等", color: "#536dfa" },
+        { name: "甲上", color: "#22c55e" },  // 藍色
+        { name: "甲等", color: "#10b981"},
+        { name: "乙上", color: "#f43f5e" },  // 紅色
+        { name: "乙等", color: "#ef4444" }
+        { name: "丙等", color: RED }
+
+    ];
+
+    // 狀態管理
+    const state = {
+        traits: [...thoughtCharacteristics,
+                ...characterCharacteristics,
+                ...performanceCharacteristics,
+                ...abilityCharacteristics,
+                ...knowledgeCharacteristics,
+                ...specialNotes],
+        selectedTraits: new Set(),
+        customTraits: [],
+        comments: [],
+        currentStudent: null,
+        previewVisible: true,
+        activeTab: 'all',
+        performanceGrade: null // 績效評等狀態
+    };
+
+    // DOM 元素
+    const traitListEl = document.getElementById("traitList");
+    const selectedTraitsEl = document.getElementById("selectedTraits");
+    const customTraitListEl = document.getElementById("customTraitList");
+    const customTraitInputEl = document.getElementById("customTraitInput");
+    const customTraitCountEl = document.getElementById("customTraitCount");
+    const studentListEl = document.getElementById("studentList");
+    const studentButtonsEl = document.getElementById("studentButtons");
+    const commentPreviewEl = document.getElementById("commentPreview");
+
+    // 初始化
+    function init() {
+        renderTraits();
+        renderSelectedTraits();
+        renderPerformanceGrades(); // 渲染績效評等按鈕
+
+        // 綁定事件
+        document.getElementById("btnResetAll").addEventListener("click", resetAll);
+        document.getElementById("btnGenerateStudents").addEventListener("click", generateStudentButtons);
+        document.getElementById("btnAddCustomTrait").addEventListener("click", addCustomTrait);
+        document.getElementById("btnClearCustomTraits").addEventListener("click", clearCustomTraits);
+        document.getElementById("btnResetTraits").addEventListener("click", resetTraits);
+        document.getElementById("btnGenerateComment").addEventListener("click", async () => {await generateComment();});
+        document.getElementById("btnDownloadTxt").addEventListener("click", downloadTxt);
+        document.getElementById("btnDownloadCsv").addEventListener("click", downloadCsv);
+        document.getElementById('btnImportFile').addEventListener('click', importFile);
+        document.getElementById('importFileInput').addEventListener('change', handleFileUpload);
+
+        customTraitInputEl.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") addCustomTrait();
+        });
+
+        document.querySelectorAll('#tabs button').forEach(btn => {
+            btn.addEventListener('click', () => toggleTab(btn.getAttribute('data-tab')));
+        });
+    }
+
+    // 切換分頁
+    function toggleTab(tab) {
+        document.querySelectorAll('#tabs button').forEach(btn => btn.classList.remove('active'));
+        document.querySelector(`#tabs button[data-tab="${tab}"]`).classList.add('active');
+        state.activeTab = tab;
+        renderTraits();
+    }
+
+    // 渲染特質按鈕
+    function renderTraits() {
+        traitListEl.innerHTML = "";
+        let traitsToRender;
+
+        switch(state.activeTab) {
+            case 'thought': traitsToRender = thoughtCharacteristics; break;
+            case 'character': traitsToRender = characterCharacteristics; break;
+            case 'performance': traitsToRender = performanceCharacteristics; break;
+            case 'ability': traitsToRender = abilityCharacteristics; break;
+            case 'knowledge': traitsToRender = knowledgeCharacteristics; break;
+            case 'special': traitsToRender = specialNotes; break;
+            default: traitsToRender = state.traits;
+        }
+
+            traitsToRender.forEach(trait => {
+            const btn = document.createElement("button");
+            btn.className = "pill";
+
+            if (state.selectedTraits.has(trait.name)) {
+                // 選中時對調配色
+                btn.style.backgroundColor = trait.color === "#3b82f6" ? "#536dfa" :
+                                        trait.color === "#f43f5e" ? "#ef4444" : "#2563eb";
+                btn.style.color = "white"; // 白字
+            } else {
+                // 未選中時使用原有配色
+                btn.style.backgroundColor = trait.color + "1A";
+                btn.style.borderColor = trait.color;
+            }
+
+            btn.textContent = trait.name;
+            // btn.style.backgroundColor = trait.color + "1A"; // 更淡的色調用於背景            
+
+            // 在按鈕上顯示顏色
+            if (trait.color === "#3b82f6") {
+                btn.title = "正面特質";
+                btn.classList.add("passitive");
+            } else if (trait.color === "#f43f5e") {
+                btn.title = "負面特質，需注意改進";
+                btn.classList.add("negitive");
+            }
+
+            btn.addEventListener("click", () => toggleTrait(trait.name));
+            traitListEl.appendChild(btn);
+        });
+    }
+
+    // 切換特質選取
+    function toggleTrait(traitName) {
+        if (state.selectedTraits.has(traitName)) {
+            state.selectedTraits.delete(traitName);
+        } else {
+            state.selectedTraits.add(traitName);
+        }
+        renderTraits();
+        renderSelectedTraits();
+    }
+
+    // 渲染已選特質
+    function renderSelectedTraits() {
+        selectedTraitsEl.innerHTML = "";
+        if (state.selectedTraits.size === 0) {
+            const p = document.createElement("p");
+            p.textContent = "未選擇任何指標";
+            p.style.color = "#6b7280";
+            selectedTraitsEl.appendChild(p);
+            return;
+        }
+
+        // 顯示所有已選擇的特質，包括自訂特質
+        Array.from(state.selectedTraits).forEach(traitName => {
+            const traitObj = state.traits.find(t => t.name === traitName) ||
+                        { name: traitName, color: "#2563eb" }; // 如果是自訂特質，預設用藍色
+
+            const span = document.createElement("span");
+            // 在按鈕上顯示顏色
+            // if (trait.color === "#3b82f6") {
+            //     btn.title = "正面特質";
+            //     btn.classList.add("passitive");
+            // } else if (trait.color === "#f43f5e") {
+            //     btn.title = "負面特質，需注意改進";
+            //     btn.classList.add("negitive");
+            // }
+            span.className = "pill selected";
+            span.textContent = traitName;
+   
+        //    span.style.backgroundColor = "#2563eb"; // 統一設定為藍底
+        //    span.style.color = "white"; // 白字
+
+        //    if (traitObj.color === "#f43f5e") {
+        //        span.classList.add("negative-trait");
+                // 如果是負面特質，保持其黃色邊框（可選）
+        //        span.style.borderColor = traitObj.color + "1A"; // 更淡的黃色
+        //    }
+
+            span.style.marginRight = "8px";
+            selectedTraitsEl.appendChild(span);
+        });
+    }
+
+    // 渲染績效評等按鈕
+    function renderPerformanceGrades() {
+        const performanceListEl = document.getElementById("performanceGradeList");
+        performanceListEl.innerHTML = "";
+
+        performanceGrades.forEach(grade => {
+            const btn = document.createElement("button");
+            btn.className = "pill performance-grade";
+            btn.textContent = grade.name;
+            btn.style.backgroundColor = state.performanceGrade === grade.name ? "#2563eb" : grade.color + 20; // 選中時統一為藍底
+            btn.style.color = state.performanceGrade === grade.name ? "white" : ""; // 白字
+
+            if (state.performanceGrade === grade.name) {
+                btn.classList.add("selected");
+            }
+
+            btn.addEventListener("click", () => {
+                state.performanceGrade = grade.name;
+                renderPerformanceGrades();
+            });
+
+            performanceListEl.appendChild(btn);
+        });
+    }
+
+    // 切換特質選取
+    function toggleTrait(traitName) {
+        if (state.selectedTraits.has(traitName)) {
+            state.selectedTraits.delete(traitName);
+        } else {
+            state.selectedTraits.add(traitName);
+        }
+        renderTraits();
+        renderSelectedTraits();
+    }
+
+    // 重置績效評等
+    function resetPerformanceGrades() {
+        state.performanceGrade = null;
+        renderPerformanceGrades();
+    }
+
+    // 自訂特質功能
+    function addCustomTrait() {
+        const value = customTraitInputEl.value.trim();
+        if (!value) return;
+
+        if (state.customTraits.length >= 10) {
+            alert("自訂指標最多 10 個！");
+            return;
+        }
+
+        // 如果此特質已經存在，則不重複添加
+        if(state.traits.some(t => t.name === value)) {
+            alert("此指標已存在，請選擇其他特質！");
+            return;
+        }
+
+        state.customTraits.push({ name: value, color: "#2563eb" }); // 自訂特質預設用藍色
+        state.traits.push({ name: value, color: "#2563eb" }); // 將自訂特質添加到主特質列表
+
+        customTraitInputEl.value = "";
+        customTraitCountEl.textContent = state.customTraits.length.toString();
+        renderCustomTraits();
+        renderTraits(); // 重新渲染所有特質以反映最新狀態
+    }
+
+    function clearCustomTraits() {
+        // 從主特質列表移除所有自訂特質
+        state.traits = state.traits.filter(t => !state.customTraits.some(ct => ct.name === t.name));
+        state.customTraits = [];
+
+        customTraitCountEl.textContent = "0";
+        renderCustomTraits();
+        renderTraits(); // 重新渲染以移除自訂特質
+
+        // 清空已選中的自訂特質
+        const selectedToRemove = Array.from(state.selectedTraits).filter(t => state.customTraits.some(ct => ct.name === t));
+        if (selectedToRemove.length > 0) {
+            selectedToRemove.forEach(t => state.selectedTraits.delete(t));
+        }
+        renderSelectedTraits();
+    }
+
+    // 顯示自訂特質
+    function renderCustomTraits() {
+        customTraitListEl.innerHTML = "";
+        if (state.customTraits.length === 0) return;
+
+        state.customTraits.forEach((trait, index) => {
+            const span = document.createElement("span");
+            span.className = "pill";
+            span.textContent = trait.name;
+            span.title = `第 ${index + 1} 個自訂指標`;
+            customTraitListEl.appendChild(span);
+        });
+    }
+
+    // 人員按鈕功能
+    function generateStudentButtons() {
+        const lines = studentListEl.value.split("\n")
+                             .map(l => l.trim())
+                             .filter(Boolean);
+
+        if (lines.length === 0) {
+            alert("請輸入人員列表！");
+            return;
+        }
+
+        studentButtonsEl.innerHTML = "";
+        state.currentStudent = null;
+
+        lines.forEach(line => {
+            const btn = document.createElement("button");
+            btn.className = "student-btn";
+            btn.textContent = line;
+            btn.addEventListener("click", () => {
+                Array.from(studentButtonsEl.children).forEach(b =>
+                    b.classList.remove("active"));
+                state.currentStudent = line;
+                btn.classList.add("active");
+            });
+            studentButtonsEl.appendChild(btn);
+        });
+
+        if (lines.length > 0) {
+            const firstBtn = studentButtonsEl.firstElementChild;
+            if (firstBtn) {
+                state.currentStudent = lines[0];
+                firstBtn.classList.add("active");
+            }
+        }
+    }
+
+    // 生成評語（整合 LLM API）
+    async function generateComment() {
+        if (!state.currentStudent) {
+            alert("請先選擇人員！");
+            return;
+        }
+        if (state.selectedTraits.size === 0 && !state.performanceGrade) {
+            alert("請至少選擇一個維度或評等！");
+            return;
+        }
+
+        const traitsArr = Array.from(state.selectedTraits);
+        const namePart = state.currentStudent.split(".")[1] || state.currentStudent;
+
+        // 顯示 loading 狀態
+        const loadingItem = {
+            student: state.currentStudent,
+            comment: "⏳ 生成中，請稍候..."
+        };
+        state.comments.push(loadingItem);
+        renderComments();
+
+        try {
+            const traitsArr = Array.from(state.selectedTraits);
+            const grade = state.performanceGrade;
+
+            // 修改prompt建議
+            let performanceInfo = grade ? `績效評等: ${grade}` : "未指定績效評等";
+            const prompt = `
+                同仁姓名: ${namePart}
+                ${performanceInfo}
+                以下是同仁表現特質:
+                ${traitsArr.map(t => `- ${t}`).join("\n")}
+                將上述表現以軍事風格撰寫評語，字數嚴格限制不得超過80中文字。
+            `;
+
+            // 實際API呼叫
+            const response = await fetch("api/chat/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    prompt: prompt,
+                    max_tokens: 80, // 限制回應長度
+                    temperature: 0.7,
+                    presence_penalty: 1.2,
+                    frequency_penalty: 1.5
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`伺服器錯誤: ${response.status}`);
+            }
+
+            const data = await response.json();
+            loadingItem.comment = data.reply;
+            renderComments();
+
+        } catch (error) {
+            console.error("生成評語失敗:", error);
+            loadingItem.comment = `❌ 生成失敗: ${error.message}`;
+            renderComments();
+        }
+    }
+
+    // 渲染評語預覽
+    function renderComments() {
+        const emptyState = document.createElement("div");
+        emptyState.textContent = "目前尚無記錄";
+        emptyState.style.color = "#6b7280";
+
+        commentPreviewEl.innerHTML = "";
+        commentPreviewEl.appendChild(emptyState);
+
+        state.comments.forEach(({student, comment}) => {
+            const div = document.createElement("div");
+            div.className = "preview-item";
+
+            const header = document.createElement("header");
+            header.textContent = student;
+            header.style.fontWeight = "500";
+            header.style.marginBottom = "6px";
+
+            const content = document.createElement("pre");
+            content.textContent = comment;
+            content.style.whiteSpace = "pre-wrap";
+            content.style.maxWidth = "100%";
+            content.style.overflowX = "auto";
+
+            div.appendChild(header);
+            div.appendChild(content);
+
+            // 將新項目插入最上方
+            commentPreviewEl.insertBefore(div, emptyState.nextSibling);
+        });
+    }
+
+    // 文件匯出功能 - TXT
+    function downloadTxt() {
+        if (state.comments.length === 0) return alert("無記錄可匯出");
+
+        const lines = state.comments.map(c => `${c.student}\t${c.comment}`);
+        const blob = new Blob([lines.join("\n")], {type: "text/plain"});
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `人員考核評語_${new Date().toISOString().slice(0,10)}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        setTimeout(() => {
+            URL.revokeObjectURL(url);
+        }, 1000);
+    }
+
+    // 文件匯出功能 - CSV
+    function downloadCsv() {
+        if (state.comments.length === 0) return alert("無記錄可匯出");
+
+        const csvHeader = "\uFEFF";
+        const header = ["人員", "考核意見"];
+        const rows = state.comments.map(c => [
+            `"${c.student.replace(/"/g, '""')}"`,
+            `"${c.comment.replace(/"/g, '""').replace(/\n/g, ' ')}"`
+        ].join(","));
+
+        const csvContent = [csvHeader, header.join(","), ...rows].join("\n");
+        const blob = new Blob([csvContent], {type: "text/csv;charset=utf-8"});
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+
+        a.href = url;
+        a.download = `人員考核評語_${new Date().toISOString().slice(0,10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        setTimeout(() => {
+            URL.revokeObjectURL(url);
+        }, 1000);
+    }
+
+    // 重置所有功能
+    function resetAll() {
+        if (!confirm("確定要清除所有設定？")) return;
+
+        state.traits = [...thoughtCharacteristics,
+                      ...characterCharacteristics,
+                      ...performanceCharacteristics,
+                      ...abilityCharacteristics,
+                      ...knowledgeCharacteristics,
+                      ...specialNotes];
+        state.selectedTraits = new Set();
+        state.customTraits = [];
+        state.comments = [];
+        state.currentStudent = null;
+        state.performanceGrade = null; // 重置績效評等
+
+        studentListEl.value = "";
+        customTraitCountEl.textContent = "0";
+        renderCustomTraits();
+        renderTraits();
+        renderSelectedTraits();
+        renderPerformanceGrades(); // 渲染績效評等按鈕
+
+        generateStudentButtons();
+        commentPreviewEl.innerHTML = "<div style='color:#6b7280'>目前尚無記錄</div>";
+    }
+
+    // 重置維度選擇
+    function resetTraits() {
+        state.selectedTraits = new Set();
+        renderTraits();
+        renderSelectedTraits();
+    }
+
+    // 匯入人員名單功能
+    function importFile() {
+        document.getElementById('importFileInput').click();
+    }
+
+    function handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        let contentType = '';
+
+        switch (file.name.split('.').pop().toLowerCase()) {
+            case 'txt': contentType = 'text/plain'; break;
+            case 'csv':
+                contentType = 'text/csv';
+                if (!confirm('建議使用TXT格式檔案，是否繼續？')) return;
+                break;
+            default:
+                alert('不支援的檔案類型，請選擇.txt或.csv文件');
+                return;
+        }
+
+        reader.onload = function(e) {
+            const content = e.target.result;
+
+            if (contentType === 'text/csv') {
+                // 簡單處理CSV（假設每行一個人員）
+                const lines = content.split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0)
+                    .filter(line => !line.startsWith('座號')); // 忽略標題行
+
+                studentListEl.value = lines.join('\n');
+            } else {
+                // 驗證TXT內容格式
+                const lines = content.split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0);
+
+                studentListEl.value = content;
+            }
+
+            generateStudentButtons();
+        };
+
+        reader.onerror = function() {
+            alert('讀取檔案時出錯');
+        };
+
+        reader.readAsText(file);
+    }
+
+    // 清除記錄功能
+    function clearComments() {
+        if (!confirm("確定要清除所有評語記錄？")) return;
+        state.comments = [];
+        commentPreviewEl.innerHTML = "<div style='color:#6b7280'>目前尚無記錄</div>";
+    }
+
+    // 當頁面載入時初始化
+    window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

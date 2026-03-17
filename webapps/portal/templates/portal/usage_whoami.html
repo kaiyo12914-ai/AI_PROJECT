@@ -1,0 +1,57 @@
+{% load static %}
+{% load tz %}
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <title>WhoAmI 詳細</title>
+  <link rel="stylesheet" href="{% static 'portal/css/usage_user_acl.css' %}">
+</head>
+<body data-base-url="{{ request.script_name }}">
+<div class="wrap">
+  <h1>WhoAmI 詳細</h1>
+
+  {% if error %}
+    <div class="muted" style="color:#b91c1c;">{{ error }}</div>
+  {% endif %}
+
+  {% if row %}
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>時間</th>
+          <th>功能</th>
+          <th>使用者</th>
+          <th>路徑</th>
+          <th>方法</th>
+          <th>IP</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>{{ row.id }}</td>
+          <td>{{ row.created_at|localtime|date:"Y-m-d H:i:s" }}</td>
+          <td>{{ row.program_code }}</td>
+          <td>{{ row.user_name|default:row.user_id }}</td>
+          <td>{{ row.path }}</td>
+          <td>{{ row.method }}</td>
+          <td>{{ row.ip }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin:12px 0 6px;">whoami_json</h3>
+    <pre style="white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:10px;">{{ pretty_json }}</pre>
+  {% endif %}
+
+  <div style="margin-top:12px;">
+    <a class="btn" href="javascript:history.back();">返回</a>
+  </div>
+</div>
+</body>
+</html>

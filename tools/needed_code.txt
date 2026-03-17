@@ -1,0 +1,15 @@
+
+#必要
+webapps\portal\static\portal\js\apiurl_factory.js
+webapps\database\db_factory.py
+webapps\llm\llm_factory.py
+webapps\portal\middleware_proxy_prefix.py
+webapps\llm\views.py
+webapps\llm\services.py
+webapps\portal\templates\portal\index.html
+webapps\portal\urls.py
+webproj\settings.py
+webproj\urls.py
+
+
+webapps\doc

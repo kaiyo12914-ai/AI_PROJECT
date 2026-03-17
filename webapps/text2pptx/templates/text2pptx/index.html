@@ -1,0 +1,85 @@
+{% load static %}
+{% load portal_extras %}
+{# templates/pptx/index.html (或你實際路徑) #}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>TEXT → PPTX</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="stylesheet" href="{% static 'text2pptx/css/index.css' %}">
+  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+</head>
+
+
+<body data-base-url="{{ request.script_name }}">
+  <div class="wrap">
+    <div class="topbar">
+      <h1>TEXT → PPTX</h1>
+
+      {# ✅ 返回入口頁：有 named url 用 named，沒有就 fallback "/"；並自動吃 proxy prefix #}
+      <a class="backlink" href="{% url 'portal:home' %}">????</a>
+    </div>
+
+    <div class="hint">
+      使用規則：用 <b>===</b> 分隔投影片；每段 <b>第一行</b> 為標題，後面每行為條列內容。<br>
+      送出後會直接下載 PPTX。
+    </div>
+
+    {# ✅ action 必須吃 proxy prefix，避免反向代理下 post 到錯的路徑 #}
+    <form method="post" action="{% url 'pptx_generate' %}">
+      {% csrf_token %}
+
+      <div class="row">
+        <div>
+          <label>簡報名稱</label>
+          <input type="text" name="title" value="簡報" />
+          <div class="small">檔名會使用此名稱（自動加 .pptx）</div>
+        </div>
+
+        <div>
+          <label>選擇範本</label>
+          <select name="template">
+            <option value="">（預設範本）</option>
+            {% if templates %}
+              {% for t in templates %}
+                <option value="{{ t }}">{{ t }}</option>
+              {% endfor %}
+            {% endif %}
+          </select>
+          <div class="small">
+            請將 .pptx 範本放到 <b>pptx_templates/</b> 資料夾（專案根目錄），此處會自動列出。
+          </div>
+        </div>
+      </div>
+
+      <label>文字內容</label>
+      <textarea name="text" placeholder="例如：
+第一張：專案概述
+目的：提升效率
+範圍：XXX
+===
+第二張：時程
+W1：需求
+W2：開發
+W3：驗收"></textarea>
+
+      <button type="submit">產生 PPTX</button>
+    </form>
+
+    <div style="margin-top:18px;">
+      <div class="hint">範例：</div>
+      <div class="ex">第一張：專案概述
+目的：提升效率
+範圍：XXX
+===
+第二張：時程
+W1：需求
+W2：開發
+W3：驗收</div>
+    </div>
+  </div>
+</body>
+</html>

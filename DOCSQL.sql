@@ -1,0 +1,199 @@
+```sql
+/* 第一段：呈文本文清單 (Official Draft Main Text) */
+SELECT
+    TRIM(TO_CHAR(TM.TM_GRSNO)) AS GRSNO,
+    TM.TM_DATE                 AS DOC_DATE,
+    TM.TM_RSTP                 AS RSTP,
+    TRIM(TO_CHAR(TD.TD_SUBJ))  AS SUBJECT,
+    TRIM(TD.TD_PATH)           AS MAIN_PATH,
+    NVL(DBMS_LOB.GETLENGTH(DF.DF_DATA), 0) AS BLOB_SIZE
+FROM DCS3_TRST_MST TM
+JOIN DCS3_TRST_DAT TD
+  ON TM.TM_SNO = TD.TD_SNO
+LEFT JOIN DCS0_DOC_FILE DF
+  ON TRIM(DF.DF_PATH) = TRIM(TD.TD_PATH)
+WHERE TD.TD_FORMAT IN ('簽呈', '呈', '令', '函', '便籤')
+  AND TRIM(TO_CHAR(TM.TM_GRSNO)) = :keyword
+ORDER BY TM.TM_DATE DESC, TM.TM_RSTP DESC;
+```
+
+```sql
+/* 第二段：呈文附件清單 (Draft Attachments) */
+SELECT
+    TRIM(TO_CHAR(TM.TM_GRSNO)) AS GRSNO,
+    TRIM(TO_CHAR(DF.DF_NAME))  AS FILENAME,
+    TRIM(TD.TD_PATH)           AS ATTACH_KEY,
+    NVL(DBMS_LOB.GETLENGTH(DF.DF_DATA), 0) AS BLOB_SIZE
+FROM DCS3_TRST_MST TM
+JOIN DCS3_TRST_DAT TD
+  ON TM.TM_SNO = TD.TD_SNO
+JOIN DCS0_DOC_FILE DF
+  ON TRIM(DF.DF_PATH) = TRIM(TD.TD_PATH)
+WHERE TD.TD_FORMAT NOT IN ('簽呈', '呈', '令', '函', '便籤')
+  AND TRIM(TO_CHAR(TM.TM_GRSNO)) = :keyword;
+```
+
+```sql
+/* 第三段：來文清單及附件 (Incoming Docs & Attachments) */
+SELECT
+    TRIM(TO_CHAR(IM.IM_GRSNO)) AS GRSNO,
+    TRIM(TO_CHAR(IM.IM_SUBJ))  AS SUBJECT,
+    TRIM(TO_CHAR(EF.EF_NAME))  AS FILENAME,
+    TRIM(TO_CHAR(EF.EF_ID))    AS EF_ID,
+    TRIM(TO_CHAR(EF.EF_PAGE))  AS EF_PAGE,
+    NVL(DBMS_LOB.GETLENGTH(EF.EF_DATA), 0) AS BLOB_SIZE
+FROM DCS1_IN_MAST IM
+LEFT JOIN DCS1_EMAL_FILE EF
+  ON IM.IM_GRSNO = EF.EF_GRSNO
+WHERE TRIM(TO_CHAR(IM.IM_GRSNO)) = :keyword
+ORDER BY EF.EF_PAGE ASC;
+```
+
+建議再補一支「點擊下載單筆」SQL（真正取 BLOB）：
+- 呈文附件：`WHERE TRIM(DF.DF_PATH)=:path`
+- 來文附件：`WHERE EF.EF_ID=:ef_id`
+
+如果你要，我可以下一步直接幫你整成一個 DAO/Repository 版本（Java 或 C#）。
+```sql
+/* A. 點擊下載：呈文系統附件（DCS0_DOC_FILE） */
+SELECT
+    TRIM(TO_CHAR(DF.DF_NAME)) AS FILENAME,
+    DF.DF_DATA                AS BLOB_DATA,
+    NVL(DBMS_LOB.GETLENGTH(DF.DF_DATA), 0) AS BLOB_SIZE
+FROM DCS0_DOC_FILE DF
+WHERE TRIM(DF.DF_PATH) = TRIM(:path);
+```
+
+```sql
+/* B. 點擊下載：來文附件（DCS1_EMAL_FILE） */
+SELECT
+    TRIM(TO_CHAR(EF.EF_NAME)) AS FILENAME,
+    EF.EF_DATA                AS BLOB_DATA,
+    NVL(DBMS_LOB.GETLENGTH(EF.EF_DATA), 0) AS BLOB_SIZE
+FROM DCS1_EMAL_FILE EF
+WHERE TRIM(TO_CHAR(EF.EF_ID)) = TRIM(TO_CHAR(:ef_id));
+```
+
+可加強安全版（避免抓錯案）：
+
+```sql
+/* B-安全版：EF_ID + GRSNO 雙鍵 */
+SELECT
+    TRIM(TO_CHAR(EF.EF_NAME)) AS FILENAME,
+    EF.EF_DATA                AS BLOB_DATA,
+    NVL(DBMS_LOB.GETLENGTH(EF.EF_DATA), 0) AS BLOB_SIZE
+FROM DCS1_EMAL_FILE EF
+WHERE TRIM(TO_CHAR(EF.EF_ID))    = TRIM(TO_CHAR(:ef_id))
+  AND TRIM(TO_CHAR(EF.EF_GRSNO)) = TRIM(TO_CHAR(:keyword));
+```
+
+```sql
+/* 主旨子字串查詢（單一版，Oracle） */
+SELECT
+    'DRAFT_DOC' AS SRC_TYPE,
+    TRIM(TM.TM_GRSNO) AS GRSNO,
+    TM.TM_DATE        AS DOC_DATE,
+    TRIM(TM.TM_PSID)  AS PSID,
+    TRIM(TM.TM_NAME)  AS SENDER,
+    TRIM(TM.TM_RSTP)  AS FLOW_INFO,
+    TRIM(TD.TD_FORMAT) AS DOC_FORMAT,
+    TRIM(TD.TD_SUBJ)   AS SUBJECT,
+    TRIM(TD.TD_PATH)   AS ATTACH_KEY,
+    TRIM(DF.DF_NAME)   AS FILENAME,
+    CAST(NULL AS VARCHAR2(128)) AS EF_ID,
+    CAST(NULL AS VARCHAR2(32))  AS EF_PAGE,
+    NVL(DBMS_LOB.GETLENGTH(DF.DF_DATA), 0) AS BLOB_SIZE
+FROM DCS3_TRST_MST TM
+JOIN DCS3_TRST_DAT TD ON TM.TM_SNO = TD.TD_SNO
+LEFT JOIN DCS0_DOC_FILE DF ON TRIM(DF.DF_PATH) = TRIM(TD.TD_PATH)
+WHERE TD.TD_FORMAT IN ('簽呈', '呈', '令', '函', '便籤')
+  AND TRIM(TD.TD_SUBJ) LIKE :subject_like ESCAPE '\'
+
+UNION ALL
+
+SELECT
+    'DRAFT_ATTACH' AS SRC_TYPE,
+    TRIM(TM.TM_GRSNO) AS GRSNO,
+    TM.TM_DATE        AS DOC_DATE,
+    TRIM(TM.TM_PSID)  AS PSID,
+    TRIM(TM.TM_NAME)  AS SENDER,
+    TRIM(TM.TM_RSTP)  AS FLOW_INFO,
+    TRIM(TD.TD_FORMAT) AS DOC_FORMAT,
+    TRIM(TD.TD_SUBJ)   AS SUBJECT,
+    TRIM(TD.TD_PATH)   AS ATTACH_KEY,
+    TRIM(DF.DF_NAME)   AS FILENAME,
+    CAST(NULL AS VARCHAR2(128)) AS EF_ID,
+    CAST(NULL AS VARCHAR2(32))  AS EF_PAGE,
+    NVL(DBMS_LOB.GETLENGTH(DF.DF_DATA), 0) AS BLOB_SIZE
+FROM DCS3_TRST_MST TM
+JOIN DCS3_TRST_DAT TD ON TM.TM_SNO = TD.TD_SNO
+JOIN DCS0_DOC_FILE DF ON TRIM(DF.DF_PATH) = TRIM(TD.TD_PATH)
+WHERE TD.TD_FORMAT NOT IN ('簽呈', '呈', '令', '函', '便籤')
+  AND TRIM(TD.TD_SUBJ) LIKE :subject_like ESCAPE '\'
+
+UNION ALL
+
+SELECT
+    'INCOMING' AS SRC_TYPE,
+    TRIM(IM.IM_GRSNO) AS GRSNO,
+    CAST(NULL AS DATE) AS DOC_DATE,
+    TRIM(IM.IM_PSID)  AS PSID,
+    CAST(NULL AS VARCHAR2(128)) AS SENDER,
+    CAST(NULL AS VARCHAR2(128)) AS FLOW_INFO,
+    CAST(NULL AS VARCHAR2(64))  AS DOC_FORMAT,
+    TRIM(IM.IM_SUBJ)  AS SUBJECT,
+    CAST(NULL AS VARCHAR2(512)) AS ATTACH_KEY,
+    TRIM(EF.EF_NAME)  AS FILENAME,
+    TRIM(EF.EF_ID)    AS EF_ID,
+    TRIM(EF.EF_PAGE)  AS EF_PAGE,
+    NVL(DBMS_LOB.GETLENGTH(EF.EF_DATA), 0) AS BLOB_SIZE
+FROM DCS1_IN_MAST IM
+LEFT JOIN DCS1_EMAL_FILE EF ON TRIM(IM.IM_GRSNO) = TRIM(EF.EF_GRSNO)
+WHERE TRIM(IM.IM_SUBJ) LIKE :subject_like ESCAPE '\'
+
+ORDER BY GRSNO DESC, DOC_DATE DESC, SRC_TYPE, EF_PAGE;
+```
+
+說明（精簡）：
+1. 這是「主旨子字串」單一 SQL：把簽稿主檔、簽稿附件、來文附件合併成一個結果集。  
+2. 用 `SRC_TYPE` 區分來源：`DRAFT_DOC / DRAFT_ATTACH / INCOMING`。  
+3. `:subject_like` 建議傳 `%關鍵字%`，並先跳脫 `%`、`_`（因為用了 `ESCAPE '\'`）。  
+4. 此版不做去重；若要 UI 去重，依 `SRC_TYPE` 用不同 key 處理即可。
+
+
+常見原因就這幾個：
+
+1. 去重鍵設太粗  
+- 例如只用 `GRSNO` 或 `檔名` 去重，會把不同流程階段/不同附件誤合併。  
+- 正確應分區塊：  
+  - 本文：`GRSNO + DATE + RSTP + FORMAT + SUBJ + PATH`  
+  - 附件：`GRSNO + ATTACH_KEY(PATH)`  
+  - 來文附件：`EF_ID (+ PAGE/NAME)`。
+
+2. 用 `UNION` 不是 `UNION ALL`  
+- `UNION` 會自動去重，容易把本來應保留的列吃掉。  
+- 子字串查詢通常應先 `UNION ALL`，去重交給應用層依業務鍵做。
+
+3. 子字串比對欄位不一致  
+- 只在 `TD_SUBJ` 用 `LIKE`，但來文用 `IM_SUBJ` 沒同樣條件（或反過來），造成一邊有一邊沒。  
+- 三段條件必須一致。
+
+4. `%`、`_` 未跳脫  
+- 使用者輸入 `%` 或 `_` 被當萬用字元，會「過度命中」看起來像去重失真。  
+- 應用 `ESCAPE '\'` + 參數前處理跳脫。
+
+5. `LIKE` 放在錯誤階段  
+- 先強力去重/limit 再做主旨過濾，會漏資料。  
+- 應先過濾再分組/去重，或放大抓取後再回補。
+
+6. Oracle/Sybase 編碼與 TRIM 差異  
+- Oracle `CHAR` 補白未處理、Sybase 轉碼不一致，會造成「明明有資料但比對不到」。  
+- 需要一致 `TRIM(...)` 與正確字元解碼策略。
+
+7. 限筆截斷太早  
+- 先 `ROWNUM/TOP` 再做組裝去重，後面的有效命中已被截掉。  
+- 子字串查詢要先放大抓取，再按案例層級裁切。
+
+8. 空附件 JOIN 條件  
+- `LEFT JOIN`/`JOIN` 用錯，附件區可能被內連接過濾掉。  
+- 主文與附件區的 JOIN 需按需求分開設計。

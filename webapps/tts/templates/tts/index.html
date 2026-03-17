@@ -1,0 +1,95 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <title>TTS / STT 語音工具</title>
+  <link rel="stylesheet" href="{% static 'tts/css/index.css' %}">
+  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+</head>
+
+<!-- ✅ 專案規範：每頁掛 base-url（Django FORCE_SCRIPT_NAME / 反代前綴會反映在此） -->
+<body data-base-url="{{ request.script_name }}">
+<div class="wrap">
+  <header>
+    <div>
+      <h1>語音工具（TTS / STT）</h1>
+      <div class="sub">文字轉語音（Piper）與音檔轉文字（Whisper/其他 STT）— 內網可用</div>
+    </div>
+    <div class="row">
+      <span class="pill">TTS: <span class="mono">/tts/generate/</span></span>
+      <span class="pill">TTS檔案: <span class="mono">/tts/generate_from_file/</span></span>
+      <span class="pill">STT: <span class="mono">/tts/transcribe/</span></span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="card">
+      <h2>文字 → 語音（Text to Speech）</h2>
+
+      <div class="hint">輸入文字後點「產生語音」，系統會回傳 wav_url，並可直接播放。也可匯入 TXT/DOCX/PDF（後端抽字）。</div>
+      <div class="divider"></div>
+
+      <textarea id="ttsText" placeholder="請輸入要朗讀的文字（建議 1200 字以內）"></textarea>
+
+      <div class="row" style="margin-top:10px;">
+        <input id="ttsFile" type="file" accept=".txt,.docx,.pdf" style="display:none;" />
+        <button id="btnTtsImport" class="ghost">匯入檔案（TXT/DOCX/PDF）</button>
+        <span id="ttsFileName" class="small"></span>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <input id="ttsModel" type="text" placeholder="模型檔名（可空白，例：zh_CN-huayan-medium.onnx）" style="flex:1; min-width:260px;">
+        <button id="btnTts">產生語音</button>
+        <button id="btnTtsClear" class="ghost">清除</button>
+      </div>
+
+      <div class="row" style="margin-top:8px;">
+        <span class="small">字數：<span id="ttsCount">0</span></span>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="audioBox">
+        <audio id="audioPlayer" controls style="width:100%; display:none;"></audio>
+        <div id="ttsResult" class="mono"></div>
+      </div>
+
+      <div id="ttsStatus" class="status"></div>
+    </section>
+
+    <section class="card">
+      <h2>音檔 → 文字（Speech to Text）</h2>
+
+      <div class="hint">
+        上傳音檔（wav/mp3/m4a 皆可，依你的 STT 引擎支援為準），轉出文字後可匯出 TXT/DOCX。
+      </div>
+      <div class="divider"></div>
+
+      <div class="row">
+        <input id="sttFile" type="file" accept="audio/*" />
+        <button id="btnStt">開始轉文字</button>
+        <button id="btnSttClear" class="ghost">清除</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <textarea id="sttText" placeholder="轉出來的文字會顯示在這裡…"></textarea>
+
+      <div class="row" style="margin-top:10px;">
+        <button id="btnCopy" class="secondary">複製文字</button>
+        <button id="btnExportTxt" class="ghost">匯出 TXT</button>
+        <button id="btnExportDocx" class="ghost">匯出 DOCX</button>
+      </div>
+
+      <div id="sttStatus" class="status"></div>
+    </section>
+  </div>
+</div>
+  <script defer src="{% static 'tts/js/index.js' %}"></script>
+</body>
+</html>

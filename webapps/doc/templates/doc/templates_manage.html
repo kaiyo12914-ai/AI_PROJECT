@@ -1,0 +1,115 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>公文轉入範例庫維護</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+
+  <link rel="stylesheet" href="{% static 'doc/css/doc_index.css' %}">
+
+  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% static 'doc/js/incoming_sybase.js' %}"></script>
+  <script defer src="{% static 'doc/js/doc_index_templates.js' %}"></script>
+  <script defer src="{% static 'doc/js/doc_index_editor.js' %}"></script>
+  <script defer src="{% static 'doc/js/doc_index_bootstrap.js' %}"></script>
+</head>
+
+<body data-base-url="{{ app_base_url }}" class="templates-manage">
+  <div class="container">
+    <h1>公文轉入範例庫維護</h1>
+    <div class="subtitle">查詢公文系統相關號並轉入公文範例庫</div>
+
+    <div class="toolbar">
+      <div class="toolbar-group">
+        <a class="btn-link" href="{{ app_base_url }}/">返回公文系統</a>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div>
+        <h3>範例庫製作</h3>
+        <div class="card section-block section-sample">
+          <div class="sample-import-panel">
+            <div class="sample-import-head">
+              <button id="btnImportTplFromSybase" class="secondary control-h" type="button">由公文系統轉入範例</button>
+              <button id="btnImportTplSelected" class="control-h" type="button">匯入勾選項目</button>
+            </div>
+            <input
+              id="sybImportGrsno"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              placeholder="輸入公文系統相關號（例：1150000712）"
+              class="input control-h"
+            />
+            <div class="syb-import-types">
+              <div class="muted" id="sybImportSummary">尚未查詢。</div>
+              <div id="sybImportList" class="syb-import-list"></div>
+            </div>
+
+            <div class="inline-2-fixed" style="margin-top:10px;">
+              <div class="field-block">
+                <label class="muted">匯入範圍</label>
+                <select id="sybImportScope">
+                  <option value="public">公開範例</option>
+                  <option value="personal" selected>個人範例</option>
+                </select>
+              </div>
+              <div class="field-block">
+                <label class="muted">標籤</label>
+                <select id="sybImportTag">
+                  <option value="">（請選擇）</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="muted hint-row">
+              匯入後會寫入範例庫；若需公開，請於後台調整。
+            </div>
+          </div>
+
+          <div style="margin-top:14px;">
+            <label class="muted">範例庫範圍</label>
+            <select id="tplScope">
+              <option value="public">公開範例庫</option>
+              <option value="personal">個人範例庫</option>
+            </select>
+            <div class="muted" style="margin-top:6px;">
+              個人範例庫需登入，未登入時會自動顯示公開。
+            </div>
+          </div>
+
+          <div style="margin-top:10px;">
+            <label class="muted">標籤篩選</label>
+            <select id="tagFilter">
+              <option value="">資訊</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3>提示</h3>
+        <div class="card" style="font-size:14px; line-height:1.6;">
+          <ul style="padding-left:20px; margin:0;">
+            <li>請先輸入公文系統相關號後查詢。</li>
+            <li>可勾選多筆範例再匯入。</li>
+            <li>若要匯入公開範例，請先由後台授權。</li>
+          </ul>
+        </div>
+
+        <h3>匯入預覽</h3>
+        <div class="card syb-import-preview">
+          <div id="sybImportPreview" class="preview-list">
+            <div class="muted">請先輸入公文系統相關號後再查詢範例預覽。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,12 @@
+body{font-family:system-ui,"Microsoft JhengHei",sans-serif;background:#f6f7fb;margin:0}
+.wrap{max-width:980px;margin:28px auto;padding:0 16px}
+.card{background:#fff;border-radius:16px;box-shadow:0 6px 20px rgba(0,0,0,.08);padding:18px}
+input,textarea{width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:12px;box-sizing:border-box}
+textarea{min-height:160px;white-space:pre-wrap}
+button{background:#0d6efd;color:#fff;border:0;border-radius:12px;padding:10px 14px;cursor:pointer}
+button:disabled{opacity:.6;cursor:not-allowed}
+.muted{color:#6b7280;font-size:13px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+
+#pasteZone{border:2px dashed #cbd5e1;border-radius:12px;padding:14px;background:#f8fafc;text-align:center;cursor:pointer}
+#pasteZone.drag{background:#eef2ff}

@@ -1,0 +1,53 @@
+# Python
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.sqlite3
+manage.py
+*.pyc
+api/__pycache__
+
+# VS Code
+.vscode/
+.idea/
+# OpenClaw Workspace (Agent data)
+openclaw-workspace/memory/
+openclaw-workspace/*.jsonl
+openclaw-workspace/heartbeat-state.json
+# 如果您不想將長期記憶納入 Git，請取消註解下行
+# openclaw-workspace/MEMORY.md
+
+# OS generated files
+venv/
+env/
+venv3.12/
+ref/
+*.log
+*.tmp
+venv*/
+.venv/
+__pycache__/
+*.pyc
+
+
+# OS generated files
+.DS_Store  # Mac
+Thumbs.db  # Windows
+desktop.ini
+api/__pycache__/
+piper/
+
+piper/espeak-ng-data/en_dict
+venv3.12/**
+whispercpp/**
+staticfiles/**
+media/**
+
+# 壓縮檔
+*.ZIP
+*.rar
+# OpenClaw workspace
+openclaw-workspace/
+export_out/
+

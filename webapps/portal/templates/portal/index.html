@@ -1,0 +1,119 @@
+﻿{% load static %}
+{# webapps/portal/templates/portal/index.html #}
+{% load portal_extras %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>AI輔助系統功能入口</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="stylesheet" href="{% static 'portal/css/index.css' %}?v=20260317u">
+  <script defer src="{% static 'portal/js/apiurl_factory.js' %}?v=20260317d"></script>
+</head>
+<body data-base-url="{{ request.script_name }}">
+  {% allow "translator" as can_translator %}
+  {% allow "comment" as can_comment %}
+  {% allow "meetingreply" as can_meetingreply %}
+  {% allow "doc" as can_doc %}
+  {% allow "vanna" as can_vanna %}
+  {% allow "graph" as can_graph %}
+  {% allow "pdf" as can_pdf %}
+  {% allow "pptx" as can_pptx %}
+  {% allow "tts" as can_tts %}
+  {% allow "portal" as can_portal %}
+
+  <main class="portal-stage" aria-label="AI 入口首頁">
+    <svg class="portal-svg" viewBox="0 0 1280 820" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="portalTitle portalDesc">
+      <title id="portalTitle">AI（雛形）輔助系統入口</title>
+      <desc id="portalDesc">中央面板與十個 AI 功能卡片入口</desc>
+
+      <defs>
+        <linearGradient id="flowGradientA" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#64b5f6" stop-opacity="0.35"/>
+          <stop offset="100%" stop-color="#80cbc4" stop-opacity="0.15"/>
+        </linearGradient>
+        <linearGradient id="flowGradientB" x1="1" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#90caf9" stop-opacity="0.32"/>
+          <stop offset="100%" stop-color="#a5d6a7" stop-opacity="0.14"/>
+        </linearGradient>
+        <filter id="panelShadow" x="-20%" y="-20%" width="140%" height="160%">
+          <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#9ea7b6" flood-opacity="0.22"/>
+        </filter>
+        <filter id="cardSoftGlow" x="-25%" y="-25%" width="160%" height="180%">
+          <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#8aa0b6" flood-opacity="0.28"/>
+        </filter>
+      </defs>
+
+      <g id="layer-bg">
+        <path class="flow-line flow-a" d="M64 170 C 320 70, 620 130, 900 84 C 1070 56, 1190 92, 1240 156" fill="none" stroke="url(#flowGradientA)" stroke-width="1.2"/>
+        <path class="flow-line flow-b" d="M40 720 C 290 662, 520 742, 770 702 C 986 668, 1110 732, 1248 684" fill="none" stroke="url(#flowGradientB)" stroke-width="1.2"/>
+        <g class="dots">
+          <circle cx="116" cy="128" r="4"/>
+          <circle cx="1190" cy="640" r="5"/>
+          <circle cx="1030" cy="104" r="3.5"/>
+          <circle cx="220" cy="712" r="3"/>
+          <circle cx="980" cy="724" r="2.8"/>
+        </g>
+      </g>
+
+      <g id="layer-panel" transform="translate(150,86)">
+        
+        
+
+        <g id="layer-header" transform="translate(490,104)">
+          <text class="title" x="0" y="0" text-anchor="middle">AI（雛形）輔助系統入口</text>
+          <text class="subtitle" x="0" y="46" text-anchor="middle">請選擇系統入口</text>
+        </g>
+
+        <g id="layer-welcome" transform="translate(640,150)">
+          <text class="welcome-label" x="0" y="0">歡迎：</text>
+          <rect class="welcome-pill" x="56" y="-24" width="220" height="34" rx="17"/>
+          <text class="welcome-name" x="166" y="-2" text-anchor="middle">{% if request.login_user_name %}{{ request.login_user_name }}{% else %}（未取得姓名）{% endif %}</text>
+        </g>
+
+        <g id="layer-cards" transform="translate(44,212)">
+          {% if can_translator %}
+          <a href="{% url 'translator_page' %}" class="card-link" aria-label="翻譯工具"><g class="card-slot" transform="translate(0,0)"><g class="card card-1"><rect class="card-bg c-blue" width="280" height="110" rx="12"/><text class="card-title" x="140" y="48" text-anchor="middle">翻譯工具</text><text class="card-sub" x="140" y="78" text-anchor="middle">中英 / 多語翻譯</text></g></g></a>
+          {% endif %}
+          {% if can_comment %}
+          <a href="{% url 'comment:page_index' %}" class="card-link" aria-label="考績評量工具"><g class="card-slot" transform="translate(306,0)"><g class="card card-2"><rect class="card-bg c-blue2" width="280" height="110" rx="12"/><text class="card-title" x="140" y="48" text-anchor="middle">考績評量工具</text><text class="card-sub" x="140" y="78" text-anchor="middle">評語建議與文字優化</text></g></g></a>
+          {% endif %}
+          {% if can_meetingreply %}
+          <a href="{% url 'meetingreply:page' %}" class="card-link" aria-label="指裁事項擬答"><g class="card-slot" transform="translate(612,0)"><g class="card card-3"><rect class="card-bg c-green" width="280" height="110" rx="12"/><text class="card-title" x="140" y="48" text-anchor="middle">指裁事項擬答</text><text class="card-sub" x="140" y="78" text-anchor="middle">RAG 輔助擬答</text></g></g></a>
+          {% endif %}
+          {% if can_doc %}
+          <a href="{% url 'doc:doc_page' %}" class="card-link" aria-label="簽文輔助系統"><g class="card-slot" transform="translate(0,128)"><g class="card card-4"><rect class="card-bg c-blue3" width="280" height="110" rx="12"/><text class="card-title" x="140" y="48" text-anchor="middle">簽文輔助系統</text><text class="card-sub" x="140" y="78" text-anchor="middle">公文、簽呈撰寫輔助</text></g></g></a>
+          {% endif %}
+          {% if can_vanna %}
+          <a href="http://mpcai.mpc.mil.tw:8084" class="card-link" aria-label="Vanna SQL 問答"><g class="card-slot" transform="translate(306,128)"><g class="card card-5"><rect class="card-bg c-teal" width="280" height="110" rx="12"/><text class="card-title" x="140" y="48" text-anchor="middle">Vanna / SQL 問答</text><text class="card-sub" x="140" y="78" text-anchor="middle">智慧查詢</text></g></g></a>
+          {% endif %}
+          {% if can_graph %}
+          <a href="{% url 'graph_page' %}" class="card-link" aria-label="截圖轉文字"><g class="card-slot" transform="translate(612,128)"><g class="card card-6"><rect class="card-bg c-blue4" width="280" height="110" rx="12"/><text class="card-title" x="140" y="48" text-anchor="middle">截圖 → 文字檔</text><text class="card-sub" x="140" y="78" text-anchor="middle">圖表 / 流程圖轉文字</text></g></g></a>
+          {% endif %}
+          {% if can_pdf %}
+          <a href="{% url 'pdf_page' %}" class="card-link" aria-label="PDF 轉文字"><g class="card-slot" transform="translate(0,256)"><g class="card card-7"><rect class="card-bg c-red" width="280" height="110" rx="12"/><text class="card-title card-title-tight" x="140" y="48" text-anchor="middle">PDF → TXT / DOCX</text><text class="card-sub" x="140" y="78" text-anchor="middle">PDF 轉文字 / Word</text></g></g></a>
+          {% endif %}
+          {% if can_pptx %}
+          <a href="{% url 'pptx_page' %}" class="card-link" aria-label="文字轉簡報"><g class="card-slot" transform="translate(306,256)"><g class="card card-8"><rect class="card-bg c-orange" width="280" height="110" rx="12"/><text class="card-title" x="140" y="48" text-anchor="middle">文字 → PPTX</text><text class="card-sub" x="140" y="78" text-anchor="middle">文字自動產生簡報</text></g></g></a>
+          {% endif %}
+          {% if can_tts %}
+          <a href="{% url 'tts_page' %}" class="card-link" aria-label="語音文字工具"><g class="card-slot" transform="translate(612,256)"><g class="card card-9"><rect class="card-bg c-cyan" width="280" height="110" rx="12"/><text class="card-title" x="140" y="48" text-anchor="middle">語音 / 文字</text><text class="card-sub" x="140" y="78" text-anchor="middle">TTS / STT</text></g></g></a>
+          {% endif %}
+          {% if can_portal %}
+          <a href="{% url 'portal:usage_page' %}" class="card-link" aria-label="Portal 使用紀錄"><g class="card-slot" transform="translate(0,384)"><g class="card card-10"><rect class="card-bg c-grayblue" width="280" height="110" rx="12"/><text class="card-title" x="140" y="48" text-anchor="middle">Portal 使用紀錄</text><text class="card-sub" x="140" y="78" text-anchor="middle">使用紀錄查詢</text></g></g></a>
+          {% endif %}
+        </g>
+      </g>
+    </svg>
+  </main>
+</body>
+</html>
+
+
+
+
+
+

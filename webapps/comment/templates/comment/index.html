@@ -1,0 +1,114 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>人員績效考核系統(雛形)</title>
+  <link rel="stylesheet" href="{% static 'comment/css/index.css' %}">
+  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+</head>
+
+<!-- ✅ 專案規範：
+     - request.script_name = 反代 prefix 唯一真相
+     - node path = 子系統名稱（本頁為 comment）
+-->
+<body data-base-prefix="{{ request.script_name|default:'' }}" data-node-path="comment" data-base-url="{{ request.script_name }}">
+<div class="container">
+  <h1>人員績效考核系統(雛形)</h1>
+
+  <div class="toolbar">
+    <button id="btnResetAll" class="danger">重置所有</button>
+  </div>
+
+  <h3>人員列表</h3>
+  <textarea id="studentList" placeholder="例：&#10;1.王小明&#10;2.林小華&#10;3.陳小美"></textarea>
+  <div style="margin-top: 8px;">
+    <input type="file" id="importFileInput" accept=".txt,.csv" style="display: none;">
+    <button id="btnImportFile" class="secondary">匯入人員名單</button>
+    <button id="btnGenerateStudents">生成人員按鈕</button>
+  </div>
+  <div id="studentButtons" class="student-buttons"></div>
+
+  <div class="grid-2">
+    <div>
+      <h3 class="section-header">
+        <span>評量維度選擇</span>
+        <button id="btnResetTraits" class="secondary">重置選擇</button>
+      </h3>
+
+      <div id="tabs" class="pill-list">
+        <button class="tab-btn active" data-tab="all">所有維度</button>
+        <button class="tab-btn" data-tab="thought">思想</button>
+        <button class="tab-btn" data-tab="character">品德</button>
+        <button class="tab-btn" data-tab="performance">績效</button>
+        <button class="tab-btn" data-tab="ability">才能</button>
+        <button class="tab-btn" data-tab="knowledge">學識</button>
+        <button class="tab-btn" data-tab="special">其他</button>
+      </div>
+
+      <div id="traitList" class="card pill-list"></div>
+
+      <h3 class="section-header">
+        <span>績效評等選擇</span>
+        <button id="btnResetPerformance" class="secondary">重置選擇</button>
+      </h3>
+      <div id="performanceGradeList" class="card pill-list"></div>
+
+      <h3 class="section-header">
+        <span>自訂評量指標（最多10項）</span>
+        <button id="btnClearCustomTraits" class="secondary">清除自訂</button>
+      </h3>
+      <div class="card">
+        <div class="inline-input">
+          <input type="text" id="customTraitInput" placeholder="輸入自訂指標，例如：團隊合作">
+          <button id="btnAddCustomTrait">新增</button>
+        </div>
+        <div id="customTraitList" class="pill-list"></div>
+        <div style="margin-top: 6px; font-size: 12px;">
+          已新增：<span id="customTraitCount">0</span>/10
+        </div>
+      </div>
+
+      <h3 class="section-header">
+        <span>已選擇指標：</span>
+        <button id="btnClearSelectedTraits" class="secondary">清空選擇</button>
+      </h3>
+      <div id="selectedTraits" class="card pill-list"></div>
+
+      <div style="margin-top: 20px; display: flex; justify-content: center;">
+        <button id="btnGenerateComment" style="width: 180px;">生成評語</button>
+      </div>
+    </div>
+
+    <div>
+      <h3 class="section-header">
+        <span>評語預覽：</span>
+        <button id="btnClearComments" class="secondary">清除記錄</button>
+      </h3>
+      <div id="commentPreview" class="card preview-list"></div>
+
+      <h3 style="margin-top: 20px;">匯出選項</h3>
+      <div class="download-area">
+        <button id="btnDownloadTxt" class="secondary">匯出 TXT</button>
+        <button id="btnDownloadCsv" class="secondary">匯出 CSV</button>
+        <span class="badge">💾 匯出考績表（待擴充）</span>
+      </div>
+
+      <h3 style="margin-top: 20px;">使用注意事項</h3>
+      <div class="card" style="font-size:14px; line-height:1.5;">
+        <ul style="padding-left:20px;">
+          <li>評語為自動生成範本，需人工校核後使用</li>
+          <li>請依實際考核情況選擇合適指標</li>
+          <li>保持專業用語，避免主觀說法</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+  <script defer src="{% static 'comment/js/index.js' %}"></script>
+</body>
+</html>
