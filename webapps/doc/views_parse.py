@@ -225,6 +225,88 @@ def _pick_header_lines(text: str, max_lines: int = 40) -> List[str]:
             break
     return lines[:min(stop_idx, max_lines)]
 
+def _extract_recipient_candidates(header_lines: List[str], max_lines: int = 40) -> List[str]:
+    """
+    Extract recipient org candidates from header lines.
+    Handles both:
+    - 受文者：國防部軍備局...
+    - 受文者：
+      國防部軍備局...
+    """
+    lines = [_compact_spaced_cjk(ln) for ln in (header_lines or []) if (ln or "").strip()]
+    if not lines:
+        return []
+
+    recipients: List[str] = []
+    stop_pat = re.compile(
+        r"^(主旨|說明|附件|發文字號|發文日期|檔號|保存年限|密等|速別|地址|電話|傳真|聯絡人|電子信箱)\s*[:：]"
+    )
+    for i, raw in enumerate(lines[:max_lines]):
+        m = re.match(r"^受文者\s*[:：]\s*(.*)$", raw)
+        if not m:
+            continue
+        inline = (m.group(1) or "").strip()
+        if inline:
+            parts = [p.strip() for p in re.split(r"[、,，;；]", inline) if p.strip()]
+            recipients.extend(parts)
+            continue
+
+        # Multi-line recipient block.
+        for j in range(i + 1, min(i + 6, len(lines))):
+            ln = (lines[j] or "").strip()
+            if not ln or stop_pat.match(ln) or re.match(r"^[令函呈]$", ln):
+                break
+            # Sender-title line starts; do not absorb into recipients.
+            if re.match(r"^.+(?:\s|　)?[令函呈]\s*$", ln):
+                break
+            # Stop when next explicit field begins.
+            if re.match(r"^[一-龥A-Za-z0-9○〇０0]{1,10}\s*[:：]", ln):
+                break
+            recipients.append(ln)
+
+    # Normalize and dedupe.
+    out: List[str] = []
+    seen = set()
+    for r in recipients:
+        rn = _normalize_org_text(r)
+        if len(rn) < 3:
+            continue
+        if rn in seen:
+            continue
+        seen.add(rn)
+        out.append(rn)
+    return out
+
+
+def _recipient_block_bounds(lines: List[str], max_lines: int = 40) -> Tuple[int, int]:
+    """
+    Return recipient block [start, end] in header, or (-1, -1) if absent.
+    """
+    if not lines:
+        return -1, -1
+    stop_pat = re.compile(
+        r"^(主旨|說明|附件|發文字號|發文日期|檔號|保存年限|密等|速別|地址|電話|傳真|聯絡人|電子信箱)\s*[:：]"
+    )
+    for i, raw in enumerate(lines[:max_lines]):
+        m = re.match(r"^受文者\s*[:：]\s*(.*)$", raw)
+        if not m:
+            continue
+        inline = (m.group(1) or "").strip()
+        if inline:
+            return i, i
+        end = i
+        for j in range(i + 1, min(i + 6, len(lines))):
+            ln = (lines[j] or "").strip()
+            if not ln or stop_pat.match(ln) or re.match(r"^[令函呈]$", ln):
+                break
+            if re.match(r"^.+(?:\s|　)?[令函呈]\s*$", ln):
+                break
+            if re.match(r"^[一-龥A-Za-z0-9○〇０0]{1,10}\s*[:：]", ln):
+                break
+            end = j
+        return i, end
+    return -1, -1
+
 def _normalize_header_line(s: str) -> str:
     """
     Normalize common OCR/fullwidth artifacts in official header lines.
@@ -262,13 +344,15 @@ def _extract_header_org_doc_type(text: str) -> Tuple[str, str]:
     if not lines:
         return "", ""
 
-    # Use the area before "受文者" as primary header zone.
-    recv_idx = None
-    for i, ln in enumerate(lines[:40]):
-        if re.search(r"^受文者\s*[:：]", ln):
-            recv_idx = i
-            break
-    top_zone = lines[:recv_idx] if recv_idx is not None else lines[:16]
+    # Use area around recipient block as primary header zone.
+    # If recipient appears at top (index 0), skip the whole recipient block.
+    recv_start, recv_end = _recipient_block_bounds(lines[:40], max_lines=40)
+    if recv_start > 0:
+        top_zone = lines[:recv_start]
+    elif recv_start == 0:
+        top_zone = lines[recv_end + 1 : recv_end + 17]
+    else:
+        top_zone = lines[:16]
     if not top_zone:
         top_zone = lines[:16]
 
@@ -373,11 +457,7 @@ def _infer_org_and_level(text: str) -> Tuple[str, str]:
         return header_org, "UNKNOWN"
     
     # Strict fallback: only inspect top header lines, avoid body contamination.
-    recipients = []
-    for raw in header_lines[:20]:
-        m_recp = re.search(r"受文者\s*[:：]\s*(.*)$", raw)
-        if m_recp:
-            recipients.append(_normalize_org_text(m_recp.group(1)))
+    recipients = _extract_recipient_candidates(header_lines[:20], max_lines=20)
 
     for raw in header_lines[:20]:
         line = _compact_spaced_cjk(raw.strip())
