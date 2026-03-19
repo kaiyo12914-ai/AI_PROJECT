@@ -135,7 +135,7 @@ def ollama_embed(texts: List[str]) -> List[List[float]]:
 # ============================================================
 class ChromaIndex:
     def __init__(self) -> None:
-        self.chroma_dir = env("RAG_CHROMA_DIR", r"F:\AI\AI_TOOLS\chroma\rag")
+        self.chroma_dir = env("RAG_CHROMA_DIR", r"H:\AI\AI_TOOLS\chroma\rag")
         self.collection_name = env("RAG_CHROMA_COLLECTION", "cm_qna")
 
         os.makedirs(self.chroma_dir, exist_ok=True)
@@ -189,7 +189,7 @@ def main() -> None:
 
     args = ap.parse_args()
 
-    chroma_dir = env("RAG_CHROMA_DIR", r"F:\AI\AI_TOOLS\chroma\rag")
+    chroma_dir = env("RAG_CHROMA_DIR", r"H:\AI\AI_TOOLS\chroma\rag")
     last_sync_file = os.path.join(chroma_dir, "last_sync.txt")
 
     since = validate_since_ymd(args.since)

@@ -53,4 +53,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-# H:\AI\venv3.12\Scripts\python.exe F:\AI\AI_TOOLS\tools\get_Window.py
+# H:\AI\venv3.12\Scripts\python.exe H:\AI\AI_TOOLS\tools\get_Window.py

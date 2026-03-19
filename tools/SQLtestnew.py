@@ -819,10 +819,10 @@ if __name__ == "__main__":
 
 # 使用方式
 # 內網產生 JSON：產生的 JSON 改為多筆累積
-# F:\AI\AI_TOOLS\venv3.12\Scripts\python.exe F:\AI\AI_TOOLS\SQLtest.py 1150001261 --out SQLTEST_output.json
-# F:\AI\AI_TOOLS\venv3.12\Scripts\python.exe F:\AI\AI_TOOLS\SQLtest.py 1150000712 --out SQLTEST_output.json
+# H:\AI\AI_TOOLS\venv3.12\Scripts\python.exe H:\AI\AI_TOOLS\SQLtest.py 1150001261 --out SQLTEST_output.json
+# H:\AI\AI_TOOLS\venv3.12\Scripts\python.exe H:\AI\AI_TOOLS\SQLtest.py 1150000712 --out SQLTEST_output.json
 
 
 # 外網模擬（ENV=EXT 或加 --simulate）：
-# F:\AI\AI_TOOLS\venv3.12\Scripts\python.exe F:\AI\AI_TOOLS\SQLtest.py --simulate --json SQLTEST_output.json --login_user A123456789 --node doc --grsno 1150001261
+# H:\AI\AI_TOOLS\venv3.12\Scripts\python.exe H:\AI\AI_TOOLS\SQLtest.py --simulate --json SQLTEST_output.json --login_user A123456789 --node doc --grsno 1150001261
  

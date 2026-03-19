@@ -3,7 +3,7 @@
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\portal\static\portal\js\apiurl_factory.js =====
+===== 文件: H:\AI\AI_TOOLS\webapps\portal\static\portal\js\apiurl_factory.js =====
 === 代碼內容 ===
 /* =========================================================
  * apiurl_factory.js
@@ -72,7 +72,7 @@
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\database\db_factory.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\database\db_factory.py =====
 === 代碼內容 ===
 # webapps/database/db_factory.py
 from __future__ import annotations
@@ -542,7 +542,7 @@ def db_execute(db_type: DBType, sql: str, params: Params = None) -> int:
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\llm\llm_factory.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\llm\llm_factory.py =====
 === 代碼內容 ===
 # webapps/llm/llm_factory.py
 import os
@@ -879,7 +879,7 @@ def _make_auto(temperature: float | None, timeout: int | None):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\portal\middleware_proxy_prefix.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\portal\middleware_proxy_prefix.py =====
 === 代碼內容 ===
 # webapps/portal/middleware_proxy_prefix.py
 from __future__ import annotations
@@ -997,7 +997,7 @@ class ForwardedPrefixMiddleware:
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\llm\views.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\llm\views.py =====
 === 代碼內容 ===
 # webapps/llm/views.py
 from __future__ import annotations
@@ -1133,7 +1133,7 @@ def translate(request: HttpRequest):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\llm\services.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\llm\services.py =====
 === 代碼內容 ===
 # webapps/llm/services.py
 from __future__ import annotations
@@ -1566,7 +1566,7 @@ def translate_core(
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\portal\templates\portal\index.html =====
+===== 文件: H:\AI\AI_TOOLS\webapps\portal\templates\portal\index.html =====
 === 代碼內容 ===
 {% load static %}
 {# webapps/portal/templates/portal/index.html #}
@@ -1792,7 +1792,7 @@ def translate_core(
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\portal\urls.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\portal\urls.py =====
 === 代碼內容 ===
 # webapps/portal/urls.py
 from __future__ import annotations
@@ -1827,7 +1827,7 @@ urlpatterns = [
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webproj\settings.py =====
+===== 文件: H:\AI\AI_TOOLS\webproj\settings.py =====
 === 代碼內容 ===
 """
 Django settings for webproj project.
@@ -2275,7 +2275,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webproj\urls.py =====
+===== 文件: H:\AI\AI_TOOLS\webproj\urls.py =====
 === 代碼內容 ===
 # webproj/urls.py
 from __future__ import annotations
@@ -2334,13 +2334,13 @@ if settings.DEBUG:
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\__init__.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\__init__.py =====
 === 代碼內容 ===
  
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\admin.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\admin.py =====
 === 代碼內容 ===
 # webapps/doc/admin.py
 from django.contrib import admin
@@ -2375,7 +2375,7 @@ class DocumentTemplateAdmin(admin.ModelAdmin):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\apps.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\apps.py =====
 === 代碼內容 ===
 from django.apps import AppConfig
 
@@ -2386,7 +2386,7 @@ class DocConfig(AppConfig):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\docService.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\docService.py =====
 === 代碼內容 ===
 from __future__ import annotations
 
@@ -2483,7 +2483,7 @@ Content:
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\models.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\models.py =====
 === 代碼內容 ===
 from __future__ import annotations
 
@@ -2784,7 +2784,7 @@ class DocumentTemplate(models.Model):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\prompt.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\prompt.py =====
 === 代碼內容 ===
 # webapps/doc/prompt.py
 from __future__ import annotations
@@ -3049,7 +3049,7 @@ def build_prompt(
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\sybase_incoming.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\sybase_incoming.py =====
 === 代碼內容 ===
 # webapps/doc/sybase_incoming.py
 from __future__ import annotations
@@ -3572,7 +3572,7 @@ def incoming_file(request: HttpRequest, attach_key: str):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\urls.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\urls.py =====
 === 代碼內容 ===
 # webapps/doc/urls.py
 from __future__ import annotations
@@ -3639,7 +3639,7 @@ urlpatterns = [
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\utils_login.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\utils_login.py =====
 === 代碼內容 ===
 # webapps/doc/utils_login.py
 from __future__ import annotations
@@ -3760,7 +3760,7 @@ def get_login_user_name(request: HttpRequest) -> str:
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\views.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\views.py =====
 === 代碼內容 ===
 # webapps/doc/views.py
 from __future__ import annotations
@@ -3817,7 +3817,7 @@ __all__ = [
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\views_generate.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\views_generate.py =====
 === 代碼內容 ===
 # webapps/doc/views_generate.py
 from __future__ import annotations
@@ -4081,7 +4081,7 @@ def api_generate(request: HttpRequest):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\views_helpers.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\views_helpers.py =====
 === 代碼內容 ===
 # webapps/doc/views_helpers.py
 from __future__ import annotations
@@ -4716,7 +4716,7 @@ def _ensure_focus_numbered(text: str, max_points: int = 12) -> str:
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\views_pages.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\views_pages.py =====
 === 代碼內容 ===
 # webapps/doc/views_pages.py
 from __future__ import annotations
@@ -4770,7 +4770,7 @@ def index(request: HttpRequest):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\views_parse.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\views_parse.py =====
 === 代碼內容 ===
 # webapps/doc/views_parse.py
 from __future__ import annotations
@@ -5032,7 +5032,7 @@ def api_parse_attachments_focus(request: HttpRequest):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\views_sybase_blob.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\views_sybase_blob.py =====
 === 代碼內容 ===
 # webapps/doc/views_sybase_blob.py
 from __future__ import annotations
@@ -5158,7 +5158,7 @@ def api_sybase_blob_download(request: HttpRequest, token: str):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\views_sybase_import.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\views_sybase_import.py =====
 === 代碼內容 ===
 # webapps/doc/views_sybase_import.py
 from __future__ import annotations
@@ -5517,7 +5517,7 @@ def api_import_template_from_sybase(request: HttpRequest) -> JsonResponse:
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\views_templates.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\views_templates.py =====
 === 代碼內容 ===
 # webapps/doc/views_templates.py
 from __future__ import annotations
@@ -5700,7 +5700,7 @@ def api_templates(request: HttpRequest):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\management\commands\clean.json.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\management\commands\clean.json.py =====
 === 代碼內容 ===
 # webapps/doc/management/commands/clean_json.py
 from __future__ import annotations
@@ -5937,7 +5937,7 @@ class Command(BaseCommand):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\management\commands\fill_meta.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\management\commands\fill_meta.py =====
 === 代碼內容 ===
 # fill_meta.py
 from __future__ import annotations
@@ -6244,7 +6244,7 @@ if __name__ == "__main__":
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\management\commands\seed_doc_templates.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\management\commands\seed_doc_templates.py =====
 === 代碼內容 ===
 # webapps/doc/management/commands/seed_doc_templates.py
 from __future__ import annotations
@@ -6684,7 +6684,7 @@ class Command(BaseCommand):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\migrations\0001_initial.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\migrations\0001_initial.py =====
 === 代碼內容 ===
 # Generated by Django 6.0 on 2025-12-24 15:17
 
@@ -6716,7 +6716,7 @@ class Migration(migrations.Migration):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\migrations\0002_documenttemplate_owner_documenttemplate_scope_and_more.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\migrations\0002_documenttemplate_owner_documenttemplate_scope_and_more.py =====
 === 代碼內容 ===
 # Generated by Django 6.0 on 2026-01-13 05:54
 
@@ -6886,7 +6886,7 @@ class Migration(migrations.Migration):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\migrations\0003_documenttemplate_schema_v2.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\migrations\0003_documenttemplate_schema_v2.py =====
 === 代碼內容 ===
 # Generated by Django 6.0 on 2026-01-14
 
@@ -6950,7 +6950,7 @@ class Migration(migrations.Migration):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\migrations\0004_auto_20260114_1047.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\migrations\0004_auto_20260114_1047.py =====
 === 代碼內容 ===
 # Generated by Django 6.0 on 2026-01-14 02:47
 
@@ -6968,12 +6968,12 @@ class Migration(migrations.Migration):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\migrations\__init__.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\migrations\__init__.py =====
 === 代碼內容 ===
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\static\doc\incoming_sybase.js =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\static\doc\incoming_sybase.js =====
 === 代碼內容 ===
 // webapps/doc/static/doc/js/incoming_sybase.js
 // ============================================================
@@ -7521,7 +7521,7 @@ class Migration(migrations.Migration):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\static\doc\css\doc_index.css =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\static\doc\css\doc_index.css =====
 === 代碼內容 ===
 /* === Sybase 來文附件（收納/下載/解析） === */
 .syb-attach-box{
@@ -7666,7 +7666,7 @@ class Migration(migrations.Migration):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\static\doc\js\doc_index_bootstrap.js =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\static\doc\js\doc_index_bootstrap.js =====
 === 代碼內容 ===
 // webapps/doc/static/doc/js/doc_index_bootstrap.js
 // ============================================================
@@ -7984,7 +7984,7 @@ class Migration(migrations.Migration):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\static\doc\js\doc_index_editor.js =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\static\doc\js\doc_index_editor.js =====
 === 代碼內容 ===
 // webapps/doc/static/doc/js/doc_index_editor.js
 // ============================================================
@@ -8538,7 +8538,7 @@ class Migration(migrations.Migration):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\static\doc\js\doc_index_templates.js =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\static\doc\js\doc_index_templates.js =====
 === 代碼內容 ===
 // webapps/doc/static/doc/js/doc_index_templates.js
 // ============================================================
@@ -9138,7 +9138,7 @@ class Migration(migrations.Migration):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\templates\doc\_incoming_sybase.html =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\templates\doc\_incoming_sybase.html =====
 === 代碼內容 ===
 {# webapps/doc/templates/doc/_incoming_sybase.html #}
 {% load static %}
@@ -9251,7 +9251,7 @@ class Migration(migrations.Migration):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\templates\doc\doc_index_editor.js =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\templates\doc\doc_index_editor.js =====
 === 代碼內容 ===
 // webapps/doc/static/doc/js/doc_index_editor.js
 // ============================================================
@@ -9805,7 +9805,7 @@ class Migration(migrations.Migration):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\templates\doc\index.html =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\templates\doc\index.html =====
 === 代碼內容 ===
 <!-- {# ============================================================
    檔案：webapps/doc/templates/doc/index.html
@@ -10092,7 +10092,7 @@ class Migration(migrations.Migration):
 
 
 
-===== 文件: F:\AI\AI_TOOLS\webapps\doc\services\official_doc_sybase.py =====
+===== 文件: H:\AI\AI_TOOLS\webapps\doc\services\official_doc_sybase.py =====
 === 代碼內容 ===
 from webapps.database.db_factory import db_query_all
 
