@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import logging
+import re
 from dataclasses import dataclass
 from typing import Optional, Tuple, Dict, Any
 
@@ -198,6 +199,8 @@ def build_translate_prompt(text: str, source_lang: str, target_lang: str) -> str
 2) 保留原文格式（換行、項目符號、編號、標點）。
 3) 專有名詞若無把握可保留原文或音譯，但不要亂改。
 4) 若 source_lang=auto，請自動判斷語言。
+5) 若 target_lang 為繁體中文（zh-TW/zh-Hant/繁體中文）且原文是一般英文詞句，必須翻譯成繁體中文，不可整段原樣輸出英文。
+6) 若可翻譯，英文單字 test 應翻成「測試」。
 
 source_lang: {source_lang}
 target_lang: {target_lang}
@@ -212,6 +215,24 @@ def build_translate_messages(prompt: str):
         ("system", "你是專業翻譯引擎，請只輸出翻譯結果。"),
         ("user", "{prompt}"),
     ]).format_messages(prompt=prompt)
+
+
+def _target_is_traditional_chinese(target_lang: str) -> bool:
+    t = (target_lang or "").strip().lower()
+    return t in {"zh-tw", "zh_hant", "zh-hant", "繁體中文", "繁中", "traditional chinese"}
+
+
+def _has_cjk(s: str) -> bool:
+    return bool(re.search(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]", s or ""))
+
+
+def _looks_like_english_only(s: str) -> bool:
+    s = (s or "").strip()
+    if not s:
+        return False
+    if len(s) > 80:
+        return False
+    return bool(re.fullmatch(r"[A-Za-z0-9\s.,:;!?'\-_/()]+", s))
 
 
 # =========================
@@ -456,5 +477,25 @@ def translate_core(
 
     llm = get_chat_model(temperature=temperature, timeout=timeout)
     out = llm.invoke(messages)
-    translated = _to_text(out)
+    translated = _to_text(out).strip()
+
+    # 防呆：目標繁中時，若模型原樣回傳英文，做一次強制翻譯重試
+    if (
+        _target_is_traditional_chinese(target_lang)
+        and translated
+        and translated.strip() == text.strip()
+        and _looks_like_english_only(text)
+        and not _has_cjk(translated)
+    ):
+        retry_prompt = (
+            "請將下列內容翻譯成繁體中文。"
+            "只輸出譯文，不可輸出英文原文，不可加註解。\n\n"
+            f"原文：{text}"
+        )
+        retry_messages = build_translate_messages(retry_prompt)
+        retry_out = llm.invoke(retry_messages)
+        retry_translated = _to_text(retry_out).strip()
+        if retry_translated:
+            translated = retry_translated
+
     return {"translated": translated, "backend": "auto_llm"}

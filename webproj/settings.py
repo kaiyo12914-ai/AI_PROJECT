@@ -170,10 +170,9 @@ CSRF_COOKIE_HTTPONLY = True
 # ✅ 環境與磁碟路徑自動切換 (ENV=EXT: H磁碟, ENV=INT: D磁碟)
 # ============================================================
 
-# 根據環境決定基礎磁碟 (H:\AI\AI_TOOLS 或 D:\AI\Django)
+# 根據環境決定基礎磁碟 (H:\AI\AI_TOOLS 或 D:\AI\AI_TOOLS)
 _TARGET_DRIVE = "H:" if ENV_NAME == "EXT" else "D:"
-_PROJECT_ROOT_STR = f"{_TARGET_DRIVE}\\AI\\Django"
-
+_PROJECT_ROOT_STR = f"{_TARGET_DRIVE}\\AI\\AI_TOOLS"
 # 強制修正 BASE_DIR 以驅動器代號開始，避免 UNC 路徑導致 staticfiles.W004 警告
 BASE_DIR = Path(_PROJECT_ROOT_STR)
 

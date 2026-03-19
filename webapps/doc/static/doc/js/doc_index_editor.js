@@ -18,6 +18,7 @@
     __INITED__: false,
     saveModalSource: "reference",
     focusParsedItems: [],
+    focusSummaryHeader: "",
   };
 
   function _ctx() {
@@ -164,6 +165,7 @@
   function resetFocusPick() {
     const { dom } = _ctx();
     state.focusParsedItems = [];
+    state.focusSummaryHeader = "";
     if (dom.focusPickWrap) dom.focusPickWrap.style.display = "none";
     if (dom.focusPickList) dom.focusPickList.innerHTML = "";
     if (dom.focusPickHint) dom.focusPickHint.textContent = "";
@@ -171,6 +173,16 @@
     if (dom.attachmentsText) dom.attachmentsText.value = "";
     if (dom.attachStatus) dom.attachStatus.textContent = "";
     if (dom.promptFocusOut) dom.promptFocusOut.value = "";
+  }
+
+  function extractFocusSummaryHeader(text) {
+    const lines = String(text || "")
+      .split(/\r?\n/)
+      .map((x) => String(x || "").trim())
+      .filter(Boolean);
+    return lines
+      .filter((line) => /^(來文單位|受文單位|來文主旨)\s*[：:]/.test(line))
+      .join("\n");
   }
 
   function parseFocusSummaryItems(text) {
@@ -205,6 +217,26 @@
       const line = String(rawLine || "").trim();
       if (!line) continue;
 
+      const mIncoming = line.match(/^來文(?:重點|說明)\s*(\d+)\s*[：:]\s*(.*)$/);
+      if (mIncoming) {
+        pushCurrent();
+        current = {
+          label: `來文說明${mIncoming[1]}`,
+          lines: [stripLeadingOrdinal(mIncoming[2])].filter(Boolean),
+        };
+        continue;
+      }
+
+      const mAttach = line.match(/^附件重點\s*(\d+)\s*[：:]\s*(.*)$/);
+      if (mAttach) {
+        pushCurrent();
+        current = {
+          label: `附件重點${mAttach[1]}`,
+          lines: [stripLeadingOrdinal(mAttach[2])].filter(Boolean),
+        };
+        continue;
+      }
+
       const m1 = line.match(/^重點\s*(\d+)\s*[：:]\s*(.*)$/);
       if (m1) {
         pushCurrent();
@@ -228,6 +260,7 @@
       if (current) {
         current.lines.push(stripLeadingOrdinal(line));
       } else {
+        if (/^(來文單位|受文單位|來文主旨)\s*[：:]/.test(line)) continue;
         items.push({
           id: `focus_${items.length + 1}`,
           label: `重點${seq}`,
@@ -243,17 +276,19 @@
 
   function selectedFocusItemsText() {
     const picked = (state.focusParsedItems || []).filter((x) => !!x.checked);
-    return picked
+    const body = picked
       .map((x) => `${x.label}：${x.text}`.trim())
       .filter(Boolean)
       .join("\n");
+    const header = String(state.focusSummaryHeader || "").trim();
+    return header ? `${header}\n${body}`.trim() : body;
   }
 
   function selectedStage2Facts() {
     const picked = (state.focusParsedItems || []).filter((x) => !!x.checked);
     return picked
       .map((x) => String(x && x.text ? x.text : "").trim())
-      .map((t) => t.replace(/^重點\s*\d+\s*[:：]\s*/g, "").trim())
+      .map((t) => t.replace(/^(?:重點|來文重點|來文說明|附件重點)\s*\d+\s*[:：]\s*/g, "").trim())
       .filter(Boolean)
       .filter((t) => !/^(擬辦|建議|請示|研處意見)\s*[:：]/.test(t))
       .filter((t) => !/^這是.+（層級|這是.+的[令函呈]/.test(t));
@@ -390,6 +425,7 @@
       const inferredDocType = String(data && data.inferred && data.inferred.doc_type ? data.inferred.doc_type : "").trim();
       const inferredKind = String(data && data.inferred && data.inferred.doc_kind ? data.inferred.doc_kind : "").trim();
       const inferredOrg = String(data && data.inferred && data.inferred.org ? data.inferred.org : "未辨識機關").trim();
+      state.focusSummaryHeader = extractFocusSummaryHeader(summaryText);
       const parsedItems = parseFocusSummaryItems(summaryText);
       if (parsedItems.length > 0) {
         state.focusParsedItems = parsedItems;

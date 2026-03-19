@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import logging
+import re
 from django.conf import settings
+from django.http import HttpResponseRedirect
 
 logger = logging.getLogger("webapps.proxy_prefix")
 
@@ -88,6 +90,15 @@ class ForwardedPrefixMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        # Canonicalize duplicated slashes in URL path to avoid routing/static anomalies,
+        # e.g. "/djangoai//" -> "/djangoai/".
+        raw_path = request.META.get("PATH_INFO", "") or ""
+        norm_path = re.sub(r"/{2,}", "/", raw_path)
+        if norm_path and norm_path != raw_path:
+            qs = request.META.get("QUERY_STRING", "") or ""
+            target = norm_path + (f"?{qs}" if qs else "")
+            return HttpResponseRedirect(target)
+
         external_prefix, source = _choose_external_prefix(request)
         request.proxy_prefix_source = source
 

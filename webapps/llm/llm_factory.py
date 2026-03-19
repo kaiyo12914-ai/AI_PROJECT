@@ -121,6 +121,38 @@ def _append_no_proxy_host(host: str) -> None:
     os.environ["no_proxy"] = val
 
 
+def _ollama_fallback_models(primary_model: str) -> list[str]:
+    """
+    Fallback order when primary Ollama model crashes at runtime.
+    Override by OLLAMA_FALLBACK_MODELS, e.g.:
+      OLLAMA_FALLBACK_MODELS=gemma3:4b,qwen3:8b
+    """
+    raw = (os.getenv("OLLAMA_FALLBACK_MODELS") or "gemma3:4b,qwen3:8b").strip()
+    out: list[str] = []
+    seen = set()
+    for x in raw.split(","):
+        m = (x or "").strip()
+        if not m:
+            continue
+        if m == primary_model:
+            continue
+        k = m.lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(m)
+    return out
+
+
+def _should_try_ollama_fallback(err: Exception) -> bool:
+    s = str(err or "").lower()
+    return (
+        "runner process has terminated" in s
+        or "exit status" in s
+        or "responseerror" in s
+    )
+
+
 def get_chat_model(temperature: float | None = None, timeout: int | None = None):
     model_type = (os.getenv("MODEL_TYPE") or "AUTO").strip().upper()
 
@@ -234,7 +266,6 @@ def _make_ollama(temperature: float | None, timeout: int | None):
     # ✅ timeout：不同版本參數名稱不一樣，安全嘗試塞入（不支援就略過）
     ollama_kwargs = {
         "base_url": base_url,
-        "model": model,
         "temperature": t,
     }
     try:
@@ -247,16 +278,47 @@ def _make_ollama(temperature: float | None, timeout: int | None):
     except Exception:
         pass
 
-    llm = OllamaLLM(**ollama_kwargs)
+    def _build_ollama(model_name: str):
+        kwargs = dict(ollama_kwargs)
+        kwargs["model"] = model_name
+        return OllamaLLM(**kwargs)
+
+    llm = _build_ollama(model)
 
     class LoggedOllama:
         def invoke(self, input, **kwargs):
             _log_llm_use("OLLAMA", model, temperature=t, timeout=to)
-            return llm.invoke(input, **kwargs)
+            try:
+                return llm.invoke(input, **kwargs)
+            except Exception as e:
+                if not _should_try_ollama_fallback(e):
+                    raise
+                last_err = e
+                for alt in _ollama_fallback_models(model):
+                    try:
+                        _log_llm_use("OLLAMA_FALLBACK", alt, temperature=t, timeout=to)
+                        return _build_ollama(alt).invoke(input, **kwargs)
+                    except Exception as e2:
+                        last_err = e2
+                        print(f"[LLM] OLLAMA fallback failed model={alt} err={e2!r}")
+                raise last_err
 
         async def ainvoke(self, input, **kwargs):
             _log_llm_use("OLLAMA", model, temperature=t, timeout=to)
-            return await llm.ainvoke(input, **kwargs)
+            try:
+                return await llm.ainvoke(input, **kwargs)
+            except Exception as e:
+                if not _should_try_ollama_fallback(e):
+                    raise
+                last_err = e
+                for alt in _ollama_fallback_models(model):
+                    try:
+                        _log_llm_use("OLLAMA_FALLBACK", alt, temperature=t, timeout=to)
+                        return await _build_ollama(alt).ainvoke(input, **kwargs)
+                    except Exception as e2:
+                        last_err = e2
+                        print(f"[LLM] OLLAMA fallback failed (async) model={alt} err={e2!r}")
+                raise last_err
 
         def __repr__(self):
             backend_name = "OllamaLLM" if _new_pkg else "Ollama(community)"
