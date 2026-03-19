@@ -18,4 +18,4 @@ PY
 
 Write-Host "Done."
 
-# H:\AI\Django\venv3.12\Scripts\python.exe H:\AI\Django\tools\playwright_mock_from_json.py --json H:\AI\Django\SQLTEST_output1150001261.json --url http://127.0.0.1/djangoai/doc/
+# F:\AI\AI_TOOLS\venv3.12\Scripts\python.exe F:\AI\AI_TOOLS\tools\playwright_mock_from_json.py --json F:\AI\AI_TOOLS\SQLTEST_output1150001261.json --url http://127.0.0.1/djangoai/doc/

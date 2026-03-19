@@ -5,7 +5,7 @@ def check_chromadb():
     try:
         # 初始化 Chroma 客戶端
         chroma_client = chromadb.PersistentClient(
-            path=r"H:\AI\Django\chroma\rag",
+            path=r"H:\AI\AI_TOOLS\chroma\rag",
             settings=Settings(anonymized_telemetry=False)
         )
 

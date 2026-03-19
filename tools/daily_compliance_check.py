@@ -9,7 +9,7 @@ if sys.stdout.encoding != 'utf-8':
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
-PROJECT_ROOT = r'H:\AI\Django'
+PROJECT_ROOT = r'F:\AI\AI_TOOLS'
 RULES_FILE = os.path.join(PROJECT_ROOT, '.codex', 'rules.md')
 
 def check_rules():

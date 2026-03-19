@@ -3,9 +3,9 @@
 # - Final bundle: exportfile_MMdd_HHmm.ZIP (contains the 3 files above)
 # - Filters: LastWriteTime >= SinceDate 00:00:00
 # Usage:
-#   powershell -ExecutionPolicy Bypass -File H:\AI\DJANGO\export_since.ps1 -BasePath H:\AI\DJANGO -Since 20260114
-#   powershell -ExecutionPolicy Bypass -File H:\AI\DJANGO\export_since.ps1 -BasePath H:\AI\DJANGO -Since 2026-01-14
-#   powershell -ExecutionPolicy Bypass -File H:\AI\DJANGO\export_since.ps1 20260114
+#   powershell -ExecutionPolicy Bypass -File F:\AI\AI_TOOLS\export_since.ps1 -BasePath F:\AI\AI_TOOLS -Since 20260114
+#   powershell -ExecutionPolicy Bypass -File F:\AI\AI_TOOLS\export_since.ps1 -BasePath F:\AI\AI_TOOLS -Since 2026-01-14
+#   powershell -ExecutionPolicy Bypass -File F:\AI\AI_TOOLS\export_since.ps1 20260114
 
 try { chcp 65001 | Out-Null } catch { }
 
@@ -172,7 +172,7 @@ function New-ZipFromFileList([string]$ZipPath, $Files, [string]$BasePath) {
 # BasePath / OutDir
 # -------------------------
 $BasePath = Get-ArgValue "-BasePath"
-if ([string]::IsNullOrWhiteSpace($BasePath)) { $BasePath = "H:\AI\DJANGO" }
+if ([string]::IsNullOrWhiteSpace($BasePath)) { $BasePath = "F:\AI\AI_TOOLS" }
 
 $OutDir = Join-Path $PSScriptRoot "export_out"
 New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
@@ -501,12 +501,12 @@ Write-Host "     powershell -ExecutionPolicy Bypass -File .\install.ps1 D:\AI\DJ
 #   .\export_since.ps1 20260101
 #   .\export_since.ps1 2026-01-01
 #   .\export_since.ps1 -Since 2026-01-01
-#   .\export_since.ps1 -BasePath H:\AI\DJANGO -Since 2026-01-01
-#匯出 powershell -ExecutionPolicy Bypass -File H:\AI\DJANGO\export_since.ps1  -BasePath H:\AI\DJANGO  -Since 2026-01-01
+#   .\export_since.ps1 -BasePath F:\AI\AI_TOOLS -Since 2026-01-01
+#匯出 powershell -ExecutionPolicy Bypass -File F:\AI\AI_TOOLS\export_since.ps1  -BasePath F:\AI\AI_TOOLS  -Since 2026-01-01
       # 會產生：
-      # H:\AI\DJANGO\export_out\exportfile_YYYYMMDD.zip
-      # H:\AI\DJANGO\export_out\filestru.txt
-      # H:\AI\DJANGO\export_out\install.ps1
+      # F:\AI\AI_TOOLS\export_out\exportfile_YYYYMMDD.zip
+      # F:\AI\AI_TOOLS\export_out\filestru.txt
+      # F:\AI\AI_TOOLS\export_out\install.ps1
       # 匯入（另一台電腦）
       # 把 export_out 整個資料夾帶過去，進去後：
 #匯入 powershell -ExecutionPolicy Bypass -File D:\AI\DJANGO\export_out\install.ps1 -TargetDir D:\AI\DJANGO -ZipPath D:\AI\DJANGO\export_out\exportfile_since_20260115_export_20260116.zip

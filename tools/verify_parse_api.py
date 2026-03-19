@@ -1,4 +1,4 @@
-# H:\AI\DJANGO\tools\verify_parse_api.py
+# F:\AI\AI_TOOLS\tools\verify_parse_api.py
 import asyncio
 import os
 import json

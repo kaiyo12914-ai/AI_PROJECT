@@ -2,7 +2,7 @@ import os
 import sys
 
 # Ensure project root is in path before anything else
-sys.path.append(r"H:\AI\DJANGO")
+sys.path.append(r"F:\AI\AI_TOOLS")
 
 import django
 from django.conf import settings

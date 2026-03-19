@@ -170,7 +170,7 @@ CSRF_COOKIE_HTTPONLY = True
 # ✅ 環境與磁碟路徑自動切換 (ENV=EXT: H磁碟, ENV=INT: D磁碟)
 # ============================================================
 
-# 根據環境決定基礎磁碟 (H:\AI\Django 或 D:\AI\Django)
+# 根據環境決定基礎磁碟 (H:\AI\AI_TOOLS 或 D:\AI\Django)
 _TARGET_DRIVE = "H:" if ENV_NAME == "EXT" else "D:"
 _PROJECT_ROOT_STR = f"{_TARGET_DRIVE}\\AI\\Django"
 

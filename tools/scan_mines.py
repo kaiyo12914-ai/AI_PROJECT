@@ -6,7 +6,7 @@
 - 輸出：終端機 + 可選寫出 report.json / report.md
 
 用法：
-  python tools/scan_mines.py --root H:\AI\Django
+  python tools/scan_mines.py --root F:\AI\AI_TOOLS
   python tools/scan_mines.py --root . --write-md --write-json
 
 建議先掃來源，不掃 collectstatic 產物：
