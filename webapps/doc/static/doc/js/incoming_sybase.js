@@ -292,6 +292,7 @@
     var _todoRows = [];
     var _busyTodo = false;
     var _activeGrsno = "";
+    var _lastInputGrsno = _asStr(elGrsno && elGrsno.value);
 
     // URL builders (ONLY placeholder replacement on injected template)
     function _buildFileUrl(attachKey, hintName) {
@@ -339,6 +340,28 @@
       _writeTokens([]);
     }
 
+    function _clearLookupUiForSwitch() {
+      _lookupRows = [];
+      if (elPick) {
+        elPick.innerHTML = "";
+        var opt0 = document.createElement("option");
+        opt0.value = "";
+        opt0.textContent = "（請選擇）";
+        elPick.appendChild(opt0);
+      }
+      if (elAttachList) elAttachList.innerHTML = "";
+      _setAttachBoxVisible(false);
+    }
+
+    function _hardResetOnGrsnoSwitch(nextGrsno) {
+      _clearStashedTokens();
+      _clearEditorContextHard();
+      _clearLookupUiForSwitch();
+      _activeGrsno = _asStr(nextGrsno);
+      _lastInputGrsno = _activeGrsno;
+      setStatus(elStatus, _activeGrsno ? ("已切換文號：" + _activeGrsno + "，歷史資料已清除。") : "", false);
+    }
+
     function _clearEditorContextHard() {
       // Clear parse/generate artifacts to avoid cross-todo contamination.
       var idsToClear = [
@@ -356,6 +379,12 @@
 
       var metaEl = document.getElementById("genMeta");
       if (metaEl) metaEl.textContent = "";
+
+      var tokenEl = _getHiddenTokensEl();
+      if (tokenEl) {
+        tokenEl.value = "";
+        tokenEl.setAttribute("value", "");
+      }
 
       try {
         if (window.DocDocApp && window.DocDocApp.modules && window.DocDocApp.modules.editor) {
@@ -552,17 +581,7 @@
       }
       
       // ✅ 物理鎖定：切換待辦時，必須立刻執行「深度清理」
-      // 1. 清空前端附件 Token 緩存
-      _clearStashedTokens();
-      
-      // 2. 清空 Editor 內解析與生成上下文
-      _clearEditorContextHard();
-      // 額外物理清空 Editor 的 sybAttachTokens
-      var editorTokensEl = document.querySelector('[name="sybAttachTokens"]');
-      if (editorTokensEl) {
-        editorTokensEl.value = "";
-        editorTokensEl.setAttribute("value", "");
-      }
+      _hardResetOnGrsnoSwitch(grsno);
 
       // ✅ 更新 GRSNO 輸入框
       if (elGrsno) {
@@ -797,6 +816,16 @@
       elBtnLookup.addEventListener("click", function () {
         doLookup();
       });
+    }
+    if (elGrsno) {
+      var onGrsnoChanged = function () {
+        var cur = _asStr(elGrsno.value);
+        if (cur === _lastInputGrsno) return;
+        // 文號一旦變更，立即清掉歷史解析/附件 token，避免混文。
+        _hardResetOnGrsnoSwitch(cur);
+      };
+      elGrsno.addEventListener("input", onGrsnoChanged);
+      elGrsno.addEventListener("change", onGrsnoChanged);
     }
     if (elPick) {
       elPick.addEventListener("change", function () {

@@ -601,8 +601,7 @@ def _preprocess_incoming_text_local(text: str, from_org: str, self_refer: str, l
 
 def _extract_recipient_org(text: str) -> str:
     """
-    Extract recipient unit (受文單位) from top header.
-    Keep human-readable raw wording instead of heavily normalized token.
+    受文單位擷取（來文檔專用）。
     """
     lines = [_compact_spaced_cjk(x.strip()) for x in _pick_header_lines(text) if (x or "").strip()]
     if not lines:
@@ -611,15 +610,24 @@ def _extract_recipient_org(text: str) -> str:
     stop_pat = re.compile(
         r"^(主旨|說明|附件|發文字號|發文日期|檔號|保存年限|密等|速別|地址|電話|傳真|聯絡人|電子信箱)\s*[:：]"
     )
+    def _clean_candidate(v: str) -> str:
+        t = _compact_spaced_cjk(v or "")
+        # If OCR merged multiple fields into one line, trim at next known field key.
+        t = re.split(
+            r"(?:發文日期|發文字號|主旨|說明|附件|檔號|保存年限|密等|速別)\s*[:：]",
+            t,
+            maxsplit=1,
+        )[0].strip()
+        t = re.split(r"[、,，;；]", t, maxsplit=1)[0].strip()
+        return t
+
     for i, raw in enumerate(lines[:40]):
         m = re.match(r"^受\s*文\s*者\s*[:：]\s*(.*)$", raw)
         if not m:
             continue
-        inline = (m.group(1) or "").strip()
+        inline = _clean_candidate((m.group(1) or "").strip())
         if inline:
-            first = re.split(r"[、,，;；]", inline, maxsplit=1)[0].strip()
-            if first:
-                return first
+            return inline
         for j in range(i + 1, min(i + 6, len(lines))):
             ln = (lines[j] or "").strip()
             if not ln or stop_pat.match(ln) or re.match(r"^[令函呈]$", ln):
@@ -628,15 +636,31 @@ def _extract_recipient_org(text: str) -> str:
                 break
             if re.match(r"^[一-龥A-Za-z0-9○〇０0]{1,10}\s*[:：]", ln):
                 break
-            return ln
+            cand = _clean_candidate(ln)
+            if cand:
+                return cand
+
+    compact_text = _compact_spaced_cjk(text or "")
+    m_inline = re.search(r"受\s*文\s*者\s*[:：]\s*([^\r\n]+)", compact_text)
+    if m_inline:
+        cand = _clean_candidate(m_inline.group(1))
+        if cand:
+            return cand
+
+    # Fallback: some official docs only expose recipient in 正本 line.
+    m_copy = re.search(r"正本\s*[:：]\s*([^\r\n]+)", compact_text)
+    if m_copy:
+        cand = _clean_candidate(m_copy.group(1))
+        if cand:
+            return cand
     return ""
 
 
 def _is_incoming_doc_text(text: str) -> bool:
     """
-    Incoming doc classifier:
-    - incoming file should contain official metadata labels such as
-      發文日期/發文字號/受文者.
+    來文檔判別：
+    - 檔案內容有發文字號、發文日期等欄位，視為來文檔
+    - 否則視為附件檔
     """
     t = _compact_spaced_cjk(text or "")
     if not t:
@@ -672,7 +696,7 @@ def _split_file_texts_by_kind(
 
 def _extract_description_paragraphs(text: str, max_items: int = 8) -> List[str]:
     """
-    Extract complete 說明 paragraphs from incoming doc body.
+    來文「說明」段落完整擷取（每段合併為完整句段）。
     """
     lines = [_compact_spaced_cjk(x.strip()) for x in (text or "").splitlines() if (x or "").strip()]
     if not lines:
@@ -725,24 +749,57 @@ def _extract_description_paragraphs(text: str, max_items: int = 8) -> List[str]:
     return cleaned
 
 
-def _extract_attachment_points(
-    attachment_docs: List[Tuple[str, str, str]],
-    llm,
-    *,
-    extra_hint: str = "",
-    max_points: int = 10,
-) -> Tuple[str, List[str]]:
-    if not attachment_docs:
-        return "", []
-    combined = "\n\n".join([x[2] for x in attachment_docs if (x[2] or "").strip()]).strip()
-    if not combined:
-        return "", []
-    prompt = _build_attach_focus_prompt(combined, extra_hint=extra_hint)
-    summary_raw = _to_text(llm.invoke(prompt)).strip()
-    summary_text = _ensure_focus_numbered(summary_raw, max_points=20)
-    summary_text = _postprocess_focus_points(summary_text, max_points=20)
-    points = _collect_focus_point_candidates(summary_text)
-    return prompt, points[:max_points]
+def _extract_numbered_points(summary_text: str) -> List[str]:
+    out: List[str] = []
+    meta_pat = re.compile(r"^(發文日期|發文字號|來文主旨|主旨)\s*[:：]")
+    non_focus_pat = re.compile(
+        r"^(附件(?:檔案)?名稱|附件檔名|解密條件(?:或保密期限)?|保密期限|文件總頁數|總頁數|頁數|(?:令的)?地址)\s*[:：]"
+    )
+    for ln in (summary_text or "").splitlines():
+        m = re.match(r"^重點\s*\d+\s*[:：]\s*(.+)$", (ln or "").strip())
+        if not m:
+            continue
+        t = _compact_spaced_cjk((m.group(1) or "").strip())
+        if meta_pat.match(t):
+            continue
+        if non_focus_pat.match(t):
+            continue
+        if t:
+            out.append(t)
+    return out
+
+
+def _extract_doc_ref_ids(text: str) -> List[str]:
+    t = _compact_spaced_cjk(text or "")
+    if not t:
+        return []
+    out: List[str] = []
+    seen = set()
+    for m in re.finditer(r"字第\s*([A-Za-z0-9○〇０-９一二三四五六七八九十百千\-]+)\s*號", t):
+        ref = re.sub(r"\s+", "", (m.group(1) or "").strip())
+        if not ref or ref in seen:
+            continue
+        seen.add(ref)
+        out.append(ref)
+    return out
+
+
+def _filter_points_by_anchor_doc_no(points: List[str], anchor_doc_no: str) -> List[str]:
+    """
+    Keep points tied to current incoming doc number.
+    If a point contains ref ids but none match anchor_doc_no, drop it as cross-case noise.
+    """
+    anchor_ids = _extract_doc_ref_ids(anchor_doc_no)
+    if not anchor_ids:
+        return points or []
+    anchor_set = set(anchor_ids)
+    out: List[str] = []
+    for p in points or []:
+        refs = _extract_doc_ref_ids(p)
+        if refs and anchor_set.isdisjoint(set(refs)):
+            continue
+        out.append(p)
+    return out
 
 
 def _collect_focus_point_candidates(summary_text: str) -> List[str]:
@@ -765,57 +822,48 @@ def _collect_focus_point_candidates(summary_text: str) -> List[str]:
     return points
 
 
-def _split_incoming_and_attachment_points(points: List[str]) -> Tuple[List[str], List[str]]:
-    attach_keys = (
-        "附件", "附呈", "附檔", "附表", "附錄", "附圖", "清冊", "名冊", "附文",
-        "附件中", "附件內容", "附件資料", "圖表", "附加文件",
-    )
-    incoming: List[str] = []
-    attach: List[str] = []
-    seen = set()
-
-    for p in points:
-        t = (p or "").strip()
-        if not t:
-            continue
-        key = _normalize_point_text(t)
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        if any(k in t for k in attach_keys):
-            attach.append(t)
-        else:
-            incoming.append(t)
-
-    # Keep deterministic output and avoid empty incoming section.
-    if not incoming and attach:
-        incoming = attach[: min(5, len(attach))]
-        attach = attach[min(5, len(attach)) :]
-    return incoming, attach
+def _extract_attachment_points(
+    attachment_docs: List[Tuple[str, str, str]],
+    llm,
+    *,
+    extra_hint: str = "",
+    max_points: int = 10,
+) -> Tuple[str, List[str]]:
+    if not attachment_docs:
+        return "", []
+    combined = "\n\n".join([x[2] for x in attachment_docs if (x[2] or "").strip()]).strip()
+    if not combined:
+        return "", []
+    prompt = _build_attach_focus_prompt(combined, extra_hint=extra_hint)
+    summary_raw = _to_text(llm.invoke(prompt)).strip()
+    summary_text = _ensure_focus_numbered(summary_raw, max_points=20)
+    summary_text = _postprocess_focus_points(summary_text, max_points=20)
+    points = _collect_focus_point_candidates(summary_text)
+    return prompt, points[:max_points]
 
 
-def _format_focus_summary_v2(
+def _format_focus_summary_v3(
     *,
     sender_org: str,
     recipient_org: str,
-    doc_subject: str,
     incoming_desc: List[str],
+    incoming_keypoints: List[str],
     attachment_points: List[str],
-    max_incoming: int = 8,
+    max_incoming_desc: int = 8,
+    max_incoming_points: int = 10,
     max_attach: int = 10,
 ) -> str:
     sender = (sender_org or "").strip() or "未辨識機關"
     recipient = (recipient_org or "").strip() or "未辨識單位"
-    subject = (doc_subject or "").strip() or "未提供主旨"
-
     lines: List[str] = [
         f"來文單位: {sender}",
-        f"受文單位: {recipient}",
-        f"來文主旨: {subject}",
+        f"受文者: {recipient}",
     ]
-    for i, p in enumerate((incoming_desc or [])[:max_incoming], 1):
+    for i, p in enumerate((incoming_desc or [])[:max_incoming_desc], 1):
         lines.append(f"來文說明{i}: {p}")
-    for i, p in enumerate(attachment_points[:max_attach], 1):
+    for i, p in enumerate((incoming_keypoints or [])[:max_incoming_points], 1):
+        lines.append(f"來文重點{i}: {p}")
+    for i, p in enumerate((attachment_points or [])[:max_attach], 1):
         lines.append(f"附件重點{i}: {p}")
     return "\n".join(lines)
 
@@ -1025,19 +1073,41 @@ def api_parse_attachments_focus(request: HttpRequest):
             return JsonResponse({"ok": False, "error": "all_files_empty"}, status=400)
         
         incoming_docs, attachment_docs = _split_file_texts_by_kind(file_texts)
-        best_meta = _find_best_doc_metadata(incoming_docs or file_texts)
+        source_docs = incoming_docs or file_texts
+        best_meta = _find_best_doc_metadata(source_docs)
         best_meta["type"] = _normalize_doc_type_by_level(best_meta.get("type", ""), best_meta.get("level", ""))
         combined_text = "\n\n".join([p[2] for p in file_texts]).strip()
-
+        
         llm = get_chat_model()
         self_refer = _resolve_writer_identity_local(request)
-        incoming_raw = best_meta.get("raw_text", "") or combined_text
-        washed_incoming = _preprocess_incoming_text_local(
-            incoming_raw, best_meta["org"], self_refer, level=best_meta["level"]
-        )
-        incoming_desc = _extract_description_paragraphs(washed_incoming, max_items=8)
-
         extra_hint = (request.POST.get("prompt") or "")
+
+        incoming_raw_text = best_meta.get("raw_text", "") or (source_docs[0][1] if source_docs else combined_text)
+        washed_incoming_text = _preprocess_incoming_text_local(
+            incoming_raw_text, best_meta["org"], self_refer, level=best_meta["level"]
+        )
+
+        # 來文說明：直接抽「說明」段落，保留每段完整語義。
+        incoming_desc = _extract_description_paragraphs(washed_incoming_text, max_items=8)
+        incoming_desc = _filter_points_by_anchor_doc_no(incoming_desc, best_meta.get("no", ""))
+
+        # 來文重點：仍保留「擬稿說明第一點固定引述」與「這是...主旨...」兩段。
+        incoming_prompt = _build_attach_focus_prompt(washed_incoming_text, extra_hint=extra_hint)
+        incoming_summary_raw = _to_text(llm.invoke(incoming_prompt)).strip()
+        incoming_summary = _ensure_focus_numbered(incoming_summary_raw, max_points=20)
+        incoming_summary = _postprocess_focus_points(incoming_summary, max_points=20)
+        injected_text = _inject_org_level_point(
+            incoming_summary, best_meta["org"], best_meta["level"],
+            best_meta["date"], best_meta["no"], best_meta["type"],
+            _extract_doc_subject(best_meta["raw_text"]),
+            full_text_for_search=best_meta["raw_text"] or combined_text,
+            max_points=20
+        )
+
+        incoming_keypoints = _extract_numbered_points(injected_text)
+        incoming_keypoints = _filter_points_by_anchor_doc_no(incoming_keypoints, best_meta.get("no", ""))
+
+        # 附件重點：只看附件檔，不混來文檔。
         attach_prompt, attachment_points = _extract_attachment_points(
             attachment_docs,
             llm,
@@ -1045,47 +1115,39 @@ def api_parse_attachments_focus(request: HttpRequest):
             max_points=10,
         )
 
-        # Fallback: if no incoming 說明 extracted, use non-attachment points from LLM summary.
-        if not incoming_desc:
-            fallback_prompt = _build_attach_focus_prompt(washed_incoming, extra_hint=extra_hint)
-            fallback_raw = _to_text(llm.invoke(fallback_prompt)).strip()
-            fallback_text = _ensure_focus_numbered(fallback_raw, max_points=20)
-            fallback_text = _postprocess_focus_points(fallback_text, max_points=20)
-            fb_points = _collect_focus_point_candidates(fallback_text)
-            incoming_desc = [x for x in fb_points if "附件" not in x][:8]
-            if not attach_prompt:
-                attach_prompt = fallback_prompt
-            if not attachment_points:
-                attachment_points = [x for x in fb_points if "附件" in x][:10]
-
-        recipient_org = _extract_recipient_org(incoming_raw)
-        doc_subject = _extract_doc_subject(incoming_raw)
-        summary_text = _format_focus_summary_v2(
-            sender_org=_safe_inferred_org(best_meta.get("org", "")),
+        sender_org = _extract_header_org_doc_type(incoming_raw_text)[0] or _safe_inferred_org(best_meta.get("org", ""))
+        recipient_org = _extract_recipient_org(incoming_raw_text)
+        summary_text = _format_focus_summary_v3(
+            sender_org=sender_org,
             recipient_org=recipient_org,
-            doc_subject=doc_subject,
             incoming_desc=incoming_desc,
+            incoming_keypoints=incoming_keypoints,
             attachment_points=attachment_points,
-            max_incoming=8,
+            max_incoming_desc=8,
+            max_incoming_points=10,
             max_attach=10,
         )
+
+        debug_obj = _build_inferred_debug(best_meta, file_texts)
+        debug_obj["incoming_files"] = [x[0] for x in incoming_docs]
+        debug_obj["attachment_files"] = [x[0] for x in attachment_docs]
+
+        combined_prompt = incoming_prompt
+        if attach_prompt:
+            combined_prompt = f"{incoming_prompt}\n\n-----\n[附件重點 Prompt]\n{attach_prompt}"
+
         return JsonResponse(
             {
                 "ok": True,
                 "summary_text": summary_text,
-                "prompt": attach_prompt,
+                "prompt": combined_prompt,
                 "inferred": {
-                    "org": _safe_inferred_org(best_meta.get("org", "")),
+                    "org": sender_org or _safe_inferred_org(best_meta.get("org", "")),
                     "recipient_org": recipient_org or "未辨識單位",
-                    "subject": doc_subject or "未提供主旨",
                     "level": best_meta.get("level", ""),
                     "doc_kind": best_meta.get("type", ""),
                     "doc_type": _map_kind_to_doc_type(best_meta.get("type", "")),
-                    "debug": {
-                        **_build_inferred_debug(best_meta, file_texts),
-                        "incoming_files": [x[0] for x in incoming_docs],
-                        "attachment_files": [x[0] for x in attachment_docs],
-                    },
+                    "debug": debug_obj,
                 },
             },
             status=200,

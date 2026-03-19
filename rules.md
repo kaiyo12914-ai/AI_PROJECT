@@ -14,11 +14,11 @@
 - 專案間整合僅能透過 API、訊息佇列或明確資料交換流程。
 
 ## 共用開發設定
-- 共用開發 workspace：H:\AI\AI_TOOLS\openclaw-workspace
+- 共用開發 workspace：H:\AI\openclaw-workspace
 - 共用虛擬環境優先：H:\AI\VENV3.12
 - 回退環境：H:\AI\venv3.12
 
 ## 變更管理
 - 任何專案規範調整，先更新本檔，再同步更新其他專案 rules.md。
 - 請將長期有效政策同步記錄於：
-  H:\AI\AI_TOOLS\openclaw-workspace\LONG_TERM_MEMORY.md
+  H:\AI\openclaw-workspace\LONG_TERM_MEMORY.md

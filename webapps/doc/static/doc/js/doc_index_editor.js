@@ -142,7 +142,10 @@
 
     // ✅ Sybase tokens 清空（incoming_sybase.js 會寫入）
     const tokenEl = document.getElementById("sybAttachTokens");
-    if (tokenEl) tokenEl.value = "";
+    if (tokenEl) {
+      tokenEl.value = "";
+      tokenEl.setAttribute("value", "");
+    }
     resetFocusPick();
   }
 
@@ -181,7 +184,7 @@
       .map((x) => String(x || "").trim())
       .filter(Boolean);
     return lines
-      .filter((line) => /^(來文單位|受文單位|來文主旨)\s*[：:]/.test(line))
+      .filter((line) => /^(來文單位|受文者|受文單位|來文主旨)\s*[：:]/.test(line))
       .join("\n");
   }
 
@@ -217,11 +220,21 @@
       const line = String(rawLine || "").trim();
       if (!line) continue;
 
-      const mIncoming = line.match(/^來文(?:重點|說明)\s*(\d+)\s*[：:]\s*(.*)$/);
+      const mDesc = line.match(/^來文說明\s*(\d+)\s*[：:]\s*(.*)$/);
+      if (mDesc) {
+        pushCurrent();
+        current = {
+          label: `來文說明${mDesc[1]}`,
+          lines: [stripLeadingOrdinal(mDesc[2])].filter(Boolean),
+        };
+        continue;
+      }
+
+      const mIncoming = line.match(/^來文重點\s*(\d+)\s*[：:]\s*(.*)$/);
       if (mIncoming) {
         pushCurrent();
         current = {
-          label: `來文說明${mIncoming[1]}`,
+          label: `來文重點${mIncoming[1]}`,
           lines: [stripLeadingOrdinal(mIncoming[2])].filter(Boolean),
         };
         continue;
@@ -260,7 +273,7 @@
       if (current) {
         current.lines.push(stripLeadingOrdinal(line));
       } else {
-        if (/^(來文單位|受文單位|來文主旨)\s*[：:]/.test(line)) continue;
+        if (/^(來文單位|受文者|受文單位|來文主旨)\s*[：:]/.test(line)) continue;
         items.push({
           id: `focus_${items.length + 1}`,
           label: `重點${seq}`,

@@ -958,9 +958,26 @@ def _sanitize_stage1_points_for_stage2(attachments_text: str) -> str:
     return "\n".join(out).strip()
 
 
-def _sanitize_stage2_facts(facts: Any) -> str:
+def _extract_doc_ref_keys(text: str) -> set[str]:
+    t = _safe_str(text)
+    if not t:
+        return set()
+    keys: set[str] = set()
+    for m in re.finditer(r"字第\s*([A-Za-z0-9○〇０-９一二三四五六七八九十百千\-]+)\s*號", t):
+        k = re.sub(r"\s+", "", _safe_str(m.group(1)))
+        if k:
+            keys.add(f"DOC:{k}")
+    for m in re.finditer(r"通(?:電資)?通報\s*([0-9]{5,})\s*號", t):
+        k = re.sub(r"\s+", "", _safe_str(m.group(1)))
+        if k:
+            keys.add(f"BUL:{k}")
+    return keys
+
+
+def _sanitize_stage2_facts(facts: Any, incoming_text: str = "") -> str:
     if not isinstance(facts, list):
         return ""
+    anchor_keys = _extract_doc_ref_keys(incoming_text)
     out: list[str] = []
     for x in facts:
         line = _safe_str(x).strip()
@@ -974,6 +991,10 @@ def _sanitize_stage2_facts(facts: Any) -> str:
         if re.search(r"^這是.+（層級|這是.+的[令函呈]", line):
             continue
         if re.search(r"^(擬辦|建議|請示|研處意見)\s*[:：]", line):
+            continue
+        # Cross-case guard: when incoming doc refs are known, drop facts carrying other case refs.
+        line_keys = _extract_doc_ref_keys(line)
+        if anchor_keys and line_keys and anchor_keys.isdisjoint(line_keys):
             continue
         out.append(line)
     return "\n".join(out).strip()
@@ -1334,6 +1355,41 @@ def _prune_optional_plan_terms_in_research_opinion(explain_text: str) -> str:
     return "\n".join(out).strip()
 
 
+def _draft_to_sections_prefer_last_body(draft_text: str) -> Dict[str, str]:
+    """
+    Parse duplicated section outputs with policy:
+    - 主旨：保留第一個（避免後段覆蓋原始主旨）
+    - 說明/擬辦：保留最後一個（通常為模型後段收斂版本）
+    """
+    text = "\n" + (draft_text or "")
+    parts = re.split(r"\n\s*(主旨|說明|擬辦|建議|擬辦建議|辦法)\s*[:：]?", text)
+    out: Dict[str, str] = {"subject": "", "explain": "", "action": ""}
+    current = ""
+    map_key = {
+        "主旨": "subject",
+        "說明": "explain",
+        "擬辦": "action",
+        "建議": "action",
+        "擬辦建議": "action",
+        "辦法": "action",
+    }
+    for part in parts:
+        p = (part or "").strip()
+        if not p:
+            continue
+        if p in map_key:
+            current = map_key[p]
+            continue
+        if not current:
+            continue
+        if current == "subject":
+            if not out.get("subject"):
+                out["subject"] = p
+            continue
+        out[current] = p
+    return out
+
+
 @csrf_exempt
 @require_node("doc", api=True)
 def api_generate(request: HttpRequest):
@@ -1357,7 +1413,7 @@ def api_generate(request: HttpRequest):
     # Deprecated in stage-2 strict mode; keep read for compatibility but never use.
     attachments_text = _safe_str(body.get("attachments_text")).strip()
     fixed_quote = _extract_fixed_quote_from_stage2_facts(body.get("stage2_facts"))
-    stage2_facts_text = _sanitize_stage2_facts(body.get("stage2_facts"))
+    stage2_facts_text = _sanitize_stage2_facts(body.get("stage2_facts"), incoming_text=incoming_text)
     attachments_text_clean = stage2_facts_text
     incoming_level = _safe_str(body.get("incoming_level")).strip().lower()
     discretion = _safe_str(body.get("discretion")).strip().lower()
@@ -1430,8 +1486,10 @@ def api_generate(request: HttpRequest):
         draft_text = _convert_incoming_directive_to_internal_narrative(draft_text, signer_self_ref, doc_type)
         draft_text = _formalize_analysis_markers(draft_text)
 
-        # 分割段落
-        draft_sections = _draft_to_sections(doc_type, draft_text)
+        # 分割段落（重複章節時：主旨取第一組；說明/擬辦取最後一組）
+        draft_sections = _draft_to_sections_prefer_last_body(draft_text)
+        if not any((draft_sections.get("subject"), draft_sections.get("explain"), draft_sections.get("action"))):
+            draft_sections = _draft_to_sections(doc_type, draft_text)
         
         # Stage isolation: do not inject stage-1 helper quote into stage-2 sections.
         draft_sections["explain"] = _ensure_research_opinion_label(_safe_str(draft_sections.get("explain")))
@@ -1452,6 +1510,10 @@ def api_generate(request: HttpRequest):
                 _extract_subject_from_requirement(requirement)
                 or _fallback_subject_from_text(draft_text)
             )
+        # 主旨必須單行；避免章節切段失敗時把說明/擬辦誤併入主旨。
+        subject_one_line = _safe_str(draft_sections.get("subject")).splitlines()[0].strip()
+        if subject_one_line:
+            draft_sections["subject"] = subject_one_line
         draft_sections["explain"] = _dedupe_explain_points(_safe_str(draft_sections.get("explain")))
         draft_sections["explain"] = _enforce_research_opinion_axis(_safe_str(draft_sections.get("explain")))
         draft_sections["explain"] = _cap_explain_points_with_evaluation(

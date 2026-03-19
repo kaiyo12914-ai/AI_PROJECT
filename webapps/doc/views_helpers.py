@@ -277,7 +277,7 @@ def _normalize_meta(body_meta: Any) -> Dict[str, Any]:
 
 def _draft_to_sections(doc_type: str, draft_text: str) -> Dict[str, Any]:
     sections = {"subject": "", "explain": "", "action": ""}
-    parts = re.split(r"\n\s*(主旨|說明|擬辦|建議|擬辦建議|辦法)[:：]", "\n" + draft_text)
+    parts = re.split(r"\n\s*(主旨|說明|擬辦|建議|擬辦建議|辦法)\s*[:：]?", "\n" + draft_text)
     current_key = ""
     for part in parts:
         p = part.strip()
