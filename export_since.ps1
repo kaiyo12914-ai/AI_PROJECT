@@ -290,10 +290,10 @@ $installContent = @'
 #   Fallback old name:  exportfile_YYYYMMDD.zip
 #
 # Usage:
-#   powershell -ExecutionPolicy Bypass -File .\install.ps1 D:\AI\AI_TOOLS
-#   powershell -ExecutionPolicy Bypass -File .\install.ps1 -TargetDir D:\AI\AI_TOOLS
-#   powershell -ExecutionPolicy Bypass -File .\install.ps1 -TargetDir D:\AI\AI_TOOLS -ZipPath .\exportfile_since_20260115_export_20260116.zip
-#   powershell -ExecutionPolicy Bypass -File .\install.ps1 -TargetDir D:\AI\AI_TOOLS -SinceTag 20260115
+#   powershell -ExecutionPolicy Bypass -File .\install.ps1 H:\AI\AI_TOOLS
+#   powershell -ExecutionPolicy Bypass -File .\install.ps1 -TargetDir H:\AI\AI_TOOLS
+#   powershell -ExecutionPolicy Bypass -File .\install.ps1 -TargetDir H:\AI\AI_TOOLS -ZipPath .\exportfile_since_20260115_export_20260116.zip
+#   powershell -ExecutionPolicy Bypass -File .\install.ps1 -TargetDir H:\AI\AI_TOOLS -SinceTag 20260115
 
 try { chcp 65001 | Out-Null } catch { }
 
@@ -341,9 +341,9 @@ $BackupDir = Get-ArgValue "-BackupDir"
 if ([string]::IsNullOrEmpty($TargetDir)) {
   Write-Host "ERROR: TargetDir missing."
   Write-Host "Run:"
-  Write-Host "  powershell -ExecutionPolicy Bypass -File .\install.ps1 D:\AI\AI_TOOLS"
+  Write-Host "  powershell -ExecutionPolicy Bypass -File .\install.ps1 H:\AI\AI_TOOLS"
   Write-Host "or:"
-  Write-Host "  powershell -ExecutionPolicy Bypass -File .\install.ps1 -TargetDir D:\AI\AI_TOOLS"
+  Write-Host "  powershell -ExecutionPolicy Bypass -File .\install.ps1 -TargetDir H:\AI\AI_TOOLS"
   exit 1
 }
 
@@ -490,7 +490,7 @@ Write-Host ""
 Write-Host "Import on another PC (recommended):"
 Write-Host ("  1) unzip: " + $BundleName)
 Write-Host "  2) run install.ps1 from extracted folder:"
-Write-Host "     powershell -ExecutionPolicy Bypass -File .\install.ps1 D:\AI\AI_TOOLS"
+Write-Host "     powershell -ExecutionPolicy Bypass -File .\install.ps1 H:\AI\AI_TOOLS"
 
 
 
@@ -509,4 +509,4 @@ Write-Host "     powershell -ExecutionPolicy Bypass -File .\install.ps1 D:\AI\AI
       # H:\AI\AI_TOOLS\export_out\install.ps1
       # 匯入（另一台電腦）
       # 把 export_out 整個資料夾帶過去，進去後：
-#匯入 powershell -ExecutionPolicy Bypass -File D:\AI\AI_TOOLS\export_out\install.ps1 -TargetDir D:\AI\AI_TOOLS -ZipPath D:\AI\AI_TOOLS\export_out\exportfile_since_20260115_export_20260116.zip
+#匯入 powershell -ExecutionPolicy Bypass -File H:\AI\AI_TOOLS\export_out\install.ps1 -TargetDir H:\AI\AI_TOOLS -ZipPath H:\AI\AI_TOOLS\export_out\exportfile_since_20260115_export_20260116.zip
