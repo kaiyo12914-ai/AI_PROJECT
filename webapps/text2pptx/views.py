@@ -3,7 +3,8 @@ from __future__ import annotations
 import io
 import os
 import re
-from typing import Optional, List
+import json # Import json for parsing LLM output
+from typing import Optional, List, Dict, Any
 
 from django.conf import settings
 from django.http import HttpResponse, JsonResponse
@@ -11,6 +12,7 @@ from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 
 from webapps.portal.decorators import require_node
+from webapps.llm.llm_factory import get_chat_model # Import LLM factory
 
 
 # ---------------------------
@@ -139,6 +141,69 @@ def _safe_filename(name: str, default: str = "slides") -> str:
     return name or default
 
 
+def _analyze_text_with_llm(text: str) -> Dict[str, Any]:
+    """
+    Uses LLM to analyze raw text and structure it for presentation.
+    Returns a dict with 'title', 'subtitle', and 'slides' (list of dicts with 'title', 'bullets').
+    """
+    llm = get_chat_model()
+    prompt = f"""
+    你是一個專業的簡報生成助手。請將以下文字內容轉換為結構化的簡報大綱。輸出必須是 JSON 格式。
+
+    規則：
+    1. 輸出 JSON 必須包含三個頂層鍵："main_title", "main_subtitle", "slides"。
+    2. "main_title"：整份簡報的主要標題。
+    3. "main_subtitle"：整份簡報的副標題。
+    4. "slides"：一個列表，每個元素代表一張投影片。
+    5. 每張投影片（slides 的每個元素）必須包含兩個鍵："title" 和 "bullets"。
+    6. "title"：該投影片的標題。
+    7. "bullets"：一個列表，包含該投影片的所有條列要點。如果沒有要點，則為空列表。
+    8. 盡可能語義化地拆分內容到不同的投影片，每張投影片的條列要點數量不應超過 {MAX_BULLETS_PER_SLIDE} 點。
+    9. 若原文沒有明確主標題，請自動生成一個簡潔相關的標題。
+    10. 若原文沒有明確副標題，請使用「文字內容自動生成簡報」作為副標題。
+
+    請分析以下文字內容：
+
+    ```text
+    {text}
+    ```
+
+    JSON 輸出範例：
+    ```json
+    {{
+      "main_title": "專案進度報告",
+      "main_subtitle": "2026年3月更新",
+      "slides": [
+        {{
+          "title": "第一張：專案概述",
+          "bullets": ["目的：提升效率", "範圍：XXX"]
+        }},
+        {{
+          "title": "第二張：時程規劃",
+          "bullets": ["W1：需求分析", "W2：開發階段", "W3：驗收與部署"]
+        }}
+      ]
+    }}
+    ```
+    """
+
+    try:
+        response = llm.invoke(prompt)
+        llm_output = json.loads(response)
+        return llm_output
+    except Exception as e:
+        print(f"LLM text analysis failed: {e}")
+        # Fallback to original splitting if LLM fails
+        return {
+            "main_title": "簡報",
+            "main_subtitle": "文字內容自動生成簡報",
+            "slides": [
+                {"title": s.splitlines()[0] if s.splitlines() else "", "bullets": s.splitlines()[1:]}
+                for s in text.split("===") if s.strip()
+            ]
+        }
+
+
 @require_node("pptx")
 def index(request):
     templates = _list_pptx_templates()
@@ -152,7 +217,7 @@ def generate_pptx(request):
         return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
 
     text = (request.POST.get("text") or "").strip()
-    title = (request.POST.get("title") or "簡報").strip()
+    # title = (request.POST.get("title") or "簡報").strip() # Now derived from LLM
     tpl_name = (request.POST.get("template") or "").strip()
 
     if not text:
@@ -165,6 +230,12 @@ def generate_pptx(request):
         return JsonResponse({"ok": False, "error": f"缺少 python-pptx 套件：{e}"}, status=500)
 
     try:
+        # --- AI 結構化分析 ---
+        analysis_result = _analyze_text_with_llm(text)
+        main_title = analysis_result.get("main_title", "簡報")
+        main_subtitle = analysis_result.get("main_subtitle", "文字內容自動生成簡報")
+        llm_slides = analysis_result.get("slides", [])
+        
         tpl_path = _safe_select_template(tpl_name)
         prs = Presentation(tpl_path) if tpl_path else Presentation()
 
@@ -178,23 +249,23 @@ def generate_pptx(request):
             tb = cover.shapes.add_textbox(Inches(0.5), Inches(1), Inches(9), Inches(1.5))
             cover_title = tb
         
-        cover_title.text_frame.text = title
+        cover_title.text_frame.text = main_title # Use LLM-generated main title
         _apply_font_style(cover_title.text_frame.paragraphs[0], TITLE_FONT_PT, bold=True)
 
         subtitle_tf = _find_largest_text_frame(cover, exclude_shape=cover_title)
         if subtitle_tf:
             subtitle_tf.clear()
             p = subtitle_tf.paragraphs[0] if subtitle_tf.paragraphs else subtitle_tf.add_paragraph()
-            p.text = "Text → PPTX 自動產生"
+            p.text = main_subtitle # Use LLM-generated main subtitle
             _apply_font_style(p, SUBTITLE_FONT_PT)
 
-        slides_raw = [s.strip() for s in text.split("===") if s.strip()]
+        # Use LLM-structured slides
+        for i, slide_data in enumerate(llm_slides, start=1):
+            slide_title = slide_data.get("title", f"投影片 {i}")
+            bullets = slide_data.get("bullets", [])
 
-        for i, block in enumerate(slides_raw, start=1):
-            lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
-            slide_title = lines[0] if lines else f"投影片 {i}"
-            bullets = lines[1:] if len(lines) > 1 else []
-
+            # LLM should handle chunking, but keep fallback just in case or for future adjustments
+            # Here we assume LLM already chunked per MAX_BULLETS_PER_SLIDE rule
             bullet_chunks = list(_chunk_list(bullets, MAX_BULLETS_PER_SLIDE)) if bullets else [[]]
 
             for part_idx, part in enumerate(bullet_chunks):
@@ -226,7 +297,7 @@ def generate_pptx(request):
         prs.save(buf)
         buf.seek(0)
 
-        filename = f"{_safe_filename(title)}.pptx"
+        filename = f"{_safe_filename(main_title)}.pptx" # Use LLM-generated main title for filename
         resp = HttpResponse(buf.getvalue(), content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation")
         resp["Content-Disposition"] = f"attachment; filename*=UTF-8''{filename}"
         return resp
