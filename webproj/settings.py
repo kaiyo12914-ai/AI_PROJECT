@@ -285,6 +285,7 @@ ACL_BACKEND_EFFECTIVE = _resolve_acl_backend(MODEL_TYPE, PORTAL_ACL_BACKEND)
 
 PORTAL_ACL = {
     "portal": ["PUBLIC"],
+    "student": ["PUBLIC"],
     "translator": ["ALL_AUTHENTICATED"],
     "comment": [
         "ALL_AUTHENTICATED",
