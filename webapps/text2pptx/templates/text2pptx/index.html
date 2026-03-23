@@ -16,16 +16,71 @@
 
 <body data-base-url="{{ request.script_name }}">
   <div class="wrap">
+    {% if messages %}
+      <div class="msg-wrap">
+        {% for message in messages %}
+          <div class="msg {{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
     <div class="topbar">
       <h1>TEXT → PPTX</h1>
 
       {# ✅ 返回入口頁：有 named url 用 named，沒有就 fallback "/"；並自動吃 proxy prefix #}
-      <a class="backlink" href="{% url 'portal:home' %}">????</a>
+      <a class="backlink" href="{% url 'portal:home' %}">回首頁</a>
     </div>
 
     <div class="hint">
       使用規則：用 <b>===</b> 分隔投影片；每段 <b>第一行</b> 為標題，後面每行為條列內容。<br>
+      可選用版型標記：<b>[標題投影片]</b>、<b>[區段標題]</b>、<b>[標題及物件]</b>、<b>[兩個物件]</b>。<br>
       送出後會直接下載 PPTX。
+    </div>
+
+    <div class="obj-guide">
+      <div class="obj-guide-title">文字內容對應（直覺說明）</div>
+      <div class="obj-grid">
+        <div class="obj-card">
+          <div class="obj-card-title">封面怎麼來</div>
+          <ul>
+            <li>「簡報名稱」有填：直接當封面標題與下載檔名</li>
+            <li>「簡報名稱」沒填：系統會從文字內容自動產生封面標題</li>
+          </ul>
+        </div>
+        <div class="obj-card">
+          <div class="obj-card-title">每一頁怎麼切</div>
+          <ul>
+            <li>用 <b>===</b> 分隔不同投影片</li>
+            <li>每段第一行是該頁標題，後面每行是條列內容</li>
+          </ul>
+        </div>
+        <div class="obj-card">
+          <div class="obj-card-title">頁面太長怎麼辦</div>
+          <ul>
+            <li>同一頁條列太多時，系統會自動拆成下一頁（標題加「續」）</li>
+            <li>系統會依內容自動選擇一般頁、章節頁或雙欄/比較頁</li>
+          </ul>
+        </div>
+        <div class="obj-card">
+          <div class="obj-card-title">匯入範本會檢查什麼</div>
+          <ul>
+            <li>會檢查是否可套用：標題投影片、區段標題、標題及物件、兩個物件</li>
+            <li>不符合會直接提示缺少版型，避免產生時版面錯亂</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="import-box">
+      <div class="import-title">匯入範本（含四種版型審查）</div>
+      <form method="post" action="{% url 'pptx_import_template' %}" enctype="multipart/form-data" class="import-form">
+        {% csrf_token %}
+        <input type="file" name="template_file" accept=".pptx" required>
+        <button type="submit">匯入範本</button>
+      </form>
+      <div class="small">
+        會審查是否包含：標題投影片（Title Slide）、區段標題（Section Header）、標題及物件（Title and Content）、兩個物件（Two Content）。
+      </div>
     </div>
 
     {# ✅ action 必須吃 proxy prefix，避免反向代理下 post 到錯的路徑 #}
@@ -36,7 +91,7 @@
         <div>
           <label>簡報名稱</label>
           <input type="text" name="title" value="簡報" />
-          <div class="small">檔名會使用此名稱（自動加 .pptx）</div>
+          <div class="small">可覆寫封面主標題；檔名也會使用此名稱（自動加 .pptx）</div>
         </div>
 
         <div>
@@ -51,34 +106,132 @@
           </select>
           <div class="small">
             請將 .pptx 範本放到 <b>pptx_templates/</b> 資料夾（專案根目錄），此處會自動列出。
+            <br>目前可選：<b>{{ template_count|default:0 }}</b> 份 .pptx。
+            {% if ignored_count %}
+              <br>已忽略（非 .pptx 或暫存檔）：<b>{{ ignored_count }}</b> 份
+              （{{ ignored_templates|join:", " }}）。
+            {% endif %}
           </div>
         </div>
       </div>
 
       <label>文字內容</label>
-      <textarea name="text" placeholder="例如：
-第一張：專案概述
-目的：提升效率
-範圍：XXX
+      <textarea name="text" placeholder="[標題投影片] 專案提案：智慧文件流程優化
+提案單位：資訊處
+提案日期：2026-03-21
 ===
-第二張：時程
-W1：需求
-W2：開發
-W3：驗收"></textarea>
+[區段標題] 提案背景
+現行簽核流程跨系統，重工與等待時間高
+文件版本分散，追蹤與稽核困難
+人工彙整報表耗時，管理決策不即時
+===
+[標題及物件] 痛點與影響
+流程長：平均處理天數偏高
+品質不穩：欄位遺漏與格式不一致
+透明度不足：主管難掌握案件卡關點
+===
+[標題及物件] 專案目標
+流程時間縮短 30%
+文件錯誤率降低 50%
+建立即時儀表板，提升管理可視性
+===
+[兩個物件] 方案比較
+方案 A：維持現況逐步修補
+方案 B：導入文件流程平台（推薦）
+方案 C：全客製重建
+===
+[標題及物件] 建議方案（B）內容
+建立統一收件與分派入口
+導入範本化產文與欄位驗證
+串接既有系統，保留核心資料來源
+===
+[標題及物件] 時程規劃
+M1：需求訪談與流程盤點
+M2：系統設計與原型確認
+M3-M4：功能開發與整合
+M5：試點上線與教育訓練
+M6：正式上線與成效追蹤
+===
+[兩個物件] 資源需求
+人力：PM 1、後端 2、前端 1、測試 1
+預算：軟體授權、開發與維運費
+配合單位：資訊處、業務單位、稽核單位
+===
+[兩個物件] 風險與對策
+使用者抗拒：分梯教育訓練 + 超級使用者機制
+資料品質落差：上線前資料清整與驗證規則
+整合風險：分階段串接與回滾方案
+===
+[標題及物件] 預期效益
+縮短核決週期，提升行政效率
+提升資料一致性與稽核可追溯性
+提供管理儀表板支援決策
+===
+[區段標題] 決策請求
+同意啟動專案與預算核定
+同意先行試點一個處室，兩個月內檢核成效
+同意成立跨部門專案小組"></textarea>
 
       <button type="submit">產生 PPTX</button>
     </form>
 
     <div style="margin-top:18px;">
       <div class="hint">範例：</div>
-      <div class="ex">第一張：專案概述
-目的：提升效率
-範圍：XXX
+      <div class="ex">[標題投影片] 專案提案：智慧文件流程優化
+提案單位：資訊處
+提案日期：2026-03-21
 ===
-第二張：時程
-W1：需求
-W2：開發
-W3：驗收</div>
+[區段標題] 提案背景
+現行簽核流程跨系統，重工與等待時間高
+文件版本分散，追蹤與稽核困難
+人工彙整報表耗時，管理決策不即時
+===
+[標題及物件] 痛點與影響
+流程長：平均處理天數偏高
+品質不穩：欄位遺漏與格式不一致
+透明度不足：主管難掌握案件卡關點
+===
+[標題及物件] 專案目標
+流程時間縮短 30%
+文件錯誤率降低 50%
+建立即時儀表板，提升管理可視性
+===
+[兩個物件] 方案比較
+方案 A：維持現況逐步修補
+方案 B：導入文件流程平台（推薦）
+方案 C：全客製重建
+===
+[標題及物件] 建議方案（B）內容
+建立統一收件與分派入口
+導入範本化產文與欄位驗證
+串接既有系統，保留核心資料來源
+===
+[標題及物件] 時程規劃
+M1：需求訪談與流程盤點
+M2：系統設計與原型確認
+M3-M4：功能開發與整合
+M5：試點上線與教育訓練
+M6：正式上線與成效追蹤
+===
+[兩個物件] 資源需求
+人力：PM 1、後端 2、前端 1、測試 1
+預算：軟體授權、開發與維運費
+配合單位：資訊處、業務單位、稽核單位
+===
+[兩個物件] 風險與對策
+使用者抗拒：分梯教育訓練 + 超級使用者機制
+資料品質落差：上線前資料清整與驗證規則
+整合風險：分階段串接與回滾方案
+===
+[標題及物件] 預期效益
+縮短核決週期，提升行政效率
+提升資料一致性與稽核可追溯性
+提供管理儀表板支援決策
+===
+[區段標題] 決策請求
+同意啟動專案與預算核定
+同意先行試點一個處室，兩個月內檢核成效
+同意成立跨部門專案小組</div>
     </div>
   </div>
 </body>
