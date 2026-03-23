@@ -17,6 +17,7 @@ from django.shortcuts import render, redirect
 
 from webapps.portal.decorators import require_node
 from webapps.llm.llm_factory import get_chat_model
+from webapps.text2pptx.image_service import ImageGenError, generate_image
 
 
 # ---------------------------
@@ -24,6 +25,13 @@ from webapps.llm.llm_factory import get_chat_model
 # ---------------------------
 BASE_DIR = getattr(settings, "BASE_DIR", None) or os.getcwd()
 PPTX_TEMPLATE_DIR = os.path.join(BASE_DIR, "webapps", "text2pptx", "pptx_templates")
+GENERATED_IMAGE_DIR = str(
+    getattr(
+        settings,
+        "TEXT2PPTX_IMAGE_DIR",
+        os.path.join(settings.MEDIA_ROOT, "generated_images", "text2pptx"),
+    )
+)
 
 MAX_BULLETS_PER_SLIDE = 7
 TITLE_FONT_PT = 34
@@ -31,6 +39,9 @@ BODY_FONT_PT = 20
 SUBTITLE_FONT_PT = 18
 MAX_INPUT_CHARS = int(getattr(settings, "TEXT2PPTX_MAX_CHARS", 20000))
 MAX_TEMPLATE_UPLOAD_MB = int(getattr(settings, "TEXT2PPTX_TEMPLATE_MAX_MB", 20))
+TEXT2PPTX_IMAGE_MODE = str(getattr(settings, "TEXT2PPTX_IMAGE_MODE", "mock")).strip().lower() or "mock"
+TEXT2PPTX_IMAGE_TIMEOUT_SEC = int(getattr(settings, "TEXT2PPTX_IMAGE_TIMEOUT_SEC", 30))
+TEXT2PPTX_IMAGE_RETRY = max(0, int(getattr(settings, "TEXT2PPTX_IMAGE_RETRY", 2)))
 DEFAULT_TEMPLATE_NAME = "預設範本.pptx"
 DEFAULT_MAIN_TITLE = "簡報"
 DEFAULT_MAIN_SUBTITLE = "文字內容自動生成簡報"
@@ -55,6 +66,7 @@ LAYOUT_NAME_KEYS = {
 TITLE_PLACEHOLDER_TYPES = {1, 3}
 SUBTITLE_PLACEHOLDER_TYPES = {4}
 CONTENT_PLACEHOLDER_TYPES = {2, 7}
+IMAGE_PLACEHOLDER_TYPES = {11, 14}
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +105,9 @@ def _is_subtitle_placeholder_type(v: int | None) -> bool:
 
 def _is_content_placeholder_type(v: int | None) -> bool:
     return v in CONTENT_PLACEHOLDER_TYPES
+
+def _is_image_placeholder_type(v: int | None) -> bool:
+    return v in IMAGE_PLACEHOLDER_TYPES
 
 
 def _list_pptx_templates() -> List[str]:
@@ -376,6 +391,26 @@ def _resolve_slide_type(raw: Any) -> str:
     return "content"
 
 
+def _coerce_bool(value: Any, *, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
+def _normalize_aspect_ratio(value: Any, default: str = "16:9") -> str:
+    text = str(value or "").strip()
+    if text in {"1:1", "4:3", "3:2", "16:9", "9:16"}:
+        return text
+    return default
+
+
 def _resolve_marker(raw_marker: str) -> str | None:
     marker = (raw_marker or "").strip()
     if not marker:
@@ -449,6 +484,10 @@ def _parse_marked_text_structure(text: str) -> Dict[str, Any] | None:
                 "left_title": "",
                 "right_title": "",
                 "bullets": [str(x).strip() for x in lines if str(x).strip()],
+                "image_required": False,
+                "image_prompt": "",
+                "image_intent": "",
+                "aspect_ratio": "16:9",
             }
         )
 
@@ -473,6 +512,198 @@ def _find_content_text_frames(slide, exclude_shape=None) -> List[Any]:
         return [x[2] for x in candidates]
     tf = _find_largest_text_frame(slide, exclude_shape=exclude_shape)
     return [tf] if tf else []
+
+
+def _shape_area(shape) -> int:
+    try:
+        return int(shape.width) * int(shape.height)
+    except Exception:
+        return 0
+
+
+def _shape_has_text(shape) -> bool:
+    if not getattr(shape, "has_text_frame", False):
+        return False
+    text = (getattr(shape.text_frame, "text", "") or "").strip()
+    return bool(text)
+
+
+def _slide_default_image_box(slide) -> tuple[int, int, int, int]:
+    emu = 914400
+    width = 10 * emu
+    height = int(7.5 * emu)
+    try:
+        presentation = slide.part.package.presentation_part.presentation
+        width = int(getattr(presentation, "slide_width", width))
+        height = int(getattr(presentation, "slide_height", height))
+    except Exception:
+        pass
+
+    left = int(width * 0.08)
+    top = int(height * 0.22)
+    box_width = int(width * 0.84)
+    box_height = int(height * 0.68)
+    return left, top, box_width, box_height
+
+
+def _find_largest_image_frame(slide, exclude_shape=None):
+    image_placeholder = None
+    image_placeholder_area = -1
+
+    for shape in slide.shapes:
+        if exclude_shape is not None and shape == exclude_shape:
+            continue
+        if not getattr(shape, "is_placeholder", False):
+            continue
+        if not _is_image_placeholder_type(_placeholder_type_id(shape)):
+            continue
+        area = _shape_area(shape)
+        if area > image_placeholder_area:
+            image_placeholder_area = area
+            image_placeholder = shape
+
+    if image_placeholder is not None:
+        return image_placeholder
+
+    candidates = []
+    for shape in slide.shapes:
+        if exclude_shape is not None and shape == exclude_shape:
+            continue
+        area = _shape_area(shape)
+        if area <= 0:
+            continue
+
+        if getattr(shape, "is_placeholder", False):
+            p_type = _placeholder_type_id(shape)
+            if _is_title_placeholder_type(p_type) or _is_subtitle_placeholder_type(p_type):
+                continue
+            if _is_content_placeholder_type(p_type):
+                if _shape_has_text(shape):
+                    continue
+                candidates.append((area, shape))
+                continue
+
+        if getattr(shape, "has_text_frame", False):
+            if _shape_has_text(shape):
+                continue
+            candidates.append((area, shape))
+
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return candidates[0][1]
+
+
+def _apply_cover_crop(picture_shape, *, image_path: str, box_width: int, box_height: int):
+    try:
+        from PIL import Image
+    except Exception:
+        return
+
+    if box_width <= 0 or box_height <= 0:
+        return
+
+    try:
+        with Image.open(image_path) as img:
+            src_width, src_height = img.size
+    except Exception:
+        return
+
+    if not src_width or not src_height:
+        return
+
+    src_ratio = src_width / src_height
+    box_ratio = box_width / box_height
+
+    if src_ratio > box_ratio:
+        crop = max(0.0, (1.0 - (box_ratio / src_ratio)) / 2.0)
+        picture_shape.crop_left = crop
+        picture_shape.crop_right = crop
+    elif src_ratio < box_ratio:
+        crop = max(0.0, (1.0 - (src_ratio / box_ratio)) / 2.0)
+        picture_shape.crop_top = crop
+        picture_shape.crop_bottom = crop
+
+
+def _insert_generated_image(slide, image_path: str, exclude_shape=None) -> bool:
+    if not image_path or not os.path.isfile(image_path):
+        return False
+
+    target = _find_largest_image_frame(slide, exclude_shape=exclude_shape)
+
+    if target is not None and getattr(target, "is_placeholder", False):
+        if _is_image_placeholder_type(_placeholder_type_id(target)) and hasattr(target, "insert_picture"):
+            try:
+                target.insert_picture(image_path)
+                return True
+            except Exception as e:
+                logger.warning("Insert picture via placeholder failed: %s", e)
+
+    if target is None:
+        for shape in slide.shapes:
+            if exclude_shape is not None and shape == exclude_shape:
+                continue
+            if not _shape_has_text(shape):
+                continue
+            p_type = _placeholder_type_id(shape) if getattr(shape, "is_placeholder", False) else None
+            if _is_title_placeholder_type(p_type) or _is_subtitle_placeholder_type(p_type):
+                continue
+            return False
+        left, top, width, height = _slide_default_image_box(slide)
+    else:
+        left = int(getattr(target, "left", 0))
+        top = int(getattr(target, "top", 0))
+        width = int(getattr(target, "width", 0))
+        height = int(getattr(target, "height", 0))
+        if width <= 0 or height <= 0:
+            left, top, width, height = _slide_default_image_box(slide)
+
+    try:
+        picture = slide.shapes.add_picture(image_path, left, top, width=width, height=height)
+        _apply_cover_crop(picture, image_path=image_path, box_width=width, box_height=height)
+        return True
+    except Exception as e:
+        logger.warning("Insert generated image failed: %s", e)
+        return False
+
+
+def _generate_image_for_slide(slide_data: Dict[str, Any]) -> str | None:
+    if TEXT2PPTX_IMAGE_MODE == "off":
+        return None
+
+    image_prompt = str(slide_data.get("image_prompt") or "").strip()
+    image_required = _coerce_bool(slide_data.get("image_required"), default=bool(image_prompt))
+    if not image_required or not image_prompt:
+        return None
+
+    aspect_ratio = _normalize_aspect_ratio(slide_data.get("aspect_ratio"))
+    attempts = TEXT2PPTX_IMAGE_RETRY + 1
+    for attempt in range(1, attempts + 1):
+        try:
+            result = generate_image(
+                prompt=image_prompt,
+                aspect_ratio=aspect_ratio,
+                mode=TEXT2PPTX_IMAGE_MODE,
+                timeout_sec=TEXT2PPTX_IMAGE_TIMEOUT_SEC,
+                output_dir=GENERATED_IMAGE_DIR,
+            )
+            path = str(result.get("local_path") or "").strip()
+            return path if path else None
+        except ImageGenError as e:
+            logger.warning(
+                "Image generation failed code=%s retryable=%s attempt=%s/%s: %s",
+                e.code,
+                e.retryable,
+                attempt,
+                attempts,
+                e,
+            )
+            if not e.retryable or attempt >= attempts:
+                break
+        except Exception as e:
+            logger.warning("Image generation failed with unexpected error: %s", e)
+            break
+    return None
 
 
 def _fill_bullets(text_frame, items: List[str]):
@@ -624,7 +855,17 @@ def _fallback_from_raw_text(text: str) -> Dict[str, Any]:
         lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
         title = lines[0] if lines else f"投影片 {i}"
         bullets = lines[1:] if len(lines) > 1 else []
-        slides.append({"title": title, "slide_type": "content", "bullets": bullets})
+        slides.append(
+            {
+                "title": title,
+                "slide_type": "content",
+                "bullets": bullets,
+                "image_required": False,
+                "image_prompt": "",
+                "image_intent": "",
+                "aspect_ratio": "16:9",
+            }
+        )
     return {
         "main_title": DEFAULT_MAIN_TITLE,
         "main_subtitle": DEFAULT_MAIN_SUBTITLE,
@@ -648,6 +889,12 @@ def _normalize_analysis_result(data: Dict[str, Any], *, source_text: str) -> Dic
         slide_type = _resolve_slide_type(s.get("slide_type"))
         left_title = str(s.get("left_title") or "").strip()
         right_title = str(s.get("right_title") or "").strip()
+        image_prompt = str(s.get("image_prompt") or "").strip()
+        image_intent = str(s.get("image_intent") or "").strip().lower()
+        aspect_ratio = _normalize_aspect_ratio(s.get("aspect_ratio"))
+        image_required = _coerce_bool(s.get("image_required"), default=bool(image_prompt))
+        if not image_prompt:
+            image_required = False
         bullets_raw = s.get("bullets")
         bullets: List[str] = []
         if isinstance(bullets_raw, list):
@@ -666,6 +913,10 @@ def _normalize_analysis_result(data: Dict[str, Any], *, source_text: str) -> Dic
                 "left_title": left_title,
                 "right_title": right_title,
                 "bullets": bullets,
+                "image_required": image_required,
+                "image_prompt": image_prompt,
+                "image_intent": image_intent,
+                "aspect_ratio": aspect_ratio,
             }
         )
 
@@ -701,6 +952,11 @@ def _analyze_text_with_llm(text: str) -> Dict[str, Any]:
     10. 盡可能語義化地拆分內容到不同的投影片，每張投影片的條列要點數量不應超過 {MAX_BULLETS_PER_SLIDE} 點。
     11. 若原文沒有明確主標題，請自動生成一個簡潔相關的標題。
     12. 若原文沒有明確副標題，請使用「文字內容自動生成簡報」作為副標題。
+    13. 每張投影片都要額外輸出圖片欄位：
+       - "image_required": 布林值，是否需要插圖。
+       - "image_prompt": 用來生圖的簡潔描述，若不需要圖片請給空字串。
+       - "image_intent": "concept"、"data"、"process"、"hero" 其一。
+       - "aspect_ratio": 優先使用 "16:9"。
 
     請分析以下文字內容：
 
@@ -717,14 +973,22 @@ def _analyze_text_with_llm(text: str) -> Dict[str, Any]:
         {{
           "title": "第一張：專案概述",
           "slide_type": "section",
-          "bullets": ["目的：提升效率", "範圍：XXX"]
+          "bullets": ["目的：提升效率", "範圍：XXX"],
+          "image_required": true,
+          "image_prompt": "團隊在會議室討論專案藍圖，乾淨的企業風格插圖",
+          "image_intent": "hero",
+          "aspect_ratio": "16:9"
         }},
         {{
           "title": "第二張：時程規劃",
           "slide_type": "comparison",
           "left_title": "已完成",
           "right_title": "待完成",
-          "bullets": ["W1：需求分析", "W2：開發階段", "W3：驗收與部署"]
+          "bullets": ["W1：需求分析", "W2：開發階段", "W3：驗收與部署"],
+          "image_required": false,
+          "image_prompt": "",
+          "image_intent": "data",
+          "aspect_ratio": "16:9"
         }}
       ]
     }}
@@ -873,6 +1137,7 @@ def generate_pptx(request):
             if not isinstance(bullets, list):
                 bullets = [str(bullets)]
             bullets = [str(b).strip() for b in bullets if str(b).strip()]
+            generated_image_path = _generate_image_for_slide(slide_data)
 
             if slide_type == "section":
                 slide = prs.slides.add_slide(_pick_layout_adaptive(prs, "section"))
@@ -885,6 +1150,8 @@ def generate_pptx(request):
                 section_tfs = _find_content_text_frames(slide, exclude_shape=title_shape)
                 if section_tfs:
                     _fill_bullets(section_tfs[0], bullets)
+                if generated_image_path:
+                    _insert_generated_image(slide, generated_image_path, exclude_shape=title_shape)
                 continue
 
             if slide_type in ("two_content", "comparison"):
@@ -908,6 +1175,8 @@ def generate_pptx(request):
                     left_title, left_items, right_title, right_items = _split_two_columns(slide_data, chunk, slide_type)
                     _fill_column(content_tfs[0], left_title, left_items)
                     _fill_column(content_tfs[1], right_title, right_items)
+                    if generated_image_path and part_idx == 0:
+                        _insert_generated_image(slide, generated_image_path, exclude_shape=title_shape)
                 continue
 
             bullet_chunks = list(_chunk_list(bullets, MAX_BULLETS_PER_SLIDE)) if bullets else [[]]
@@ -923,6 +1192,8 @@ def generate_pptx(request):
                 content_tfs = _find_content_text_frames(slide, exclude_shape=title_shape)
                 if content_tfs:
                     _fill_bullets(content_tfs[0], part)
+                if generated_image_path and part_idx == 0:
+                    _insert_generated_image(slide, generated_image_path, exclude_shape=title_shape)
 
         buf = io.BytesIO()
         prs.save(buf)

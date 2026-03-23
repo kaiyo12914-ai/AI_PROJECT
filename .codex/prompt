@@ -1,0 +1,130 @@
+請以playwright進行驗證並修改相關程式至正常後再回覆予我
+
+Set-Location -Path "H:\\AI\\ai_tools"
+git add -A
+git commit -m (Get-Date -Format 'yyyy-MM-dd_HHmmss')
+
+
+編碼正確分工
+DB（Sybase）→	BIG5
+ODBC driver	BIG5 → Unicode
+Python→	Unicode
+JSON→	UTF-8
+HTML→	UTF-8
+
+整理我本輪提出的問題及你回復的結果，讓我做成本日交談紀錄存查使用
+
+請以playwright進行SQLTEST.py 驗證並修改相關程式至正常後再回覆予我並確認生成之JSON可滿足DOC子系統外網離線模擬DB功能
+
+這是來文附件讀取至附件重點解析的架構及設計畫面
+[輸入 tm_grsno]
+        |
+        v
+[GET/POST incoming_lookup]
+        |
+        v
+[顯示來文主旨+附件清單(呈現TD_SUBJ)]
+        |
+   點擊附件
+        |
+        v
+[GET incoming_file/<attach_key>]
+        |
+        v
+[瀏覽器下載檔案(EF_DATA BLOB)內容]
+        |
+        v
+附件重點解析文件產出
+
+
+
+
+轉入公文範例的設計概念與上圖架構雷同如下，請比照設計前後端程式碼並設計類同畫面給我
+
+[輸入 tm_grsno]
+        |
+        v
+[GET/POST sybase_import]
+        |
+        v
+[顯示呈文主旨+可轉入案件清單(呈現TD_SUBJ)]
+        |
+   點擊附件
+        |
+        v
+[GET import_file/<attach_key>]
+        |
+        v
+[瀏覽器下載檔案(DF_DATA BLOB)內容]
+        |
+        v
+公文範例文件產出(簽呈、令稿、呈稿、函稿、便籤範例)
+        |
+        v選範例庫範圍(公開、個人)、標籤標籤篩選(資訊...)
+公文範例文件存檔(簽呈、令稿、呈稿、函稿、便籤範例)
+
+檢查 Oracle 是否實際回傳姓名
+middleware.py
+EMP_NAME_LOOKUP=1 才會呼叫 _cache_get_emp_name()
+_cache_get_emp_name() → oracle_emp.py:get_emp_name()
+若 Oracle 查不到或連線失敗，就回傳空字串
+模板端 login_user_name 為空時會顯示 login_user
+ .\venv3.12\Scripts\python.exe manage.py shell -c "from webapps.portal.oracle_emp import get_emp_name; print(get_emp_name('F129195600'))"
+ http://127.0.0.1/djangoai/whoami/
+確認 login_user 是否為 IDNO（如 F129195600）
+
+PORTAL ACL 權限設定
+設定規則（webproj/settings.py）
+PORTAL_ACL 定義每個子系統的可進入群組：
+
+PORTAL_ACL = {
+    "portal": ["PUBLIC"],
+    "doc": ["ALL_AUTHENTICATED", "DOC"],
+    "excelproc": ["EXCELPROC_GROUP"],
+    ...
+}
+PUBLIC：任何人
+
+現在格式
+重點1：這是{來文單位}({層級})的[{類別}]文，發文日期(字號)：{日期+字號}
+
+例如：
+重點1：這是國防部軍備局生產製造中心第二○五廠(下級單位)的[呈]文，發文日期(字號)：中華民國115年1月9日備二五策字第1150000426號
+
+來文及附件查詢前面請增加個人待辦公文查詢功能，以個人待辦公文相關號查詢清單供使用者可直接選用進行待辦公文處理，查詢待辦公文語法請試著以MOCK+JSON提供給我參考
+
+要修改「下級單位簽文特性」的位置
+
+規則主檔（語氣/禁用詞/段落）
+draft_tone_rules.json
+修改 FROM_SUBORDINATE 區塊即可調整語氣、禁用詞、常用句、必要段落。
+
+LLM 進入提示與自檢規則
+draft_reply_service.py
+
+build_llm_instructions()：把 JSON 規則轉成 prompt
+check_tone_compliance()：禁用詞檢查邏輯
+若要加「正則禁用」或「替代語」也在此擴充
+來文單位層級判斷（誰算下級）
+org_level_map.json
+新增/調整 pattern → FROM_SUBORDINATE，影響「來文層級」判斷
+
+解析重點時的「來文字號及層級」格式
+views_parse.py
+
+_infer_org_and_level()：判斷來文單位與層級
+_extract_doc_meta()：抓發文日期/字號/文別
+_inject_org_level_point()：重點1格式（含層級與文別）
+若要改 LLM 摘要提示詞格式
+views_helpers.py
+_build_attach_focus_prompt() 內的規範文本
+
+
+目前待辦公文查詢是 MOCK JSON，語法放在 todo_mock.json 的 sql_example.query，內容如下：
+
+SELECT TOP 100 TM.TM_GRSNO, TM.TM_DATE, TM.TM_RSTP, TM.TM_SUBJ, TM.TM_PSID, TM.TM_NAME, TD.TD_SUBJ, TD.TD_PATH
+FROM mnda.dbo.DCS3_TRST_MST TM
+LEFT JOIN mnda.dbo.DCS3_TRST_DAT TD ON TM.TM_SNO = TD.TD_SNO
+WHERE TM.TM_PSID = :login_user
+  AND (TM.TM_GRSNO LIKE :q OR TM.TM_SUBJ LIKE :q)
+ORDER BY TM.TM_DATE DESC

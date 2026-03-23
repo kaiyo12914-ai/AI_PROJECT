@@ -36,6 +36,61 @@ class Text2PptxHelperTests(SimpleTestCase):
         out = views._normalize_analysis_result(data, source_text="頁1\na\nb")
         self.assertEqual(out["slides"][0]["slide_type"], "content")
 
+    def test_normalize_analysis_result_sets_image_fields_defaults(self):
+        data = {
+            "main_title": "主標",
+            "main_subtitle": "副標",
+            "slides": [
+                {
+                    "title": "頁1",
+                    "slide_type": "content",
+                    "bullets": ["a"],
+                }
+            ],
+        }
+        out = views._normalize_analysis_result(data, source_text="頁1\na")
+        slide = out["slides"][0]
+        self.assertFalse(slide["image_required"])
+        self.assertEqual(slide["image_prompt"], "")
+        self.assertEqual(slide["image_intent"], "")
+        self.assertEqual(slide["aspect_ratio"], "16:9")
+
+    def test_normalize_analysis_result_reads_image_fields(self):
+        data = {
+            "main_title": "主標",
+            "main_subtitle": "副標",
+            "slides": [
+                {
+                    "title": "頁1",
+                    "slide_type": "content",
+                    "bullets": ["a"],
+                    "image_required": "true",
+                    "image_prompt": "modern office team discussing timeline",
+                    "image_intent": "Hero",
+                    "aspect_ratio": "4:3",
+                }
+            ],
+        }
+        out = views._normalize_analysis_result(data, source_text="頁1\na")
+        slide = out["slides"][0]
+        self.assertTrue(slide["image_required"])
+        self.assertEqual(slide["image_prompt"], "modern office team discussing timeline")
+        self.assertEqual(slide["image_intent"], "hero")
+        self.assertEqual(slide["aspect_ratio"], "4:3")
+
+    def test_generate_image_for_slide_mock_mode(self):
+        slide_data = {
+            "image_required": True,
+            "image_prompt": "simple blue abstract background",
+            "aspect_ratio": "16:9",
+        }
+        with tempfile.TemporaryDirectory(dir=os.getcwd()) as td:
+            with patch.object(views, "GENERATED_IMAGE_DIR", td), patch.object(views, "TEXT2PPTX_IMAGE_MODE", "mock"):
+                path = views._generate_image_for_slide(slide_data)
+                self.assertIsNotNone(path)
+                assert path is not None
+                self.assertTrue(os.path.exists(path))
+
     @patch("webapps.text2pptx.views.get_chat_model")
     def test_analyze_text_with_llm_parses_json_with_extra_explanation(self, mock_get_chat_model):
         class DummyLLM:

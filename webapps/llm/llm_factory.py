@@ -1,11 +1,13 @@
 # webapps/llm/llm_factory.py
 import os
 import inspect
+import logging
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 
 def _f(name: str, default: float) -> float:
@@ -206,7 +208,7 @@ def log_llm_config():
     啟動時列印 LLM 配置摘要，方便診斷。
     """
     model_type = (os.getenv("MODEL_TYPE") or "AUTO").strip().upper()
-    print(f"\n[LLM CONFIG] MODEL_TYPE={model_type}")
+    logger.info("[LLM CONFIG] MODEL_TYPE=%s", model_type)
 
     def _mask_key(key):
         if not key: return "MISSING"
@@ -216,18 +218,18 @@ def log_llm_config():
     if model_type == "GOOGLE":
         m = os.getenv("GOOGLE_MODEL", "gemini-1.5-flash")
         k = os.getenv("GOOGLE_API_KEY")
-        print(f"[LLM CONFIG] GOOGLE: model={m}, api_key={_mask_key(k)}")
+        logger.info("[LLM CONFIG] GOOGLE: model=%s, api_key=%s", m, _mask_key(k))
     elif model_type == "OPENAI":
         m = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         k = os.getenv("OPENAI_API_KEY")
-        print(f"[LLM CONFIG] OPENAI: model={m}, api_key={_mask_key(k)}")
+        logger.info("[LLM CONFIG] OPENAI: model=%s, api_key=%s", m, _mask_key(k))
     elif model_type == "OLLAMA":
         m = os.getenv("OLLAMA_MODEL", "mistral_small_3_1_2503:latest")
         u = os.getenv("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
-        print(f"[LLM CONFIG] OLLAMA: model={m}, base_url={u}")
+        logger.info("[LLM CONFIG] OLLAMA: model=%s, base_url=%s", m, u)
     elif model_type == "AUTO":
         prio = _resolved_model_priority()
-        print(f"[LLM CONFIG] AUTO Priority: {' -> '.join(prio)}")
+        logger.info("[LLM CONFIG] AUTO Priority: %s", " -> ".join(prio))
         
         # 檢查各後端狀態
         status_line = []
@@ -238,8 +240,8 @@ def log_llm_config():
                 status_line.append(f"OPENAI:{_mask_key(os.getenv('OPENAI_API_KEY'))}")
             elif p == "OLLAMA":
                 status_line.append(f"OLLAMA:Ready")
-        print(f"[LLM CONFIG] Status: {' | '.join(status_line)}")
-    print("-" * 40 + "\n")
+        logger.info("[LLM CONFIG] Status: %s", " | ".join(status_line))
+    logger.info("%s", "-" * 40)
 
 
 def _make_ollama(temperature: float | None, timeout: int | None):
@@ -300,7 +302,7 @@ def _make_ollama(temperature: float | None, timeout: int | None):
                         return _build_ollama(alt).invoke(input, **kwargs)
                     except Exception as e2:
                         last_err = e2
-                        print(f"[LLM] OLLAMA fallback failed model={alt} err={e2!r}")
+                        logger.warning("[LLM] OLLAMA fallback failed model=%s err=%r", alt, e2)
                 raise last_err
 
         async def ainvoke(self, input, **kwargs):
@@ -317,7 +319,7 @@ def _make_ollama(temperature: float | None, timeout: int | None):
                         return await _build_ollama(alt).ainvoke(input, **kwargs)
                     except Exception as e2:
                         last_err = e2
-                        print(f"[LLM] OLLAMA fallback failed (async) model={alt} err={e2!r}")
+                        logger.warning("[LLM] OLLAMA fallback failed (async) model=%s err=%r", alt, e2)
                 raise last_err
 
         def __repr__(self):
@@ -432,7 +434,7 @@ def _log_llm_use(tag: str, model: str, *, temperature: float | None = None, time
     if timeout is not None:
         extra.append(f"timeout={timeout}")
     suffix = (" " + " ".join(extra)) if extra else ""
-    print(f"[LLM] backend={tag} model={model}{suffix}")
+    logger.info("[LLM] backend=%s model=%s%s", tag, model, suffix)
 
 
 # -------------------------
@@ -473,7 +475,7 @@ def _make_auto(temperature: float | None, timeout: int | None):
                     return llm.invoke(input, config=config, **kwargs)
                 except Exception as e:
                     last_err = e
-                    print(f"[LLM] AUTO fallback: {name} failed, error: {e!r}")
+                    logger.warning("[LLM] AUTO fallback: %s failed, error=%r", name, e)
             
             raise RuntimeError(f"AUTO 模式所有後端皆失敗。最後錯誤: {last_err!r}")
 
@@ -490,7 +492,7 @@ def _make_auto(temperature: float | None, timeout: int | None):
                     return await llm.ainvoke(input, config=config, **kwargs)
                 except Exception as e:
                     last_err = e
-                    print(f"[LLM] AUTO fallback (async): {name} failed, error: {e!r}")
+                    logger.warning("[LLM] AUTO fallback (async): %s failed, error=%r", name, e)
             
             raise RuntimeError(f"AUTO 模式所有後端皆失敗。最後錯誤: {last_err!r}")
 

@@ -1,0 +1,8 @@
+===== system.md =====
+（system.md 內容）
+
+===== rules.md =====
+（rules.md 內容）
+
+===== skills.md =====
+（skills.md 內容）
