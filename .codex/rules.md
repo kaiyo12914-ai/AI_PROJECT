@@ -164,6 +164,7 @@ DEV_LOGIN_NAME=
 
 ## Mandatory Startup Rule
 - 每次進入本專案（新對話/新 session）必須先讀取 `/.codex/rules.md`，再開始其他工作。
+- 每次進入本專案（新對話/新 session）在讀完 `/.codex/rules.md` 後，必須再讀取 `H:\AI\openclaw-workspace\LONG_TERM_MEMORY.md` 最新內容，才可開始其他工作。
 
 ## UTF-8 / BOM Rule
 - 專案文字與程式碼檔案一律使用 UTF-8（無 BOM）。

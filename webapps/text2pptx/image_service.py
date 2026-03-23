@@ -19,6 +19,13 @@ _MOCK_PNG_B64 = (
 
 _VALID_MODES = {"mock", "google", "off"}
 _VALID_ASPECT_RATIOS = {"1:1", "4:3", "3:2", "16:9", "9:16"}
+_SIZE_BY_RATIO = {
+    "1:1": "1024x1024",
+    "4:3": "1536x1152",
+    "3:2": "1536x1024",
+    "16:9": "1536x864",
+    "9:16": "864x1536",
+}
 
 
 class ImageGenError(Exception):
@@ -53,6 +60,10 @@ def _normalize_aspect_ratio(aspect_ratio: str | None) -> str:
 def _build_cache_key(prompt: str, aspect_ratio: str, seed: int | None) -> str:
     raw = f"{prompt}|{aspect_ratio}|{seed if seed is not None else ''}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _size_for_aspect_ratio(aspect_ratio: str) -> str:
+    return _SIZE_BY_RATIO.get(aspect_ratio, _SIZE_BY_RATIO["16:9"])
 
 
 def _decode_base64_payload(value: str) -> bytes | None:
@@ -102,6 +113,8 @@ def _call_google_provider(
     aspect_ratio: str,
     seed: int | None,
     timeout_sec: int,
+    output_path: str,
+    size: str,
 ) -> Any:
     try:
         from webapps.img_gen.img_factory import get_image_model  # type: ignore
@@ -125,6 +138,8 @@ def _call_google_provider(
         "aspect_ratio": aspect_ratio,
         "seed": seed,
         "timeout_sec": timeout_sec,
+        "output_path": output_path,
+        "size": size,
     }
     payload = {k: v for k, v in payload.items() if v is not None}
 
@@ -180,6 +195,8 @@ def generate_image(
             aspect_ratio=ratio_value,
             seed=seed,
             timeout_sec=int(timeout_sec),
+            output_path=str(out_path),
+            size=_size_for_aspect_ratio(ratio_value),
         )
     except ImageGenError:
         raise
@@ -188,11 +205,26 @@ def generate_image(
     except Exception as exc:
         raise ImageGenError("IMG_E_PROVIDER", str(exc), retryable=True) from exc
 
+    if isinstance(result, dict) and result.get("ok") is False:
+        raise ImageGenError(
+            "IMG_E_PROVIDER",
+            str(result.get("error") or "Provider returned ok=false."),
+            retryable=True,
+        )
+
     local_path = _extract_local_path(result)
     if local_path and os.path.isfile(local_path):
         return {
             "ok": True,
             "local_path": local_path,
+            "provider": "google",
+            "meta": {"cached": False, "aspect_ratio": ratio_value, "seed": seed},
+        }
+
+    if isinstance(result, dict) and result.get("ok") is True and out_path.is_file():
+        return {
+            "ok": True,
+            "local_path": str(out_path),
             "provider": "google",
             "meta": {"cached": False, "aspect_ratio": ratio_value, "seed": seed},
         }
