@@ -6,6 +6,8 @@ import re
 import json
 import logging
 import platform
+import unicodedata
+from urllib.parse import quote
 from typing import Optional, List, Dict, Any
 
 from django.conf import settings
@@ -29,6 +31,7 @@ BODY_FONT_PT = 20
 SUBTITLE_FONT_PT = 18
 MAX_INPUT_CHARS = int(getattr(settings, "TEXT2PPTX_MAX_CHARS", 20000))
 MAX_TEMPLATE_UPLOAD_MB = int(getattr(settings, "TEXT2PPTX_TEMPLATE_MAX_MB", 20))
+DEFAULT_TEMPLATE_NAME = "預設範本.pptx"
 DEFAULT_MAIN_TITLE = "簡報"
 DEFAULT_MAIN_SUBTITLE = "文字內容自動生成簡報"
 VALID_SLIDE_TYPES = {"content", "section", "two_content", "comparison"}
@@ -39,14 +42,15 @@ MARKER_TO_SLIDE_TYPE = {
     "two_content": "two_content",
     "comparison": "comparison",
     "標題投影片": "cover",
-    "區段標題": "section",
-    "標題及物件": "content",
-    "兩個物件": "two_content",
-    "封面頁": "cover",
-    "章節頁": "section",
-    "一般內容頁": "content",
-    "雙欄頁": "two_content",
-    "比較頁": "comparison",
+    "章節標題": "section",
+    "內容頁": "content",
+    "雙欄必較頁": "two_content",
+}
+LAYOUT_NAME_KEYS = {
+    "cover": ["title slide", "標題投影片"],
+    "content": ["title and content", "內容頁"],
+    "section": ["section header", "章節標題"],
+    "two_content": ["two content", "雙欄必較頁"],
 }
 TITLE_PLACEHOLDER_TYPES = {1, 3}
 SUBTITLE_PLACEHOLDER_TYPES = {4}
@@ -104,6 +108,14 @@ def _list_pptx_templates() -> List[str]:
     return files
 
 
+def _normalize_template_name(name: str) -> str:
+    return unicodedata.normalize("NFC", str(name or "")).strip()
+
+
+def _template_name_key(name: str) -> str:
+    return _normalize_template_name(name).casefold()
+
+
 def _list_ignored_template_files() -> List[str]:
     if not os.path.isdir(PPTX_TEMPLATE_DIR):
         return []
@@ -122,28 +134,23 @@ def _list_ignored_template_files() -> List[str]:
 
 
 def _safe_select_template(tpl_name: str) -> Optional[str]:
-    tpl_name = (tpl_name or "").strip()
+    tpl_name = _normalize_template_name(tpl_name)
     if not tpl_name:
         return None
-    allowed = set(_list_pptx_templates())
-    if tpl_name not in allowed:
-        return None
-    return os.path.join(PPTX_TEMPLATE_DIR, tpl_name)
+    wanted_key = _template_name_key(tpl_name)
+    for fn in _list_pptx_templates():
+        if _template_name_key(fn) == wanted_key:
+            return os.path.join(PPTX_TEMPLATE_DIR, fn)
+    return None
 
 
 def _pick_layout_adaptive(prs, layout_type: str):
     # PowerPoint 2016 class mapping:
-    # comparison and two_content both map to "Two Content（兩個物件）".
+    # comparison and two_content both map to "Two Content（雙欄必較頁）".
     if layout_type == "comparison":
         layout_type = "two_content"
 
-    type_keys = {
-        "cover": ["cover", "title slide", "標題投影片", "title only"],
-        "content": ["content", "title and content", "標題及內容", "標題及物件", "body", "slide", "投影片"],
-        "section": ["section", "section header", "章節", "段落", "title only"],
-        "two_content": ["two content", "two-column", "兩欄", "雙欄", "2 content", "兩個內容"],
-    }
-    keys = type_keys.get(layout_type, [])
+    keys = LAYOUT_NAME_KEYS.get(layout_type, [])
     
     for layout in prs.slide_layouts:
         name = (getattr(layout, "name", "") or "").lower()
@@ -232,18 +239,20 @@ def _validate_layout_for_type(layout, layout_type: str) -> bool:
 
 
 def _find_layout_for_import_validation(prs, layout_type: str):
-    type_keys = {
-        "cover": ["cover", "title slide", "標題投影片", "title only"],
-        "content": ["content", "title and content", "標題及內容", "標題及物件", "body", "slide", "投影片"],
-        "two_content": ["two content", "two-column", "兩欄", "雙欄", "2 content", "兩個內容"],
-        "comparison": ["comparison", "比較", "compare", "對照", "two content"],
-        "section": ["section", "section header", "章節", "段落"],
-    }
-    keys = type_keys.get(layout_type, [])
+    # PowerPoint 2016 class mapping:
+    # comparison and two_content both map to "Two Content（雙欄必較頁）".
+    if layout_type == "comparison":
+        layout_type = "two_content"
+
+    keys = LAYOUT_NAME_KEYS.get(layout_type, [])
     for layout in prs.slide_layouts:
         name = (getattr(layout, "name", "") or "").lower()
         if keys and not any(k in name for k in keys):
             continue
+        if _validate_layout_for_type(layout, layout_type):
+            return layout
+    # Fallback: allow non-default localized layout names if structure is valid.
+    for layout in prs.slide_layouts:
         if _validate_layout_for_type(layout, layout_type):
             return layout
     return None
@@ -257,9 +266,9 @@ def _audit_template_bytes(raw: bytes) -> Dict[str, Any]:
     required = ["cover", "section", "content", "two_content"]
     labels = {
         "cover": "標題投影片（Title Slide）",
-        "section": "區段標題（Section Header）",
-        "content": "標題及物件（Title and Content）",
-        "two_content": "兩個物件（Two Content）",
+        "section": "章節標題（Section Header）",
+        "content": "內容頁（Title and Content）",
+        "two_content": "雙欄必較頁（Two Content）",
     }
     found: Dict[str, str] = {}
     missing: List[str] = []
@@ -274,12 +283,21 @@ def _audit_template_bytes(raw: bytes) -> Dict[str, Any]:
 
 def _save_template_bytes(filename: str, raw: bytes) -> str:
     os.makedirs(PPTX_TEMPLATE_DIR, exist_ok=True)
+    filename = _normalize_template_name(filename)
     base, ext = os.path.splitext(filename)
     base = _safe_filename(base, default="template")
     ext = ext if ext else ".pptx"
     candidate = f"{base}{ext}"
+    existing_keys = set()
+    for fn in os.listdir(PPTX_TEMPLATE_DIR):
+        full = os.path.join(PPTX_TEMPLATE_DIR, fn)
+        if os.path.isfile(full):
+            existing_keys.add(_template_name_key(fn))
     idx = 1
-    while os.path.exists(os.path.join(PPTX_TEMPLATE_DIR, candidate)):
+    while (
+        _template_name_key(candidate) in existing_keys
+        or os.path.exists(os.path.join(PPTX_TEMPLATE_DIR, candidate))
+    ):
         candidate = f"{base}_{idx}{ext}"
         idx += 1
     with open(os.path.join(PPTX_TEMPLATE_DIR, candidate), "wb") as f:
@@ -352,8 +370,9 @@ def _resolve_slide_type(raw: Any) -> str:
     value = str(raw or "").strip().lower()
     if value in VALID_SLIDE_TYPES:
         return value
-    if value in ("一般內容頁", "章節頁", "雙欄頁", "比較頁"):
-        return _resolve_marker(value) or "content"
+    resolved = _resolve_marker(str(raw or "").strip())
+    if resolved in VALID_SLIDE_TYPES:
+        return resolved
     return "content"
 
 
@@ -411,6 +430,16 @@ def _parse_marked_text_structure(text: str) -> Dict[str, Any] | None:
             if lines:
                 out["main_subtitle"] = "｜".join(lines)
             continue
+
+        if marker_type == "two_content":
+            lower_title = title.lower()
+            if (
+                "comparison" in lower_title
+                or "compare" in lower_title
+                or "比較" in title
+                or "對照" in title
+            ):
+                marker_type = "comparison"
 
         slide_type = marker_type if marker_type in VALID_SLIDE_TYPES else "content"
         out["slides"].append(
@@ -519,6 +548,14 @@ def _safe_filename(name: str, default: str = "slides") -> str:
     name = re.sub(r'[\\/:*?"<>|]+', "_", name)
     name = re.sub(r"\s+", "_", name).strip("_")
     return name or default
+
+
+def _build_download_filename(raw_title: str, fallback: str = DEFAULT_MAIN_TITLE) -> str:
+    base = (raw_title or "").strip() or fallback
+    if base.lower().endswith(".pptx"):
+        base = base[:-5]
+    safe_base = _safe_filename(base, default=fallback)
+    return f"{safe_base}.pptx"
 
 
 def _coerce_llm_text_response(response: Any) -> str:
@@ -707,52 +744,60 @@ def _analyze_text_with_llm(text: str) -> Dict[str, Any]:
         return _fallback_from_raw_text(text)
 
 
-@require_node("pptx")
-def index(request):
+def _build_template_context() -> Dict[str, Any]:
     templates = _list_pptx_templates()
     ignored_templates = _list_ignored_template_files()
-    return render(
-        request,
-        "text2pptx/index.html",
-        {
-            "templates": templates,
-            "template_count": len(templates),
-            "ignored_templates": ignored_templates,
-            "ignored_count": len(ignored_templates),
-        },
-    )
+    default_template_available = DEFAULT_TEMPLATE_NAME in templates
+    return {
+        "templates": templates,
+        "template_count": len(templates),
+        "ignored_templates": ignored_templates,
+        "ignored_count": len(ignored_templates),
+        "default_template_name": DEFAULT_TEMPLATE_NAME,
+        "default_template_available": default_template_available,
+    }
+
+
+@require_node("pptx")
+def index(request):
+    return render(request, "text2pptx/index.html", _build_template_context())
+
+
+@require_node("pptx")
+def template_admin(request):
+    return render(request, "text2pptx/template_admin.html", _build_template_context())
 
 
 @require_node("pptx")
 def import_template(request):
     if request.method != "POST":
-        return redirect("pptx_page")
+        return redirect("pptx_template_admin")
 
     upload = request.FILES.get("template_file")
     if not upload:
         messages.error(request, "請選擇要匯入的 .pptx 範本檔。")
-        return redirect("pptx_page")
+        return redirect("pptx_template_admin")
 
-    filename = upload.name or ""
+    filename = _normalize_template_name(upload.name or "")
     if not filename.lower().endswith(".pptx"):
         messages.error(request, "只支援匯入 .pptx 檔案。")
-        return redirect("pptx_page")
+        return redirect("pptx_template_admin")
 
     if upload.size and upload.size > (MAX_TEMPLATE_UPLOAD_MB * 1024 * 1024):
         messages.error(request, f"範本檔案過大，請小於 {MAX_TEMPLATE_UPLOAD_MB} MB。")
-        return redirect("pptx_page")
+        return redirect("pptx_template_admin")
 
     raw = upload.read()
     try:
         audit = _audit_template_bytes(raw)
     except Exception as e:
         messages.error(request, f"範本解析失敗：{e}")
-        return redirect("pptx_page")
+        return redirect("pptx_template_admin")
 
     if not audit.get("ok"):
         missing = audit.get("missing") or []
         messages.error(request, "匯入失敗，缺少必要版型：" + "、".join(missing))
-        return redirect("pptx_page")
+        return redirect("pptx_template_admin")
 
     saved_name = _save_template_bytes(filename, raw)
     found = audit.get("found") or {}
@@ -761,11 +806,11 @@ def import_template(request):
         "匯入成功："
         f"{saved_name}。"
         f"標題投影片={found.get('cover')} / "
-        f"區段標題={found.get('section')} / "
-        f"標題及物件={found.get('content')} / "
-        f"兩個物件={found.get('two_content')}",
+        f"章節標題={found.get('section')} / "
+        f"內容頁={found.get('content')} / "
+        f"雙欄必較頁={found.get('two_content')}",
     )
-    return redirect("pptx_page")
+    return redirect("pptx_template_admin")
 
 
 @require_node("pptx", api=True)
@@ -775,7 +820,7 @@ def generate_pptx(request):
 
     text = (request.POST.get("text") or "").strip()
     user_title = (request.POST.get("title") or "").strip()
-    tpl_name = (request.POST.get("template") or "").strip()
+    tpl_name = (request.POST.get("template") or "").strip() or DEFAULT_TEMPLATE_NAME
 
     if not text:
         return JsonResponse({"ok": False, "error": "請輸入文字內容"}, status=400)
@@ -883,9 +928,19 @@ def generate_pptx(request):
         prs.save(buf)
         buf.seek(0)
 
-        filename = f"{_safe_filename(main_title)}.pptx" # Use LLM-generated main title for filename
+        filename = _build_download_filename(user_title or main_title, fallback=DEFAULT_MAIN_TITLE)
+        ascii_fallback = _safe_filename(
+            filename.encode("ascii", errors="ignore").decode("ascii"),
+            default="slides",
+        )
+        if not ascii_fallback.lower().endswith(".pptx"):
+            ascii_fallback = f"{ascii_fallback}.pptx"
+        quoted_filename = quote(filename)
         resp = HttpResponse(buf.getvalue(), content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation")
-        resp["Content-Disposition"] = f"attachment; filename*=UTF-8''{filename}"
+        resp["Content-Disposition"] = (
+            f"attachment; filename=\"{ascii_fallback}\"; "
+            f"filename*=UTF-8''{quoted_filename}"
+        )
         return resp
 
     except Exception as e:

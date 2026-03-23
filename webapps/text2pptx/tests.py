@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import io
-from email.header import decode_header
+import os
+import tempfile
+import unicodedata
+from urllib.parse import unquote
 from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -77,21 +80,21 @@ class Text2PptxHelperTests(SimpleTestCase):
         self.assertEqual(out["slides"][0]["title"], "單頁標題")
 
     def test_parse_marked_text_structure_chinese_markers(self):
-        text = """[封面頁] 智慧文件流程優化專案提案
+        text = """[標題投影片] 智慧文件流程優化專案提案
 提案單位：資訊處
 ===
-[章節頁] 章節一：現況與目標
+[章節標題] 章節一：現況與目標
 本章重點摘要
 ===
-[一般內容頁] 提案背景
+[內容頁] 提案背景
 痛點一
 痛點二
 ===
-[雙欄頁] 成本與時程
+[雙欄必較頁] 成本與時程
 左欄：自建成本高、時程長
 右欄：採購成本中、時程短
 ===
-[比較頁] 風險比較
+[雙欄必較頁] 風險比較
 左欄：自建需技術團隊
 右欄：採購受供應商排程影響"""
         out = views._parse_marked_text_structure(text)
@@ -115,6 +118,29 @@ class Text2PptxHelperTests(SimpleTestCase):
         views._clear_all_slides(prs)
         self.assertEqual(len(prs.slides), 0)
 
+    def test_safe_select_template_supports_chinese_filename(self):
+        with tempfile.TemporaryDirectory(dir=os.getcwd()) as td:
+            fname_nfc = "中心測試.pptx"
+            with open(os.path.join(td, fname_nfc), "wb") as f:
+                f.write(b"x")
+            with patch.object(views, "PPTX_TEMPLATE_DIR", td):
+                selected = views._safe_select_template(unicodedata.normalize("NFD", fname_nfc))
+            self.assertEqual(selected, os.path.join(td, fname_nfc))
+
+    def test_save_template_bytes_preserves_chinese_filename(self):
+        with tempfile.TemporaryDirectory(dir=os.getcwd()) as td:
+            with patch.object(views, "PPTX_TEMPLATE_DIR", td):
+                saved1 = views._save_template_bytes("中心測試.pptx", b"a")
+                saved2 = views._save_template_bytes("中心測試.pptx", b"b")
+            self.assertEqual(saved1, "中心測試.pptx")
+            self.assertEqual(saved2, "中心測試_1.pptx")
+            self.assertTrue(os.path.exists(os.path.join(td, saved1)))
+            self.assertTrue(os.path.exists(os.path.join(td, saved2)))
+
+    def test_build_download_filename_avoids_double_extension(self):
+        self.assertEqual(views._build_download_filename("測試主題"), "測試主題.pptx")
+        self.assertEqual(views._build_download_filename("測試主題.pptx"), "測試主題.pptx")
+
 
 @override_settings(PORTAL_ACL_ENABLED=False)
 class Text2PptxViewTests(SimpleTestCase):
@@ -131,11 +157,42 @@ class Text2PptxViewTests(SimpleTestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertIn("文字內容超過上限", resp.json().get("error", ""))
 
+    def test_index_lists_chinese_template_filename(self):
+        with tempfile.TemporaryDirectory(dir=os.getcwd()) as td:
+            with open(os.path.join(td, "中心測試.pptx"), "wb") as f:
+                f.write(b"x")
+            with patch.object(views, "PPTX_TEMPLATE_DIR", td):
+                resp = self.client.get("/text2pptx/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "投影片可引用版面範例")
+        self.assertContains(resp, "中心測試.pptx")
+        self.assertContains(resp, "預設範本缺失，改用內建")
+        self.assertContains(resp, "引用範例並產生 PPTX")
+        self.assertContains(resp, "前往範本管理（管理者）")
+        self.assertNotContains(resp, "匯入範本（含四種版型審查）")
+
+    def test_index_uses_default_template_when_available(self):
+        with tempfile.TemporaryDirectory(dir=os.getcwd()) as td:
+            with open(os.path.join(td, "預設範本.pptx"), "wb") as f:
+                f.write(b"x")
+            with open(os.path.join(td, "中心測試.pptx"), "wb") as f:
+                f.write(b"x")
+            with patch.object(views, "PPTX_TEMPLATE_DIR", td):
+                resp = self.client.get("/text2pptx/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "（預設範本：預設範本.pptx）")
+
+    def test_template_admin_page_renders_import_panel(self):
+        resp = self.client.get("/text2pptx/template-admin/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "TEXT → PPTX 範本管理")
+        self.assertContains(resp, "匯入範本（含四種版型審查）")
+
     @patch("webapps.text2pptx.views._audit_template_bytes")
     def test_import_template_rejects_when_required_layout_missing(self, mock_audit):
         mock_audit.return_value = {
             "ok": False,
-            "missing": ["區段標題（Section Header）"],
+            "missing": ["章節標題（Section Header）"],
             "found": {},
         }
         f = SimpleUploadedFile(
@@ -145,6 +202,7 @@ class Text2PptxViewTests(SimpleTestCase):
         )
         resp = self.client.post("/text2pptx/import-template/", {"template_file": f}, follow=True)
         self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "TEXT → PPTX 範本管理")
         self.assertContains(resp, "匯入失敗，缺少必要版型")
 
     @patch("webapps.text2pptx.views._save_template_bytes")
@@ -168,6 +226,7 @@ class Text2PptxViewTests(SimpleTestCase):
         )
         resp = self.client.post("/text2pptx/import-template/", {"template_file": f}, follow=True)
         self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "TEXT → PPTX 範本管理")
         self.assertContains(resp, "匯入成功：uploaded_ok.pptx")
 
     @patch("webapps.text2pptx.views._analyze_text_with_llm")
@@ -175,7 +234,7 @@ class Text2PptxViewTests(SimpleTestCase):
         resp = self.client.post(
             "/text2pptx/generate/",
             {
-                "text": "[封面頁] 封面標題\n副標\n===\n[一般內容頁] 內容頁\n重點一\n重點二",
+                "text": "[標題投影片] 封面標題\n副標\n===\n[內容頁] 內容頁\n重點一\n重點二",
                 "title": "",
                 "template": "",
             },
@@ -190,7 +249,7 @@ class Text2PptxViewTests(SimpleTestCase):
             "main_subtitle": "副標",
             "slides": [
                 {
-                    "title": "章節頁",
+                    "title": "章節標題",
                     "slide_type": "section",
                     "bullets": ["重點一", "重點二", "重點三"],
                 }
@@ -219,12 +278,12 @@ class Text2PptxViewTests(SimpleTestCase):
             "main_subtitle": "AI 副標",
             "slides": [
                 {
-                    "title": "章節頁",
+                    "title": "章節標題",
                     "slide_type": "section",
                     "bullets": ["重點摘要"],
                 },
                 {
-                    "title": "比較頁",
+                    "title": "雙欄必較頁",
                     "slide_type": "comparison",
                     "left_title": "已完成",
                     "right_title": "待完成",
@@ -252,14 +311,9 @@ class Text2PptxViewTests(SimpleTestCase):
             "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         )
         cd_raw = resp["Content-Disposition"]
-        decoded_parts = []
-        for part, enc in decode_header(cd_raw):
-            if isinstance(part, bytes):
-                decoded_parts.append(part.decode(enc or "utf-8", errors="replace"))
-            else:
-                decoded_parts.append(part)
-        cd_text = "".join(decoded_parts)
-        self.assertIn("使用者自訂主標.pptx", cd_text)
+        self.assertIn("filename*=", cd_raw)
+        encoded_name = cd_raw.split("filename*=UTF-8''", 1)[1]
+        self.assertIn("使用者自訂主標.pptx", unquote(encoded_name))
 
         from pptx import Presentation
 

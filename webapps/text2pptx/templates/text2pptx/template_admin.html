@@ -1,0 +1,63 @@
+{% load static %}
+{% load portal_extras %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>TEXT → PPTX 範本管理</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="stylesheet" href="{% static 'text2pptx/css/index.css' %}">
+  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+</head>
+<body data-base-url="{{ request.script_name }}">
+  <div class="wrap">
+    {% if messages %}
+      <div class="msg-wrap">
+        {% for message in messages %}
+          <div class="msg {{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="topbar">
+      <h1>TEXT → PPTX 範本管理</h1>
+      <a class="backlink" href="{% url 'pptx_page' %}">回產生頁</a>
+    </div>
+
+    <div class="hint">
+      此頁供管理者維護範本。匯入時會審查四種必要版型：標題投影片、章節標題、內容頁、雙欄必較頁。
+    </div>
+
+    <div class="import-box">
+      <div class="import-title">匯入範本（含四種版型審查）</div>
+      <form method="post" action="{% url 'pptx_import_template' %}" enctype="multipart/form-data" class="import-form">
+        {% csrf_token %}
+        <input type="file" name="template_file" accept=".pptx" required>
+        <button type="submit">匯入範本</button>
+      </form>
+      <div class="small">
+        請將 .pptx 範本放到 <b>pptx_templates/</b> 資料夾（專案根目錄），此處會自動列出。
+        <br>目前可選：<b>{{ template_count|default:0 }}</b> 份 .pptx。
+        {% if ignored_count %}
+          <br>已忽略（非 .pptx 或暫存檔）：<b>{{ ignored_count }}</b> 份（{{ ignored_templates|join:", " }}）。
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="import-box">
+      <div class="import-title">已上架範本清單</div>
+      {% if templates %}
+        <div class="template-list">
+          {% for t in templates %}
+            <div class="template-item">{{ t }}</div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="small">目前尚無可用範本。</div>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

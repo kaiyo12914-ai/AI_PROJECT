@@ -28,211 +28,411 @@
       <h1>TEXT → PPTX</h1>
 
       {# ✅ 返回入口頁：有 named url 用 named，沒有就 fallback "/"；並自動吃 proxy prefix #}
-      <a class="backlink" href="{% url 'portal:home' %}">回首頁</a>
+      <div class="top-links">
+        <a class="backlink" href="{% url 'portal:home' %}">回首頁</a>
+        <a class="backlink" href="{% url 'pptx_template_admin' %}">前往範本管理（管理者）</a>
+      </div>
     </div>
 
     <div class="hint">
-      使用規則：用 <b>===</b> 分隔投影片；每段 <b>第一行</b> 為標題，後面每行為條列內容。<br>
-      可選用版型標記：<b>[標題投影片]</b>、<b>[區段標題]</b>、<b>[標題及物件]</b>、<b>[兩個物件]</b>。<br>
-      送出後會直接下載 PPTX。
+      用 <b>===</b> 分隔投影片；每段第 1 行是標題，其餘各行是條列。<br>
+      可用標記：<b>[標題投影片]</b>、<b>[章節標題]</b>、<b>[內容頁]</b>、<b>[雙欄必較頁]</b>。<br>
+      送出後會直接下載 <b>.pptx</b>。
     </div>
 
     <div class="obj-guide">
-      <div class="obj-guide-title">文字內容對應（直覺說明）</div>
+      <div class="obj-guide-title">文字內容對應（精簡版）</div>
       <div class="obj-grid">
         <div class="obj-card">
-          <div class="obj-card-title">封面怎麼來</div>
+          <div class="obj-card-title">封面</div>
           <ul>
-            <li>「簡報名稱」有填：直接當封面標題與下載檔名</li>
-            <li>「簡報名稱」沒填：系統會從文字內容自動產生封面標題</li>
+            <li>有填「簡報主題及檔名」就使用該名稱；未填則由內容自動產生。</li>
           </ul>
         </div>
         <div class="obj-card">
-          <div class="obj-card-title">每一頁怎麼切</div>
+          <div class="obj-card-title">分頁</div>
           <ul>
-            <li>用 <b>===</b> 分隔不同投影片</li>
-            <li>每段第一行是該頁標題，後面每行是條列內容</li>
+            <li>每個 <b>===</b> 區塊會產生一頁。</li>
           </ul>
         </div>
         <div class="obj-card">
-          <div class="obj-card-title">頁面太長怎麼辦</div>
+          <div class="obj-card-title">長內容</div>
           <ul>
-            <li>同一頁條列太多時，系統會自動拆成下一頁（標題加「續」）</li>
-            <li>系統會依內容自動選擇一般頁、章節頁或雙欄/比較頁</li>
+            <li>條列過多會自動分頁（標題加「續」）。</li>
           </ul>
         </div>
         <div class="obj-card">
-          <div class="obj-card-title">匯入範本會檢查什麼</div>
+          <div class="obj-card-title">範本檢查</div>
           <ul>
-            <li>會檢查是否可套用：標題投影片、區段標題、標題及物件、兩個物件</li>
-            <li>不符合會直接提示缺少版型，避免產生時版面錯亂</li>
+            <li>需包含四種版型；缺少時會提示。</li>
           </ul>
         </div>
       </div>
     </div>
 
-    <div class="import-box">
-      <div class="import-title">匯入範本（含四種版型審查）</div>
-      <form method="post" action="{% url 'pptx_import_template' %}" enctype="multipart/form-data" class="import-form">
-        {% csrf_token %}
-        <input type="file" name="template_file" accept=".pptx" required>
-        <button type="submit">匯入範本</button>
-      </form>
-      <div class="small">
-        會審查是否包含：標題投影片（Title Slide）、區段標題（Section Header）、標題及物件（Title and Content）、兩個物件（Two Content）。
-      </div>
+    <div class="layout-guide">
+      <div class="layout-guide-title">投影片可引用版面範例</div>
+      <svg viewBox="0 0 1600 980" role="img" aria-label="投影片可引用版面範例資訊圖表" style="width:100%;height:auto;display:block;background:#ffffff;border:1px solid #d7e0eb;border-radius:8px;">
+        <defs>
+          <radialGradient id="bgGrad" cx="50%" cy="45%" r="70%">
+            <stop offset="0%" stop-color="#ffffff"/>
+            <stop offset="100%" stop-color="#e8edf3"/>
+          </radialGradient>
+          <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#355f84"/>
+            <stop offset="100%" stop-color="#4388b0"/>
+          </linearGradient>
+          <linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#53b9c2"/>
+            <stop offset="100%" stop-color="#3f6f9d"/>
+          </linearGradient>
+          <linearGradient id="g3" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#274f7e"/>
+            <stop offset="100%" stop-color="#5ad2c4"/>
+          </linearGradient>
+          <linearGradient id="g4" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#3a628f"/>
+            <stop offset="100%" stop-color="#71d0c4"/>
+          </linearGradient>
+          <linearGradient id="barGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#4f7c96"/>
+            <stop offset="100%" stop-color="#3a6a87"/>
+          </linearGradient>
+        </defs>
+
+        <rect x="0" y="0" width="1600" height="980" fill="url(#bgGrad)"/>
+
+        <text x="90" y="92" font-size="72" font-weight="700" fill="#4e6f86">投影片可引用版面範例</text>
+        <text x="90" y="146" font-size="28" fill="#1f2329">
+          本圖表拆解了專業簡報母片中不可或缺的四種基礎版型。透過標準化的母片設定，能確保簡報在視覺呈現上維持一致性，並
+        </text>
+        <text x="90" y="186" font-size="28" fill="#1f2329">
+          滿足從開場、轉場到核心內容呈現的所有溝通需求。
+        </text>
+
+        <rect x="90" y="230" width="330" height="200" fill="#f6fafc" stroke="#5b7a8e" stroke-width="3"/>
+        <rect x="105" y="245" width="300" height="170" fill="none" stroke="#7f98a9" stroke-width="2"/>
+        <line x1="105" y1="245" x2="235" y2="320" stroke="#6e879b" stroke-width="2"/>
+        <line x1="405" y1="245" x2="275" y2="320" stroke="#6e879b" stroke-width="2"/>
+        <line x1="105" y1="415" x2="210" y2="355" stroke="#6e879b" stroke-width="2"/>
+        <line x1="405" y1="415" x2="300" y2="355" stroke="#6e879b" stroke-width="2"/>
+        <rect x="160" y="332" width="190" height="24" fill="url(#barGrad)"/>
+        <rect x="225" y="275" width="50" height="50" fill="none" stroke="#6e879b" stroke-width="2"/>
+        <line x1="225" y1="275" x2="275" y2="325" stroke="#6e879b" stroke-width="2"/>
+        <line x1="275" y1="275" x2="225" y2="325" stroke="#6e879b" stroke-width="2"/>
+        <rect x="220" y="370" width="120" height="14" fill="url(#barGrad)"/>
+        <line x1="215" y1="392" x2="350" y2="392" stroke="#9fb0bd" stroke-width="6"/>
+
+        <rect x="485" y="230" width="330" height="200" fill="#f6fafc" stroke="#5b7a8e" stroke-width="3"/>
+        <rect x="500" y="245" width="300" height="40" fill="none" stroke="#7f98a9" stroke-width="2"/>
+        <rect x="590" y="257" width="130" height="14" fill="url(#barGrad)"/>
+        <rect x="500" y="304" width="130" height="110" fill="none" stroke="#7f98a9" stroke-width="2"/>
+        <line x1="500" y1="304" x2="630" y2="414" stroke="#6e879b" stroke-width="2"/>
+        <line x1="630" y1="304" x2="500" y2="414" stroke="#6e879b" stroke-width="2"/>
+        <line x1="645" y1="304" x2="790" y2="346" stroke="#6e879b" stroke-width="2"/>
+        <line x1="645" y1="366" x2="790" y2="304" stroke="#6e879b" stroke-width="2"/>
+        <rect x="650" y="382" width="58" height="24" fill="none" stroke="#7f98a9" stroke-width="2"/>
+        <rect x="720" y="382" width="58" height="24" fill="none" stroke="#7f98a9" stroke-width="2"/>
+        <rect x="485" y="414" width="330" height="16" fill="#d9e1ea"/>
+        <line x1="635" y1="423" x2="665" y2="423" stroke="#9eb0be" stroke-width="6"/>
+
+        <rect x="880" y="230" width="330" height="200" fill="#f6fafc" stroke="#5b7a8e" stroke-width="3"/>
+        <rect x="895" y="245" width="300" height="40" fill="none" stroke="#7f98a9" stroke-width="2"/>
+        <rect x="980" y="257" width="130" height="14" fill="url(#barGrad)"/>
+        <circle cx="930" cy="332" r="12" fill="#63c0c3"/>
+        <circle cx="930" cy="372" r="12" fill="#4f8f9f"/>
+        <circle cx="930" cy="412" r="12" fill="#4a6f86"/>
+        <line x1="952" y1="332" x2="1040" y2="332" stroke="#9cb0bf" stroke-width="6"/>
+        <line x1="952" y1="372" x2="1040" y2="372" stroke="#9cb0bf" stroke-width="6"/>
+        <line x1="952" y1="412" x2="1040" y2="412" stroke="#9cb0bf" stroke-width="6"/>
+        <rect x="1035" y="322" width="165" height="115" fill="none" stroke="#7f98a9" stroke-width="2"/>
+        <line x1="1035" y1="322" x2="1200" y2="437" stroke="#6e879b" stroke-width="2"/>
+        <line x1="1200" y1="322" x2="1035" y2="437" stroke="#6e879b" stroke-width="2"/>
+
+        <rect x="1275" y="230" width="330" height="200" fill="#f6fafc" stroke="#5b7a8e" stroke-width="3"/>
+        <rect x="1290" y="245" width="300" height="40" fill="none" stroke="#7f98a9" stroke-width="2"/>
+        <rect x="1375" y="257" width="130" height="14" fill="url(#barGrad)"/>
+        <rect x="1290" y="304" width="140" height="110" fill="none" stroke="#7f98a9" stroke-width="2"/>
+        <rect x="1450" y="304" width="140" height="110" fill="none" stroke="#7f98a9" stroke-width="2"/>
+        <rect x="1300" y="315" width="120" height="24" fill="none" stroke="#7f98a9" stroke-width="2"/>
+        <rect x="1460" y="315" width="120" height="24" fill="none" stroke="#7f98a9" stroke-width="2"/>
+        <line x1="1320" y1="350" x2="1400" y2="350" stroke="#9cb0bf" stroke-width="6"/>
+        <line x1="1320" y1="370" x2="1400" y2="370" stroke="#9cb0bf" stroke-width="6"/>
+        <line x1="1320" y1="390" x2="1400" y2="390" stroke="#9cb0bf" stroke-width="6"/>
+        <line x1="1480" y1="350" x2="1560" y2="350" stroke="#9cb0bf" stroke-width="6"/>
+        <line x1="1480" y1="370" x2="1560" y2="370" stroke="#9cb0bf" stroke-width="6"/>
+        <line x1="1480" y1="390" x2="1560" y2="390" stroke="#9cb0bf" stroke-width="6"/>
+        <line x1="1440" y1="304" x2="1440" y2="414" stroke="#7f98a9" stroke-width="2"/>
+
+        <line x1="255" y1="432" x2="255" y2="488" stroke="#63b9c0" stroke-width="5"/>
+        <line x1="650" y1="432" x2="650" y2="488" stroke="#63b9c0" stroke-width="5"/>
+        <line x1="1045" y1="432" x2="1045" y2="488" stroke="#63b9c0" stroke-width="5"/>
+        <line x1="1440" y1="432" x2="1440" y2="488" stroke="#63b9c0" stroke-width="5"/>
+
+        <text x="255" y="530" text-anchor="middle" font-size="40" font-weight="700" fill="#1f2329">
+          <tspan x="255" dy="0">1. 標題投影片</tspan>
+          <tspan x="255" dy="42">（首頁封面）</tspan>
+        </text>
+        <text x="255" y="608" text-anchor="middle" font-size="26" fill="#1f2329">
+          <tspan x="255" dy="0">建立簡報的第一印象，呈現</tspan>
+          <tspan x="255" dy="34">主題名稱與講者資訊。</tspan>
+        </text>
+
+        <text x="650" y="530" text-anchor="middle" font-size="40" font-weight="700" fill="#1f2329">
+          <tspan x="650" dy="0">2. 章節標題</tspan>
+          <tspan x="650" dy="42">（章節分頁）</tspan>
+        </text>
+        <text x="650" y="608" text-anchor="middle" font-size="26" fill="#1f2329">
+          <tspan x="650" dy="0">作為簡報內容的轉折點，</tspan>
+          <tspan x="650" dy="34">引導聽眾進入下一主題。</tspan>
+        </text>
+
+        <text x="1045" y="530" text-anchor="middle" font-size="40" font-weight="700" fill="#1f2329">
+          <tspan x="1045" dy="0">3. 內容頁</tspan>
+          <tspan x="1045" dy="42">（多數內容需求）</tspan>
+        </text>
+        <text x="1045" y="608" text-anchor="middle" font-size="26" fill="#1f2329">
+          <tspan x="1045" dy="0">最常用版面，適合條列重點、</tspan>
+          <tspan x="1045" dy="34">圖表與一般敘述文字。</tspan>
+        </text>
+
+        <text x="1440" y="530" text-anchor="middle" font-size="40" font-weight="700" fill="#1f2329">
+          <tspan x="1440" dy="0">4. 雙欄必較頁</tspan>
+          <tspan x="1440" dy="42">（比較與對照）</tspan>
+        </text>
+        <text x="1440" y="608" text-anchor="middle" font-size="26" fill="#1f2329">
+          <tspan x="1440" dy="0">專為呈現兩組數據或方案</tspan>
+          <tspan x="1440" dy="34">差異對照的左右平衡版型。</tspan>
+        </text>
+
+        <line x1="255" y1="628" x2="255" y2="760" stroke="#63b9c0" stroke-width="5"/>
+        <line x1="650" y1="628" x2="650" y2="760" stroke="#63b9c0" stroke-width="5"/>
+        <line x1="1045" y1="628" x2="1045" y2="760" stroke="#63b9c0" stroke-width="5"/>
+        <line x1="1440" y1="628" x2="1440" y2="760" stroke="#63b9c0" stroke-width="5"/>
+        <circle cx="255" cy="760" r="10" fill="#63b9c0"/>
+        <circle cx="650" cy="760" r="10" fill="#63b9c0"/>
+        <circle cx="1045" cy="760" r="10" fill="#63b9c0"/>
+        <circle cx="1440" cy="760" r="10" fill="#63b9c0"/>
+
+        <rect x="80" y="790" width="340" height="170" rx="16" fill="url(#g1)"/>
+        <text x="250" y="872" text-anchor="middle" font-size="26" font-weight="700" fill="#d8ecf7">PROJECT VISION 2024</text>
+        <text x="250" y="915" text-anchor="middle" font-size="20" fill="#d8ecf7">Presented by [Name/Team]</text>
+
+        <rect x="475" y="790" width="340" height="170" rx="16" fill="url(#g2)"/>
+        <path d="M475,910 C555,840 655,870 815,800 L815,960 L475,960 Z" fill="#2f5b84" opacity="0.55"/>
+        <text x="645" y="875" text-anchor="middle" font-size="52" font-weight="700" fill="#e4f7ff">02</text>
+        <text x="645" y="907" text-anchor="middle" font-size="24" font-weight="700" fill="#e4f7ff">MARKET ANALYSIS</text>
+        <text x="645" y="935" text-anchor="middle" font-size="16" fill="#e4f7ff">&amp; TRENDS</text>
+
+        <rect x="870" y="790" width="340" height="170" rx="10" fill="#ffffff" stroke="#93a8b7" stroke-width="2"/>
+        <rect x="870" y="790" width="340" height="38" fill="url(#g3)"/>
+        <text x="1040" y="818" text-anchor="middle" font-size="18" font-weight="700" fill="#e7f8ff">KEY PERFORMANCE INDICATORS</text>
+        <circle cx="925" cy="872" r="10" fill="#5a8ea6"/>
+        <circle cx="925" cy="910" r="10" fill="#5a8ea6"/>
+        <circle cx="925" cy="948" r="10" fill="#5a8ea6"/>
+        <line x1="945" y1="872" x2="1035" y2="872" stroke="#a8b9c5" stroke-width="6"/>
+        <line x1="945" y1="910" x2="1035" y2="910" stroke="#a8b9c5" stroke-width="6"/>
+        <line x1="945" y1="948" x2="1035" y2="948" stroke="#a8b9c5" stroke-width="6"/>
+        <rect x="1055" y="915" width="26" height="35" fill="#6b94aa"/>
+        <rect x="1090" y="895" width="26" height="55" fill="#5d879f"/>
+        <rect x="1125" y="862" width="26" height="88" fill="#4f7590"/>
+        <line x1="1055" y1="950" x2="1160" y2="950" stroke="#9fb2c1" stroke-width="2"/>
+
+        <rect x="1265" y="790" width="340" height="170" rx="10" fill="#ffffff" stroke="#93a8b7" stroke-width="2"/>
+        <rect x="1265" y="790" width="340" height="38" fill="url(#g4)"/>
+        <text x="1435" y="818" text-anchor="middle" font-size="18" font-weight="700" fill="#f4ffff">SOLUTION A vs. SOLUTION B</text>
+        <rect x="1295" y="842" width="130" height="100" rx="8" fill="none" stroke="#6f8ea5" stroke-width="2"/>
+        <rect x="1445" y="842" width="130" height="100" rx="8" fill="none" stroke="#6f8ea5" stroke-width="2"/>
+        <line x1="1315" y1="875" x2="1398" y2="875" stroke="#9db0bf" stroke-width="6"/>
+        <line x1="1315" y1="900" x2="1398" y2="900" stroke="#9db0bf" stroke-width="6"/>
+        <line x1="1465" y1="875" x2="1548" y2="875" stroke="#9db0bf" stroke-width="6"/>
+        <line x1="1465" y1="900" x2="1548" y2="900" stroke="#9db0bf" stroke-width="6"/>
+        <rect x="1305" y="916" width="20" height="18" fill="#5d879f"/>
+        <rect x="1330" y="905" width="20" height="29" fill="#4f7590"/>
+        <rect x="1355" y="894" width="20" height="40" fill="#3f6681"/>
+        <rect x="1475" y="916" width="20" height="18" fill="#5d879f"/>
+        <rect x="1500" y="905" width="20" height="29" fill="#4f7590"/>
+        <rect x="1525" y="894" width="20" height="40" fill="#3f6681"/>
+      </svg>
     </div>
 
     {# ✅ action 必須吃 proxy prefix，避免反向代理下 post 到錯的路徑 #}
-    <form method="post" action="{% url 'pptx_generate' %}">
+    <form id="pptx-generate-form" method="post" action="{% url 'pptx_generate' %}">
       {% csrf_token %}
 
       <div class="row">
         <div>
-          <label>簡報名稱</label>
+          <label>簡報主題及檔名</label>
           <input type="text" name="title" value="簡報" />
-          <div class="small">可覆寫封面主標題；檔名也會使用此名稱（自動加 .pptx）</div>
+          <div class="small">可覆寫封面主標題；輸出檔名也會使用此名稱（自動加 .pptx）</div>
         </div>
 
         <div>
           <label>選擇範本</label>
           <select name="template">
-            <option value="">（預設範本）</option>
+            {% if default_template_available %}
+              <option value="{{ default_template_name }}" selected>（預設範本：{{ default_template_name }}）</option>
+            {% else %}
+              <option value="" selected>（預設範本缺失，改用內建）</option>
+            {% endif %}
             {% if templates %}
               {% for t in templates %}
-                <option value="{{ t }}">{{ t }}</option>
+                {% if t != default_template_name %}
+                  <option value="{{ t }}">{{ t }}</option>
+                {% endif %}
               {% endfor %}
             {% endif %}
           </select>
-          <div class="small">
-            請將 .pptx 範本放到 <b>pptx_templates/</b> 資料夾（專案根目錄），此處會自動列出。
-            <br>目前可選：<b>{{ template_count|default:0 }}</b> 份 .pptx。
-            {% if ignored_count %}
-              <br>已忽略（非 .pptx 或暫存檔）：<b>{{ ignored_count }}</b> 份
-              （{{ ignored_templates|join:", " }}）。
-            {% endif %}
-          </div>
         </div>
       </div>
 
-      <label>文字內容</label>
-      <textarea name="text" placeholder="[標題投影片] 專案提案：智慧文件流程優化
+      <div class="content-example-grid">
+        <div>
+          <div class="label-row">
+            <label for="pptx_text_input">文字內容</label>
+            <button type="button" id="apply-sample-btn" class="apply-sample-btn">引用範例並產生 PPTX</button>
+          </div>
+          <textarea id="pptx_text_input" name="text" placeholder="[標題投影片] 專案提案：智慧文件流程優化
 提案單位：資訊處
 提案日期：2026-03-21
 ===
-[區段標題] 提案背景
+[章節標題] 提案背景
 現行簽核流程跨系統，重工與等待時間高
 文件版本分散，追蹤與稽核困難
 人工彙整報表耗時，管理決策不即時
 ===
-[標題及物件] 痛點與影響
+[內容頁] 痛點與影響
 流程長：平均處理天數偏高
 品質不穩：欄位遺漏與格式不一致
 透明度不足：主管難掌握案件卡關點
 ===
-[標題及物件] 專案目標
+[內容頁] 專案目標
 流程時間縮短 30%
 文件錯誤率降低 50%
 建立即時儀表板，提升管理可視性
 ===
-[兩個物件] 方案比較
+[雙欄必較頁] 方案比較
 方案 A：維持現況逐步修補
 方案 B：導入文件流程平台（推薦）
 方案 C：全客製重建
 ===
-[標題及物件] 建議方案（B）內容
+[內容頁] 建議方案（B）內容
 建立統一收件與分派入口
 導入範本化產文與欄位驗證
 串接既有系統，保留核心資料來源
 ===
-[標題及物件] 時程規劃
+[內容頁] 時程規劃
 M1：需求訪談與流程盤點
 M2：系統設計與原型確認
 M3-M4：功能開發與整合
 M5：試點上線與教育訓練
 M6：正式上線與成效追蹤
 ===
-[兩個物件] 資源需求
+[雙欄必較頁] 資源需求
 人力：PM 1、後端 2、前端 1、測試 1
 預算：軟體授權、開發與維運費
 配合單位：資訊處、業務單位、稽核單位
 ===
-[兩個物件] 風險與對策
+[雙欄必較頁] 風險與對策
 使用者抗拒：分梯教育訓練 + 超級使用者機制
 資料品質落差：上線前資料清整與驗證規則
 整合風險：分階段串接與回滾方案
 ===
-[標題及物件] 預期效益
+[內容頁] 預期效益
 縮短核決週期，提升行政效率
 提升資料一致性與稽核可追溯性
 提供管理儀表板支援決策
 ===
-[區段標題] 決策請求
+[章節標題] 決策請求
 同意啟動專案與預算核定
 同意先行試點一個處室，兩個月內檢核成效
 同意成立跨部門專案小組"></textarea>
-
-      <button type="submit">產生 PPTX</button>
-    </form>
-
-    <div style="margin-top:18px;">
-      <div class="hint">範例：</div>
-      <div class="ex">[標題投影片] 專案提案：智慧文件流程優化
+        </div>
+        <div>
+          <label>範例</label>
+          <div id="pptx_sample_text" class="ex ex-panel">[標題投影片] 專案提案：智慧文件流程優化
 提案單位：資訊處
 提案日期：2026-03-21
 ===
-[區段標題] 提案背景
+[章節標題] 提案背景
 現行簽核流程跨系統，重工與等待時間高
 文件版本分散，追蹤與稽核困難
 人工彙整報表耗時，管理決策不即時
 ===
-[標題及物件] 痛點與影響
+[內容頁] 痛點與影響
 流程長：平均處理天數偏高
 品質不穩：欄位遺漏與格式不一致
 透明度不足：主管難掌握案件卡關點
 ===
-[標題及物件] 專案目標
+[內容頁] 專案目標
 流程時間縮短 30%
 文件錯誤率降低 50%
 建立即時儀表板，提升管理可視性
 ===
-[兩個物件] 方案比較
+[雙欄必較頁] 方案比較
 方案 A：維持現況逐步修補
 方案 B：導入文件流程平台（推薦）
 方案 C：全客製重建
 ===
-[標題及物件] 建議方案（B）內容
+[內容頁] 建議方案（B）內容
 建立統一收件與分派入口
 導入範本化產文與欄位驗證
 串接既有系統，保留核心資料來源
 ===
-[標題及物件] 時程規劃
+[內容頁] 時程規劃
 M1：需求訪談與流程盤點
 M2：系統設計與原型確認
 M3-M4：功能開發與整合
 M5：試點上線與教育訓練
 M6：正式上線與成效追蹤
 ===
-[兩個物件] 資源需求
+[雙欄必較頁] 資源需求
 人力：PM 1、後端 2、前端 1、測試 1
 預算：軟體授權、開發與維運費
 配合單位：資訊處、業務單位、稽核單位
 ===
-[兩個物件] 風險與對策
+[雙欄必較頁] 風險與對策
 使用者抗拒：分梯教育訓練 + 超級使用者機制
 資料品質落差：上線前資料清整與驗證規則
 整合風險：分階段串接與回滾方案
 ===
-[標題及物件] 預期效益
+[內容頁] 預期效益
 縮短核決週期，提升行政效率
 提升資料一致性與稽核可追溯性
 提供管理儀表板支援決策
 ===
-[區段標題] 決策請求
+[章節標題] 決策請求
 同意啟動專案與預算核定
 同意先行試點一個處室，兩個月內檢核成效
 同意成立跨部門專案小組</div>
-    </div>
+        </div>
+      </div>
+
+      <button type="submit">產生 PPTX</button>
+    </form>
   </div>
+  <script>
+    (function () {
+      const form = document.getElementById("pptx-generate-form");
+      const textInput = document.getElementById("pptx_text_input");
+      const sampleText = document.getElementById("pptx_sample_text");
+      const applyBtn = document.getElementById("apply-sample-btn");
+      if (!form || !textInput || !sampleText || !applyBtn) {
+        return;
+      }
+      applyBtn.addEventListener("click", function () {
+        const text = (sampleText.textContent || "").trim();
+        if (!text) {
+          return;
+        }
+        textInput.value = text;
+        if (typeof form.requestSubmit === "function") {
+          form.requestSubmit();
+        } else {
+          form.submit();
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
