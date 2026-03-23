@@ -4,6 +4,7 @@
 
 - Every new session in this project must read `/.codex/rules.md` before any other task.
 - Do not skip this step.
+- `/.codex/rules.md` is the single source of truth; do not keep a second `rules.md` at project root.
 
 ## Encoding Rule
 
