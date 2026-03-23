@@ -11,6 +11,7 @@
   <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
   <link rel="stylesheet" href="{% static 'text2pptx/css/index.css' %}">
   <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% static 'text2pptx/js/index.js' %}"></script>
 </head>
 
 
@@ -257,7 +258,12 @@
     </div>
 
     {# ✅ action 必須吃 proxy prefix，避免反向代理下 post 到錯的路徑 #}
-    <form id="pptx-generate-form" method="post" action="{% url 'pptx_generate' %}">
+    <form
+      id="pptx-generate-form"
+      method="post"
+      action="{% url 'pptx_generate' %}"
+      data-analyze-prompts-url="{% url 'pptx_analyze_image_prompts' %}"
+    >
       {% csrf_token %}
 
       <div class="row">
@@ -407,32 +413,25 @@ M6：正式上線與成效追蹤
 同意成立跨部門專案小組</div>
         </div>
       </div>
-
-      <button type="submit">產生 PPTX</button>
+      <div class="form-actions">
+        <button type="button" id="analyze-image-prompts-btn" class="btn-secondary">解析內容轉生圖提示詞</button>
+        <button type="submit">生成 PPTX</button>
+      </div>
     </form>
   </div>
-  <script>
-    (function () {
-      const form = document.getElementById("pptx-generate-form");
-      const textInput = document.getElementById("pptx_text_input");
-      const sampleText = document.getElementById("pptx_sample_text");
-      const applyBtn = document.getElementById("apply-sample-btn");
-      if (!form || !textInput || !sampleText || !applyBtn) {
-        return;
-      }
-      applyBtn.addEventListener("click", function () {
-        const text = (sampleText.textContent || "").trim();
-        if (!text) {
-          return;
-        }
-        textInput.value = text;
-        if (typeof form.requestSubmit === "function") {
-          form.requestSubmit();
-        } else {
-          form.submit();
-        }
-      });
-    })();
-  </script>
+  <div id="image-prompts-modal" class="prompt-modal" hidden>
+    <div class="prompt-modal-card" role="dialog" aria-modal="true" aria-labelledby="image-prompts-modal-title">
+      <div class="prompt-modal-header">
+        <h2 id="image-prompts-modal-title">生圖提示詞解析結果</h2>
+        <button type="button" id="close-image-prompts-modal" class="modal-close-btn" aria-label="關閉">×</button>
+      </div>
+      <p class="small">可先檢查每張投影片提示詞，再決定是否直接生成 PPTX。</p>
+      <textarea id="image-prompts-preview" class="prompt-preview-textarea" readonly></textarea>
+      <div class="prompt-modal-actions">
+        <button type="button" id="copy-image-prompts-btn" class="btn-secondary">複製提示詞</button>
+        <button type="button" id="confirm-image-prompts-btn">關閉</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import base64
 import os
 import tempfile
 import unicodedata
@@ -11,6 +12,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, override_settings
 
 from webapps.text2pptx import views
+from webapps.text2pptx import image_service
 
 
 class Text2PptxHelperTests(SimpleTestCase):
@@ -52,8 +54,27 @@ class Text2PptxHelperTests(SimpleTestCase):
         slide = out["slides"][0]
         self.assertFalse(slide["image_required"])
         self.assertEqual(slide["image_prompt"], "")
-        self.assertEqual(slide["image_intent"], "")
+        self.assertEqual(slide["image_intent"], "concept")
         self.assertEqual(slide["aspect_ratio"], "16:9")
+
+    def test_normalize_analysis_result_invalid_image_intent_defaults_to_concept(self):
+        data = {
+            "main_title": "T",
+            "main_subtitle": "S",
+            "slides": [
+                {
+                    "title": "A",
+                    "slide_type": "content",
+                    "bullets": ["x"],
+                    "image_required": True,
+                    "image_prompt": "abstract workflow diagram",
+                    "image_intent": "poster",
+                }
+            ],
+        }
+        out = views._normalize_analysis_result(data, source_text="A\nx")
+        slide = out["slides"][0]
+        self.assertEqual(slide["image_intent"], "concept")
 
     def test_normalize_analysis_result_reads_image_fields(self):
         data = {
@@ -90,6 +111,101 @@ class Text2PptxHelperTests(SimpleTestCase):
                 self.assertIsNotNone(path)
                 assert path is not None
                 self.assertTrue(os.path.exists(path))
+
+    def test_generate_image_google_accepts_ok_image_path(self):
+        with tempfile.TemporaryDirectory(dir=os.getcwd(), ignore_cleanup_errors=True) as td:
+            image_path = os.path.join(td, "provider_out.png")
+            with open(image_path, "wb") as f:
+                f.write(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/w8AAusB9Y0A3L8AAAAASUVORK5CYII="))
+            with patch("webapps.text2pptx.image_service._call_google_provider", return_value={"ok": True, "image_path": image_path}):
+                result = image_service.generate_image(prompt="x", mode="google", output_dir=td)
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["local_path"], image_path)
+
+    def test_generate_image_google_uses_output_path_when_ok_true(self):
+        with tempfile.TemporaryDirectory(dir=os.getcwd(), ignore_cleanup_errors=True) as td:
+            def _provider(**kwargs):
+                out = str(kwargs["output_path"])
+                with open(out, "wb") as f:
+                    f.write(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/w8AAusB9Y0A3L8AAAAASUVORK5CYII="))
+                return {"ok": True}
+
+            with patch("webapps.text2pptx.image_service._call_google_provider", side_effect=_provider):
+                result = image_service.generate_image(prompt="x", mode="google", output_dir=td, aspect_ratio="3:2")
+            self.assertTrue(result["ok"])
+            self.assertTrue(os.path.isfile(result["local_path"]))
+
+    def test_generate_image_google_raises_when_ok_false(self):
+        with tempfile.TemporaryDirectory(dir=os.getcwd()) as td:
+            with patch(
+                "webapps.text2pptx.image_service._call_google_provider",
+                return_value={"ok": False, "error": "invalid API key"},
+            ):
+                with self.assertRaises(image_service.ImageGenError) as cm:
+                    image_service.generate_image(prompt="x", mode="google", output_dir=td)
+        self.assertEqual(cm.exception.code, "IMG_E_PROVIDER")
+
+    def test_insert_generated_image_places_picture_in_available_area(self):
+        from pptx import Presentation
+        from pptx.util import Inches
+
+        prs = Presentation()
+        blank_layout = next((ly for ly in prs.slide_layouts if len(getattr(ly, "placeholders", [])) == 0), prs.slide_layouts[-1])
+        slide = prs.slides.add_slide(blank_layout)
+        title_shape = slide.shapes.add_textbox(Inches(0.5), Inches(0.2), Inches(9), Inches(0.8))
+        title_shape.text_frame.text = "Title"
+
+        with tempfile.TemporaryDirectory(dir=os.getcwd()) as td:
+            image_path = os.path.join(td, "probe.png")
+            png = base64.b64decode(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8"
+                "/w8AAusB9Y0A3L8AAAAASUVORK5CYII="
+            )
+            with open(image_path, "wb") as f:
+                f.write(png)
+
+            inserted = views._insert_generated_image(
+                slide,
+                image_path,
+                exclude_shape=title_shape,
+                slide_type="content",
+                image_intent="hero",
+            )
+
+        self.assertTrue(inserted)
+        self.assertTrue(any(hasattr(sh, "image") for sh in slide.shapes))
+
+    def test_insert_generated_image_skips_when_text_almost_fullslide(self):
+        from pptx import Presentation
+        from pptx.util import Inches
+
+        prs = Presentation()
+        blank_layout = next((ly for ly in prs.slide_layouts if len(getattr(ly, "placeholders", [])) == 0), prs.slide_layouts[-1])
+        slide = prs.slides.add_slide(blank_layout)
+        title_shape = slide.shapes.add_textbox(Inches(0.2), Inches(0.1), Inches(9.3), Inches(0.8))
+        title_shape.text_frame.text = "Title"
+        body = slide.shapes.add_textbox(Inches(0.0), Inches(0.0), Inches(10.0), Inches(7.5))
+        body.text_frame.text = "This area is intentionally occupied by text."
+
+        with tempfile.TemporaryDirectory(dir=os.getcwd()) as td:
+            image_path = os.path.join(td, "probe.png")
+            png = base64.b64decode(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8"
+                "/w8AAusB9Y0A3L8AAAAASUVORK5CYII="
+            )
+            with open(image_path, "wb") as f:
+                f.write(png)
+
+            with patch.object(views, "_find_largest_image_frame", return_value=None):
+                inserted = views._insert_generated_image(
+                    slide,
+                    image_path,
+                    exclude_shape=title_shape,
+                    slide_type="content",
+                    image_intent="data",
+                )
+
+        self.assertFalse(inserted)
 
     @patch("webapps.text2pptx.views.get_chat_model")
     def test_analyze_text_with_llm_parses_json_with_extra_explanation(self, mock_get_chat_model):
@@ -201,6 +317,38 @@ class Text2PptxHelperTests(SimpleTestCase):
 class Text2PptxViewTests(SimpleTestCase):
     databases = {"default"}
 
+    def test_analyze_image_prompts_method_not_allowed(self):
+        resp = self.client.get("/text2pptx/analyze-image-prompts/")
+        self.assertEqual(resp.status_code, 405)
+
+    def test_analyze_image_prompts_rejects_empty_text(self):
+        resp = self.client.post("/text2pptx/analyze-image-prompts/", {"text": ""})
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(resp.json().get("ok", True))
+
+    @patch("webapps.text2pptx.views._resolve_analysis_for_image_prompts")
+    def test_analyze_image_prompts_returns_preview(self, mock_resolve):
+        mock_resolve.return_value = {
+            "main_title": "T",
+            "main_subtitle": "S",
+            "slides": [
+                {
+                    "title": "Slide A",
+                    "slide_type": "content",
+                    "image_required": True,
+                    "image_prompt": "a clean enterprise illustration",
+                    "image_intent": "hero",
+                    "aspect_ratio": "16:9",
+                }
+            ],
+        }
+        resp = self.client.post("/text2pptx/analyze-image-prompts/", {"text": "demo"})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data.get("ok"))
+        self.assertEqual(len(data.get("slides", [])), 1)
+        self.assertIn("a clean enterprise illustration", data.get("preview_text", ""))
+
     def test_generate_rejects_empty_text(self):
         resp = self.client.post("/text2pptx/generate/", {"text": ""})
         self.assertEqual(resp.status_code, 400)
@@ -223,6 +371,7 @@ class Text2PptxViewTests(SimpleTestCase):
         self.assertContains(resp, "中心測試.pptx")
         self.assertContains(resp, "預設範本缺失，改用內建")
         self.assertContains(resp, "引用範例並產生 PPTX")
+        self.assertContains(resp, "解析內容轉生圖提示詞")
         self.assertContains(resp, "前往範本管理（管理者）")
         self.assertNotContains(resp, "匯入範本（含四種版型審查）")
 

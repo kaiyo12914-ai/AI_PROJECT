@@ -46,6 +46,7 @@ DEFAULT_TEMPLATE_NAME = "預設範本.pptx"
 DEFAULT_MAIN_TITLE = "簡報"
 DEFAULT_MAIN_SUBTITLE = "文字內容自動生成簡報"
 VALID_SLIDE_TYPES = {"content", "section", "two_content", "comparison"}
+VALID_IMAGE_INTENTS = {"concept", "data", "process", "hero"}
 MARKER_TO_SLIDE_TYPE = {
     "cover": "cover",
     "section": "section",
@@ -411,6 +412,13 @@ def _normalize_aspect_ratio(value: Any, default: str = "16:9") -> str:
     return default
 
 
+def _normalize_image_intent(value: Any, default: str = "concept") -> str:
+    intent = str(value or "").strip().lower()
+    if intent in VALID_IMAGE_INTENTS:
+        return intent
+    return default
+
+
 def _resolve_marker(raw_marker: str) -> str | None:
     marker = (raw_marker or "").strip()
     if not marker:
@@ -528,7 +536,7 @@ def _shape_has_text(shape) -> bool:
     return bool(text)
 
 
-def _slide_default_image_box(slide) -> tuple[int, int, int, int]:
+def _slide_size_emu(slide) -> tuple[int, int]:
     emu = 914400
     width = 10 * emu
     height = int(7.5 * emu)
@@ -538,6 +546,11 @@ def _slide_default_image_box(slide) -> tuple[int, int, int, int]:
         height = int(getattr(presentation, "slide_height", height))
     except Exception:
         pass
+    return width, height
+
+
+def _slide_default_image_box(slide) -> tuple[int, int, int, int]:
+    width, height = _slide_size_emu(slide)
 
     left = int(width * 0.08)
     top = int(height * 0.22)
@@ -577,11 +590,16 @@ def _find_largest_image_frame(slide, exclude_shape=None):
             p_type = _placeholder_type_id(shape)
             if _is_title_placeholder_type(p_type) or _is_subtitle_placeholder_type(p_type):
                 continue
+            if _is_image_placeholder_type(p_type):
+                candidates.append((area, shape))
+                continue
             if _is_content_placeholder_type(p_type):
                 if _shape_has_text(shape):
                     continue
                 candidates.append((area, shape))
                 continue
+            # Ignore non-content placeholders (e.g., footer/date/number) to avoid accidental overlay.
+            continue
 
         if getattr(shape, "has_text_frame", False):
             if _shape_has_text(shape):
@@ -592,6 +610,160 @@ def _find_largest_image_frame(slide, exclude_shape=None):
         return None
     candidates.sort(key=lambda x: x[0], reverse=True)
     return candidates[0][1]
+
+
+def _shape_rect(shape) -> tuple[int, int, int, int] | None:
+    try:
+        left = int(getattr(shape, "left", 0))
+        top = int(getattr(shape, "top", 0))
+        width = int(getattr(shape, "width", 0))
+        height = int(getattr(shape, "height", 0))
+    except Exception:
+        return None
+    if width <= 0 or height <= 0:
+        return None
+    return left, top, width, height
+
+
+def _rect_area(rect: tuple[int, int, int, int]) -> int:
+    return max(0, int(rect[2])) * max(0, int(rect[3]))
+
+
+def _rect_intersection_area(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> int:
+    ax1, ay1, aw, ah = a
+    bx1, by1, bw, bh = b
+    ax2, ay2 = ax1 + aw, ay1 + ah
+    bx2, by2 = bx1 + bw, by1 + bh
+    w = max(0, min(ax2, bx2) - max(ax1, bx1))
+    h = max(0, min(ay2, by2) - max(ay1, by1))
+    return w * h
+
+
+def _collect_text_rectangles(slide, exclude_shape=None) -> List[tuple[int, int, int, int]]:
+    rects: List[tuple[int, int, int, int]] = []
+    for shape in slide.shapes:
+        if exclude_shape is not None and shape == exclude_shape:
+            continue
+        if not _shape_has_text(shape):
+            continue
+        p_type = _placeholder_type_id(shape) if getattr(shape, "is_placeholder", False) else None
+        if _is_title_placeholder_type(p_type) or _is_subtitle_placeholder_type(p_type):
+            continue
+        rect = _shape_rect(shape)
+        if rect is not None:
+            rects.append(rect)
+    return rects
+
+
+def _iter_candidate_image_boxes(slide, *, slide_type: str, image_intent: str):
+    width, height = _slide_size_emu(slide)
+    margin_x = int(width * 0.06)
+    margin_top = int(height * 0.2)
+    margin_bottom = int(height * 0.08)
+    usable_w = max(1, width - (margin_x * 2))
+    usable_h = max(1, height - margin_top - margin_bottom)
+
+    def _clamp_box(box: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
+        left, top, box_w, box_h = box
+        left = max(0, min(left, width - 1))
+        top = max(0, min(top, height - 1))
+        box_w = max(1, min(box_w, width - left))
+        box_h = max(1, min(box_h, height - top))
+        return left, top, box_w, box_h
+
+    right_box = _clamp_box(
+        (
+            margin_x + int(usable_w * 0.52),
+            margin_top,
+            int(usable_w * 0.42),
+            int(usable_h * 0.76),
+        )
+    )
+    bottom_box = _clamp_box(
+        (
+            margin_x,
+            margin_top + int(usable_h * 0.54),
+            usable_w,
+            int(usable_h * 0.38),
+        )
+    )
+    center_box = _clamp_box(
+        (
+            margin_x + int(usable_w * 0.18),
+            margin_top + int(usable_h * 0.26),
+            int(usable_w * 0.64),
+            int(usable_h * 0.54),
+        )
+    )
+    hero_box = _clamp_box(
+        (
+            margin_x,
+            margin_top + int(usable_h * 0.2),
+            usable_w,
+            int(usable_h * 0.68),
+        )
+    )
+
+    intent = _normalize_image_intent(image_intent)
+    slide_kind = _resolve_slide_type(slide_type)
+    if slide_kind == "section":
+        preferred = [hero_box, bottom_box, center_box]
+    elif slide_kind in {"two_content", "comparison"}:
+        preferred = [bottom_box, right_box, center_box]
+    elif intent == "hero":
+        preferred = [right_box, center_box, bottom_box]
+    elif intent in {"data", "process"}:
+        preferred = [bottom_box, right_box, center_box]
+    else:
+        preferred = [right_box, bottom_box, center_box]
+
+    seen: set[tuple[int, int, int, int]] = set()
+    for box in preferred:
+        if _rect_area(box) <= 0:
+            continue
+        if box in seen:
+            continue
+        seen.add(box)
+        yield box
+
+
+def _pick_non_overlapping_image_box(
+    slide,
+    *,
+    slide_type: str,
+    image_intent: str,
+    exclude_shape=None,
+) -> tuple[int, int, int, int] | None:
+    occupied = _collect_text_rectangles(slide, exclude_shape=exclude_shape)
+    candidates = list(_iter_candidate_image_boxes(slide, slide_type=slide_type, image_intent=image_intent))
+    if not candidates:
+        return None
+    if not occupied:
+        return candidates[0]
+
+    intent = _normalize_image_intent(image_intent)
+    overlap_limit = 0.12 if intent == "hero" else 0.08
+    best_box = None
+    best_ratio = 1.0
+
+    for box in candidates:
+        area = _rect_area(box)
+        if area <= 0:
+            continue
+        overlap = 0
+        for used in occupied:
+            overlap += _rect_intersection_area(box, used)
+        ratio = overlap / area
+        if ratio <= overlap_limit:
+            return box
+        if ratio < best_ratio:
+            best_ratio = ratio
+            best_box = box
+
+    # Fallback for section slides: allow slightly larger overlap to keep visual richness.
+    if _resolve_slide_type(slide_type) == "section" and best_box is not None and best_ratio <= 0.2:
+        return best_box
+    return None
 
 
 def _apply_cover_crop(picture_shape, *, image_path: str, box_width: int, box_height: int):
@@ -625,7 +797,14 @@ def _apply_cover_crop(picture_shape, *, image_path: str, box_width: int, box_hei
         picture_shape.crop_bottom = crop
 
 
-def _insert_generated_image(slide, image_path: str, exclude_shape=None) -> bool:
+def _insert_generated_image(
+    slide,
+    image_path: str,
+    exclude_shape=None,
+    *,
+    slide_type: str = "content",
+    image_intent: str = "concept",
+) -> bool:
     if not image_path or not os.path.isfile(image_path):
         return False
 
@@ -640,16 +819,15 @@ def _insert_generated_image(slide, image_path: str, exclude_shape=None) -> bool:
                 logger.warning("Insert picture via placeholder failed: %s", e)
 
     if target is None:
-        for shape in slide.shapes:
-            if exclude_shape is not None and shape == exclude_shape:
-                continue
-            if not _shape_has_text(shape):
-                continue
-            p_type = _placeholder_type_id(shape) if getattr(shape, "is_placeholder", False) else None
-            if _is_title_placeholder_type(p_type) or _is_subtitle_placeholder_type(p_type):
-                continue
+        fallback_box = _pick_non_overlapping_image_box(
+            slide,
+            slide_type=slide_type,
+            image_intent=image_intent,
+            exclude_shape=exclude_shape,
+        )
+        if fallback_box is None:
             return False
-        left, top, width, height = _slide_default_image_box(slide)
+        left, top, width, height = fallback_box
     else:
         left = int(getattr(target, "left", 0))
         top = int(getattr(target, "top", 0))
@@ -890,7 +1068,7 @@ def _normalize_analysis_result(data: Dict[str, Any], *, source_text: str) -> Dic
         left_title = str(s.get("left_title") or "").strip()
         right_title = str(s.get("right_title") or "").strip()
         image_prompt = str(s.get("image_prompt") or "").strip()
-        image_intent = str(s.get("image_intent") or "").strip().lower()
+        image_intent = _normalize_image_intent(s.get("image_intent"))
         aspect_ratio = _normalize_aspect_ratio(s.get("aspect_ratio"))
         image_required = _coerce_bool(s.get("image_required"), default=bool(image_prompt))
         if not image_prompt:
@@ -1022,6 +1200,56 @@ def _build_template_context() -> Dict[str, Any]:
     }
 
 
+def _resolve_analysis_for_image_prompts(text: str) -> Dict[str, Any]:
+    marked_result = _parse_marked_text_structure(text)
+    normalized_marked = (
+        _normalize_analysis_result(marked_result, source_text=text) if marked_result is not None else None
+    )
+
+    llm_result = _analyze_text_with_llm(text)
+    llm_slides = llm_result.get("slides") if isinstance(llm_result, dict) else []
+    llm_has_prompt = False
+    if isinstance(llm_slides, list):
+        for slide in llm_slides:
+            if not isinstance(slide, dict):
+                continue
+            if str(slide.get("image_prompt") or "").strip():
+                llm_has_prompt = True
+                break
+
+    if llm_has_prompt:
+        return llm_result
+    if normalized_marked is not None:
+        return normalized_marked
+    return llm_result
+
+
+def _image_prompt_preview_lines(analysis_result: Dict[str, Any]) -> List[str]:
+    slides = analysis_result.get("slides") if isinstance(analysis_result, dict) else []
+    if not isinstance(slides, list):
+        return []
+
+    lines: List[str] = []
+    for idx, slide in enumerate(slides, start=1):
+        if not isinstance(slide, dict):
+            continue
+        title = str(slide.get("title") or f"Slide {idx}").strip()
+        slide_type = _resolve_slide_type(slide.get("slide_type"))
+        image_prompt = str(slide.get("image_prompt") or "").strip()
+        image_intent = _normalize_image_intent(slide.get("image_intent"))
+        aspect_ratio = _normalize_aspect_ratio(slide.get("aspect_ratio"))
+        image_required = _coerce_bool(slide.get("image_required"), default=bool(image_prompt))
+        if not image_prompt:
+            image_required = False
+
+        lines.append(f"[{idx}] {title} ({slide_type})")
+        lines.append(f"required: {'yes' if image_required else 'no'}")
+        lines.append(f"intent: {image_intent} | aspect_ratio: {aspect_ratio}")
+        lines.append(f"prompt: {image_prompt or '(empty)'}")
+        lines.append("")
+    return lines
+
+
 @require_node("pptx")
 def index(request):
     return render(request, "text2pptx/index.html", _build_template_context())
@@ -1075,6 +1303,55 @@ def import_template(request):
         f"雙欄必較頁={found.get('two_content')}",
     )
     return redirect("pptx_template_admin")
+
+
+@require_node("pptx", api=True)
+def analyze_image_prompts(request):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    text = (request.POST.get("text") or "").strip()
+    if not text:
+        return JsonResponse({"ok": False, "error": "請先輸入內容。"}, status=400)
+    if len(text) > MAX_INPUT_CHARS:
+        return JsonResponse(
+            {"ok": False, "error": f"輸入內容長度不可超過 {MAX_INPUT_CHARS} 字。"},
+            status=400,
+        )
+
+    try:
+        analysis_result = _resolve_analysis_for_image_prompts(text)
+        slides = analysis_result.get("slides") if isinstance(analysis_result, dict) else []
+        normalized_slides: List[Dict[str, Any]] = []
+        if isinstance(slides, list):
+            for idx, slide in enumerate(slides, start=1):
+                if not isinstance(slide, dict):
+                    continue
+                prompt = str(slide.get("image_prompt") or "").strip()
+                normalized_slides.append(
+                    {
+                        "index": idx,
+                        "title": str(slide.get("title") or f"Slide {idx}").strip(),
+                        "slide_type": _resolve_slide_type(slide.get("slide_type")),
+                        "image_required": _coerce_bool(slide.get("image_required"), default=bool(prompt)),
+                        "image_intent": _normalize_image_intent(slide.get("image_intent")),
+                        "aspect_ratio": _normalize_aspect_ratio(slide.get("aspect_ratio")),
+                        "image_prompt": prompt,
+                    }
+                )
+
+        return JsonResponse(
+            {
+                "ok": True,
+                "main_title": str(analysis_result.get("main_title") or DEFAULT_MAIN_TITLE),
+                "main_subtitle": str(analysis_result.get("main_subtitle") or DEFAULT_MAIN_SUBTITLE),
+                "slides": normalized_slides,
+                "preview_text": "\n".join(_image_prompt_preview_lines(analysis_result)).strip(),
+            }
+        )
+    except Exception as e:
+        logger.warning("Analyze image prompts failed: %s", e)
+        return JsonResponse({"ok": False, "error": str(e)}, status=500)
 
 
 @require_node("pptx", api=True)
@@ -1151,7 +1428,13 @@ def generate_pptx(request):
                 if section_tfs:
                     _fill_bullets(section_tfs[0], bullets)
                 if generated_image_path:
-                    _insert_generated_image(slide, generated_image_path, exclude_shape=title_shape)
+                    _insert_generated_image(
+                        slide,
+                        generated_image_path,
+                        exclude_shape=title_shape,
+                        slide_type=slide_type,
+                        image_intent=str(slide_data.get("image_intent") or ""),
+                    )
                 continue
 
             if slide_type in ("two_content", "comparison"):
@@ -1176,7 +1459,13 @@ def generate_pptx(request):
                     _fill_column(content_tfs[0], left_title, left_items)
                     _fill_column(content_tfs[1], right_title, right_items)
                     if generated_image_path and part_idx == 0:
-                        _insert_generated_image(slide, generated_image_path, exclude_shape=title_shape)
+                        _insert_generated_image(
+                            slide,
+                            generated_image_path,
+                            exclude_shape=title_shape,
+                            slide_type=slide_type,
+                            image_intent=str(slide_data.get("image_intent") or ""),
+                        )
                 continue
 
             bullet_chunks = list(_chunk_list(bullets, MAX_BULLETS_PER_SLIDE)) if bullets else [[]]
@@ -1193,7 +1482,13 @@ def generate_pptx(request):
                 if content_tfs:
                     _fill_bullets(content_tfs[0], part)
                 if generated_image_path and part_idx == 0:
-                    _insert_generated_image(slide, generated_image_path, exclude_shape=title_shape)
+                    _insert_generated_image(
+                        slide,
+                        generated_image_path,
+                        exclude_shape=title_shape,
+                        slide_type=slide_type,
+                        image_intent=str(slide_data.get("image_intent") or ""),
+                    )
 
         buf = io.BytesIO()
         prs.save(buf)
