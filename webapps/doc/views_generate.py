@@ -33,6 +33,26 @@ from webapps.doc.views_helpers import (
     _save_template_with_conflict_policy_v2,
 )
 
+_FULL_SUBORDINATE_UNIT_RE = re.compile(
+    r"(?:國防部)?軍備局(?:生產製造中心|生製中心)\s*(第[○〇０0一二三四五六七八九十\d]{1,4}廠)"
+)
+
+
+def _normalize_subordinate_unit_short_name(text: str) -> str:
+    """
+    下轄單位名稱一律使用簡稱（如：第四0一廠），避免輸出完整機關全銜。
+    """
+    t = text or ""
+    if not t.strip():
+        return t
+    t = _FULL_SUBORDINATE_UNIT_RE.sub(r"\1", t)
+    t = re.sub(
+        r"(第[○〇０0一二三四五六七八九十\d]{1,4}廠)\s*\1",
+        r"\1",
+        t,
+    )
+    return t
+
 # ✅ RAG: context retrieval (Chroma knowledge base)
 try:
     from webapps.llm.services import LLMServiceConfig, try_get_rag_context
@@ -469,7 +489,7 @@ def _extract_candidates_from_attachments(attachments_text: str) -> list[str]:
         line = raw.strip()
         if not line:
             continue
-        line = re.sub(r"^重點\s*\d+\s*[:：]\s*", "", line).strip()
+        line = re.sub(r"^(?:重點|來文重點|來文說明|附件重點)\s*\d+\s*[:：]\s*", "", line).strip()
         if not line:
             continue
         if re.search(r"^【?擬稿說明第一點固定引述】?\s*[:：]", line):
@@ -945,7 +965,7 @@ def _sanitize_stage1_points_for_stage2(attachments_text: str) -> str:
         line = (raw or "").strip()
         if not line:
             continue
-        line = re.sub(r"^重點\s*\d+\s*[:：]\s*", "", line).strip()
+        line = re.sub(r"^(?:重點|來文重點|來文說明|附件重點)\s*\d+\s*[:：]\s*", "", line).strip()
         if not line:
             continue
         if re.search(r"^【?擬稿說明第一點固定引述】?\s*[:：]", line):
@@ -974,6 +994,36 @@ def _extract_doc_ref_keys(text: str) -> set[str]:
     return keys
 
 
+def _is_address_like_fact(text: str) -> bool:
+    t = _safe_str(text).strip()
+    if not t:
+        return False
+    if re.search(r"(地址|住址|通訊處)\s*[:：]", t):
+        return True
+    if re.search(
+        r"(?:縣|市).{0,12}(?:鄉|鎮|市|區).{0,12}(?:路|街|大道).{0,12}(?:段)?(?:.{0,8}(?:巷|弄))?.{0,12}[0-9０-９]+號",
+        t,
+    ):
+        return True
+    if (
+        re.search(r"(?:台|臺|新北|桃園|新竹|苗栗|台中|臺中|彰化|南投|雲林|嘉義|台南|臺南|高雄|屏東|宜蘭|花蓮|台東|臺東|澎湖|金門|連江).{0,12}(?:縣|市)", t)
+        and re.search(r"(?:路|街|大道|段|巷|弄).{0,12}[0-9０-９]+號", t)
+    ):
+        return True
+    return False
+
+
+def _is_speed_level_like_fact(text: str) -> bool:
+    t = _safe_str(text).strip()
+    if not t:
+        return False
+    if re.search(r"(速別|速件|最速件|普通件)\s*[:：]", t):
+        return True
+    if re.match(r"^(最速件|速件|普通件)$", t):
+        return True
+    return False
+
+
 def _sanitize_stage2_facts(facts: Any, incoming_text: str = "") -> str:
     if not isinstance(facts, list):
         return ""
@@ -983,7 +1033,7 @@ def _sanitize_stage2_facts(facts: Any, incoming_text: str = "") -> str:
         line = _safe_str(x).strip()
         if not line:
             continue
-        line = re.sub(r"^重點\s*\d+\s*[:：]\s*", "", line).strip()
+        line = re.sub(r"^(?:重點|來文重點|來文說明|附件重點)\s*\d+\s*[:：]\s*", "", line).strip()
         if not line:
             continue
         if re.search(r"^【?擬稿說明第一點固定引述】?\s*[:：]", line):
@@ -991,6 +1041,10 @@ def _sanitize_stage2_facts(facts: Any, incoming_text: str = "") -> str:
         if re.search(r"^這是.+（層級|這是.+的[令函呈]", line):
             continue
         if re.search(r"^(擬辦|建議|請示|研處意見)\s*[:：]", line):
+            continue
+        if _is_address_like_fact(line):
+            continue
+        if _is_speed_level_like_fact(line):
             continue
         # Cross-case guard: when incoming doc refs are known, drop facts carrying other case refs.
         line_keys = _extract_doc_ref_keys(line)
@@ -1485,6 +1539,7 @@ def api_generate(request: HttpRequest):
         draft_text = _normalize_target_honorifics(draft_text, doc_type)
         draft_text = _convert_incoming_directive_to_internal_narrative(draft_text, signer_self_ref, doc_type)
         draft_text = _formalize_analysis_markers(draft_text)
+        draft_text = _normalize_subordinate_unit_short_name(draft_text)
 
         # 分割段落（重複章節時：主旨取第一組；說明/擬辦取最後一組）
         draft_sections = _draft_to_sections_prefer_last_body(draft_text)
@@ -1505,6 +1560,8 @@ def api_generate(request: HttpRequest):
         )
         draft_sections["subject"] = _formalize_analysis_markers(_safe_str(draft_sections.get("subject")))
         draft_sections["explain"] = _formalize_analysis_markers(_safe_str(draft_sections.get("explain")))
+        draft_sections["subject"] = _normalize_subordinate_unit_short_name(_safe_str(draft_sections.get("subject")))
+        draft_sections["explain"] = _normalize_subordinate_unit_short_name(_safe_str(draft_sections.get("explain")))
         if not _safe_str(draft_sections.get("subject")).strip():
             draft_sections["subject"] = (
                 _extract_subject_from_requirement(requirement)
@@ -1590,6 +1647,7 @@ def api_generate(request: HttpRequest):
             execution_context,
             max_points=2,
         )
+        action_text = _normalize_subordinate_unit_short_name(action_text)
         draft_sections["action"] = action_text
 
         # 最終合成純文字版，確保換行清晰
@@ -1598,6 +1656,7 @@ def api_generate(request: HttpRequest):
         else:
             action_block = f"擬辦：\n{action_text}"
         final_text = f"主旨：{draft_sections.get('subject')}\n\n說明：\n{draft_sections.get('explain')}\n\n{action_block}"
+        final_text = _normalize_subordinate_unit_short_name(final_text)
 
         return JsonResponse({
             "ok": True,

@@ -764,6 +764,10 @@ def _extract_numbered_points(summary_text: str) -> List[str]:
             continue
         if non_focus_pat.match(t):
             continue
+        if _is_address_like_text(t):
+            continue
+        if _is_speed_level_like_text(t):
+            continue
         if t:
             out.append(t)
     return out
@@ -802,6 +806,42 @@ def _filter_points_by_anchor_doc_no(points: List[str], anchor_doc_no: str) -> Li
     return out
 
 
+def _is_address_like_text(text: str) -> bool:
+    t = _compact_spaced_cjk((text or "").strip())
+    if not t:
+        return False
+
+    if re.search(r"(地址|住址|通訊處)\s*[:：]", t):
+        return True
+
+    # Typical TW address pattern: 縣/市 + 區/鄉/鎮 + 路/街/大道 ... + 號
+    if re.search(
+        r"(?:縣|市).{0,12}(?:鄉|鎮|市|區).{0,12}(?:路|街|大道).{0,12}(?:段)?(?:.{0,8}(?:巷|弄))?.{0,12}[0-9０-９]+號",
+        t,
+    ):
+        return True
+
+    # Fallback: region marker + road marker + house number marker.
+    if (
+        re.search(r"(?:台|臺|新北|桃園|新竹|苗栗|台中|臺中|彰化|南投|雲林|嘉義|台南|臺南|高雄|屏東|宜蘭|花蓮|台東|臺東|澎湖|金門|連江).{0,12}(?:縣|市)", t)
+        and re.search(r"(?:路|街|大道|段|巷|弄).{0,12}[0-9０-９]+號", t)
+    ):
+        return True
+
+    return False
+
+
+def _is_speed_level_like_text(text: str) -> bool:
+    t = _compact_spaced_cjk((text or "").strip())
+    if not t:
+        return False
+    if re.search(r"(速別|速件|最速件|普通件)\s*[:：]", t):
+        return True
+    if re.match(r"^(最速件|速件|普通件)$", t):
+        return True
+    return False
+
+
 def _collect_focus_point_candidates(summary_text: str) -> List[str]:
     points: List[str] = []
     skip_regex = [
@@ -813,6 +853,10 @@ def _collect_focus_point_candidates(summary_text: str) -> List[str]:
         if len(content) < 6:
             continue
         if _is_non_key_point_text(content):
+            continue
+        if _is_address_like_text(content):
+            continue
+        if _is_speed_level_like_text(content):
             continue
         if re.search(r"^(這是.+（層級|【擬稿說明第一點固定引述】)", content):
             continue
@@ -908,6 +952,8 @@ def _inject_org_level_point(
         content = _strip_point_prefixes(raw)
         if len(content) < 6: continue
         if _is_non_key_point_text(content): continue
+        if _is_address_like_text(content): continue
+        if _is_speed_level_like_text(content): continue
         if re.search(r"^(這是.+（層級|【擬稿說明第一點固定引述】)", content):
             continue
         if any(re.search(pat, content) for pat in skip_regex): continue
@@ -1090,6 +1136,8 @@ def api_parse_attachments_focus(request: HttpRequest):
         # 來文說明：直接抽「說明」段落，保留每段完整語義。
         incoming_desc = _extract_description_paragraphs(washed_incoming_text, max_items=8)
         incoming_desc = _filter_points_by_anchor_doc_no(incoming_desc, best_meta.get("no", ""))
+        incoming_desc = [x for x in incoming_desc if not _is_address_like_text(x)]
+        incoming_desc = [x for x in incoming_desc if not _is_speed_level_like_text(x)]
 
         # 來文重點：仍保留「擬稿說明第一點固定引述」與「這是...主旨...」兩段。
         incoming_prompt = _build_attach_focus_prompt(washed_incoming_text, extra_hint=extra_hint)
@@ -1106,6 +1154,8 @@ def api_parse_attachments_focus(request: HttpRequest):
 
         incoming_keypoints = _extract_numbered_points(injected_text)
         incoming_keypoints = _filter_points_by_anchor_doc_no(incoming_keypoints, best_meta.get("no", ""))
+        incoming_keypoints = [x for x in incoming_keypoints if not _is_address_like_text(x)]
+        incoming_keypoints = [x for x in incoming_keypoints if not _is_speed_level_like_text(x)]
 
         # 附件重點：只看附件檔，不混來文檔。
         attach_prompt, attachment_points = _extract_attachment_points(
@@ -1114,6 +1164,8 @@ def api_parse_attachments_focus(request: HttpRequest):
             extra_hint=extra_hint,
             max_points=10,
         )
+        attachment_points = [x for x in attachment_points if not _is_address_like_text(x)]
+        attachment_points = [x for x in attachment_points if not _is_speed_level_like_text(x)]
 
         sender_org = _extract_header_org_doc_type(incoming_raw_text)[0] or _safe_inferred_org(best_meta.get("org", ""))
         recipient_org = _extract_recipient_org(incoming_raw_text)
@@ -1264,6 +1316,10 @@ def _postprocess_focus_points(summary_text: str, max_points: int = 20) -> str:
 
         if _is_non_key_point_text(body_plain):
             continue
+        if _is_address_like_text(body_plain):
+            continue
+        if _is_speed_level_like_text(body_plain):
+            continue
 
         # Second-stage drafting cues must not leak into stage-1 key points.
         if re.search(r"(擬辦|建議|請示|研處意見)\s*[:：]", body_plain):
@@ -1280,6 +1336,10 @@ def _postprocess_focus_points(summary_text: str, max_points: int = 20) -> str:
             if len(body_plain) < 8:
                 continue
             if re.search(r"(擬辦|建議|請示|研處意見)\s*[:：]", body_plain):
+                continue
+            if _is_address_like_text(body_plain):
+                continue
+            if _is_speed_level_like_text(body_plain):
                 continue
             key = _normalize_point_text(body_plain)
             if not key or key in seen:
