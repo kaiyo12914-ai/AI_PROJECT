@@ -1,0 +1,78 @@
+{% load static %}
+{% load portal_extras %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>PPTX 文字範例抽取 | TEXT 轉 PPTX</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="stylesheet" href="{% static 'text2pptx/css/index.css' %}">
+  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% static 'text2pptx/js/sample_extractor.js' %}"></script>
+</head>
+<body data-base-url="{{ request.script_name }}">
+  <div class="wrap">
+    {% if messages %}
+      <div class="msg-wrap">
+        {% for message in messages %}
+          <div class="msg {{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="topbar">
+      <h1>PPTX 文字範例抽取</h1>
+      <div class="top-links">
+        <a class="backlink" href="{% url 'portal:home' %}">回首頁</a>
+        <a class="backlink" href="{% url 'pptx_page' %}">回 TEXT 轉 PPTX</a>
+      </div>
+    </div>
+
+    <div class="hint">
+      上傳既有 <b>.pptx</b> 檔案後，系統會擷取投影片文字並轉成 text2pptx 可直接使用的範例格式（以 <b>===</b> 分段）。
+    </div>
+
+    <div class="import-box">
+      <div class="import-title">上傳 PPTX</div>
+      <form method="post" enctype="multipart/form-data" class="import-form">
+        {% csrf_token %}
+        <input type="file" name="pptx_file" accept=".pptx" required>
+        <button type="submit">抽取範例</button>
+      </form>
+      <div class="small">僅支援 .pptx。若內容過長會依系統上限自動截斷。</div>
+    </div>
+
+    {% if extract_meta %}
+      <div class="small">
+        檔案：<b>{{ uploaded_filename }}</b><br>
+        投影片總數：<b>{{ extract_meta.total_slides }}</b>，成功抽取：<b>{{ extract_meta.used_slides }}</b>
+      </div>
+    {% endif %}
+
+    <label for="extracted-sample-text">抽取結果（可直接貼到 text2pptx）</label>
+    <textarea id="extracted-sample-text" class="prompt-preview-textarea" readonly>{{ sample_text }}</textarea>
+
+    <div class="form-actions">
+      <button type="button" id="copy-extracted-sample-btn" class="btn-secondary">複製結果</button>
+      <button
+        type="button"
+        id="save-extracted-sample-btn"
+        class="btn-secondary"
+        data-uploaded-filename="{{ uploaded_filename|default:'' }}"
+      >
+        儲存檔案
+      </button>
+      <button
+        type="button"
+        id="apply-extracted-sample-btn"
+        data-target-url="{% url 'pptx_page' %}"
+        {% if not sample_text %}disabled{% endif %}
+      >
+        帶回主頁使用
+      </button>
+    </div>
+  </div>
+</body>
+</html>

@@ -12,6 +12,11 @@ label { display:block; margin: 12px 0 6px; font-weight: 600; color:#333; }
 .label-row label {
   margin-bottom: 6px;
 }
+.inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .apply-sample-btn {
   margin-top: 0;
   padding: 7px 10px;
@@ -24,6 +29,12 @@ label { display:block; margin: 12px 0 6px; font-weight: 600; color:#333; }
 }
 .apply-sample-btn:hover {
   background: #1f64bf;
+}
+.btn-read-file {
+  background: #2f8a5d;
+}
+.btn-read-file:hover {
+  background: #236646;
 }
 input[type=text], select {
   width: 100%;

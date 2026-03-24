@@ -39,6 +39,9 @@ BODY_FONT_PT = 20
 SUBTITLE_FONT_PT = 18
 MAX_INPUT_CHARS = int(getattr(settings, "TEXT2PPTX_MAX_CHARS", 20000))
 MAX_TEMPLATE_UPLOAD_MB = int(getattr(settings, "TEXT2PPTX_TEMPLATE_MAX_MB", 20))
+MAX_SAMPLE_UPLOAD_MB = int(getattr(settings, "TEXT2PPTX_SAMPLE_MAX_MB", 30))
+MAX_SAMPLE_SLIDES = int(getattr(settings, "TEXT2PPTX_SAMPLE_MAX_SLIDES", 80))
+MAX_SAMPLE_CHARS = int(getattr(settings, "TEXT2PPTX_SAMPLE_MAX_CHARS", 50000))
 TEXT2PPTX_IMAGE_MODE = str(getattr(settings, "TEXT2PPTX_IMAGE_MODE", "mock")).strip().lower() or "mock"
 TEXT2PPTX_IMAGE_TIMEOUT_SEC = int(getattr(settings, "TEXT2PPTX_IMAGE_TIMEOUT_SEC", 30))
 TEXT2PPTX_IMAGE_RETRY = max(0, int(getattr(settings, "TEXT2PPTX_IMAGE_RETRY", 2)))
@@ -417,6 +420,101 @@ def _normalize_image_intent(value: Any, default: str = "concept") -> str:
     if intent in VALID_IMAGE_INTENTS:
         return intent
     return default
+
+
+def _clean_prompt_fragment(value: Any, *, max_len: int = 48) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = re.sub(r"^[\-\*\u2022\d\.\)\(]+", "", text).strip()
+    if re.match(r"^(required|intent|aspect_ratio|prompt)\s*:", text, flags=re.IGNORECASE):
+        return ""
+    if re.match(r"^\[\d+\]\s+", text):
+        return ""
+    text = re.sub(r"\s+", " ", text).strip(" ,;")
+    if len(text) > max_len:
+        text = text[:max_len].rstrip() + "..."
+    return text
+
+
+def _infer_image_intent_from_slide(slide: Dict[str, Any]) -> str:
+    slide_type = _resolve_slide_type(slide.get("slide_type"))
+    if slide_type == "section":
+        return "hero"
+    if slide_type == "comparison":
+        return "data"
+
+    title = str(slide.get("title") or "")
+    bullets = slide.get("bullets") or []
+    if not isinstance(bullets, list):
+        bullets = [bullets]
+    combined = f"{title} " + " ".join(str(x) for x in bullets)
+    low = combined.lower()
+
+    process_keys = ("process", "workflow", "timeline", "roadmap", "phase", "steps")
+    data_keys = ("compare", "comparison", "trend", "kpi", "roi", "metric", "chart", "data", "vs")
+    if any(k in low for k in process_keys):
+        return "process"
+    if any(k in low for k in data_keys):
+        return "data"
+    return "concept"
+
+
+def _synthesize_image_prompt(slide: Dict[str, Any], *, intent: str) -> str:
+    title = str(slide.get("title") or "").strip()
+    title = re.sub(r"\s*\((section|content|two_content|comparison)\)\s*$", "", title, flags=re.IGNORECASE).strip()
+    title = title or "presentation key visual"
+
+    bullets = slide.get("bullets") or []
+    if not isinstance(bullets, list):
+        bullets = [bullets]
+    fragments: List[str] = []
+    for item in bullets:
+        frag = _clean_prompt_fragment(item)
+        if not frag:
+            continue
+        fragments.append(frag)
+        if len(fragments) >= 3:
+            break
+    focus = f"; focus: {'; '.join(fragments)}" if fragments else ""
+
+    style_map = {
+        "hero": "corporate hero visual, wide scene, clear subject, professional lighting",
+        "data": "business infographic style, clean hierarchy, data-focused visual language",
+        "process": "workflow illustration style, clear step nodes, process-focused composition",
+        "concept": "modern business illustration, clean composition, key point emphasis",
+    }
+    style = style_map.get(intent, style_map["concept"])
+    return f"{title}{focus}. {style}, 16:9, no text, no watermark."
+
+
+def _autofill_image_prompts_if_all_empty(analysis_result: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(analysis_result, dict):
+        return analysis_result
+    slides = analysis_result.get("slides")
+    if not isinstance(slides, list) or not slides:
+        return analysis_result
+
+    has_any_prompt = False
+    for slide in slides:
+        if not isinstance(slide, dict):
+            continue
+        if str(slide.get("image_prompt") or "").strip():
+            has_any_prompt = True
+            break
+    if has_any_prompt:
+        return analysis_result
+
+    for slide in slides:
+        if not isinstance(slide, dict):
+            continue
+        inferred_intent = _infer_image_intent_from_slide(slide)
+        intent = _normalize_image_intent(slide.get("image_intent"), default=inferred_intent)
+        slide["image_intent"] = intent
+        slide["aspect_ratio"] = _normalize_aspect_ratio(slide.get("aspect_ratio"))
+        slide["image_prompt"] = _synthesize_image_prompt(slide, intent=intent)
+        slide["image_required"] = True
+    return analysis_result
 
 
 def _resolve_marker(raw_marker: str) -> str | None:
@@ -1186,6 +1284,194 @@ def _analyze_text_with_llm(text: str) -> Dict[str, Any]:
         return _fallback_from_raw_text(text)
 
 
+def _clean_extracted_line(value: Any) -> str:
+    text = str(value or "")
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _shape_position_key(shape: Any) -> tuple[int, int]:
+    try:
+        return (int(getattr(shape, "top", 0)), int(getattr(shape, "left", 0)))
+    except Exception:
+        return (0, 0)
+
+
+def _extract_text_lines_from_shape(shape: Any) -> List[str]:
+    lines: List[str] = []
+    if getattr(shape, "has_text_frame", False):
+        text = getattr(shape.text_frame, "text", "")
+        for row in str(text or "").splitlines():
+            cleaned = _clean_extracted_line(row)
+            if cleaned:
+                lines.append(cleaned)
+
+    # Some slide objects may raise "shape does not contain a table"
+    # when reading shape.table even after has_table checks.
+    try:
+        has_table = bool(getattr(shape, "has_table", False))
+    except Exception:
+        has_table = False
+    if has_table:
+        try:
+            table = shape.table
+            for row in table.rows:
+                for cell in row.cells:
+                    for raw in str(getattr(cell, "text", "") or "").splitlines():
+                        cleaned = _clean_extracted_line(raw)
+                        if cleaned:
+                            lines.append(cleaned)
+        except Exception:
+            # Keep extracting from other shapes.
+            pass
+    return lines
+
+
+def _extract_text_lines_from_slide(slide: Any) -> List[str]:
+    ordered_shapes = sorted(list(getattr(slide, "shapes", [])), key=_shape_position_key)
+    lines: List[str] = []
+    for shape in ordered_shapes:
+        for line in _extract_text_lines_from_shape(shape):
+            if lines and lines[-1] == line:
+                continue
+            lines.append(line)
+    return lines
+
+
+def _marker_to_layout_label(marker: str) -> str:
+    labels = {
+        "cover": "\u6a19\u984c\u6295\u5f71\u7247",
+        "section": "\u7ae0\u7bc0\u6a19\u984c",
+        "content": "\u5167\u5bb9\u9801",
+        "two_content": "\u96d9\u6b04\u5fc5\u8f03\u9801",
+        "comparison": "\u96d9\u6b04\u5fc5\u8f03\u9801",
+    }
+    return labels.get(marker, labels["content"])
+
+
+def _detect_layout_marker_from_slide(slide: Any, *, extracted_index: int) -> str | None:
+    if extracted_index == 1:
+        return "cover"
+
+    ph_types: List[int | None] = []
+    for shape in getattr(slide, "shapes", []):
+        if not getattr(shape, "is_placeholder", False):
+            continue
+        ph_types.append(_placeholder_type_id(shape))
+
+    has_title = any(_is_title_placeholder_type(t) for t in ph_types)
+    has_subtitle = any(_is_subtitle_placeholder_type(t) for t in ph_types)
+    content_count = sum(1 for t in ph_types if _is_content_placeholder_type(t))
+
+    if has_title and content_count >= 2:
+        return "two_content"
+    if has_title and has_subtitle and content_count == 0:
+        return "section"
+    if has_title and content_count >= 1:
+        return "content"
+    return None
+
+
+def _pick_marker_for_extracted_slide(
+    *,
+    extracted_index: int,
+    title: str,
+    body_lines: List[str],
+) -> str:
+    if extracted_index == 1:
+        return "cover"
+
+    low_title = title.lower()
+    combined = f"{title} {' '.join(body_lines)}"
+    low_combined = combined.lower()
+
+    comparison_keys = (
+        "compare",
+        "comparison",
+        "vs",
+        "\u6bd4\u8f03",
+        "\u5c0d\u6bd4",
+        "\u5dee\u7570",
+        "\u65b9\u6848a",
+        "\u65b9\u6848b",
+    )
+    section_keys = (
+        "overview",
+        "summary",
+        "objective",
+        "conclusion",
+        "decision",
+        "\u80cc\u666f",
+        "\u6458\u8981",
+        "\u7e3d\u7d50",
+        "\u7d50\u8ad6",
+        "\u76ee\u6a19",
+        "\u6c7a\u7b56",
+        "\u8acb\u6c42",
+    )
+
+    if any(k in low_title or k in low_combined for k in comparison_keys) or any(k in combined for k in comparison_keys):
+        return "comparison"
+    if len(body_lines) >= (MAX_BULLETS_PER_SLIDE + 3):
+        return "two_content"
+    if any(k in low_title or k in low_combined for k in section_keys) or any(k in combined for k in section_keys):
+        return "section"
+    return "content"
+
+def _extract_sample_text_from_pptx_bytes(raw: bytes) -> Dict[str, Any]:
+    from pptx import Presentation
+
+    presentation = Presentation(io.BytesIO(raw))
+    total_slides = len(presentation.slides)
+    if total_slides == 0:
+        raise ValueError("\u6b64 PPTX \u6a94\u6848\u6c92\u6709\u53ef\u7528\u7684\u6295\u5f71\u7247\u3002")
+
+    blocks: List[str] = []
+    extracted_count = 0
+    for slide in presentation.slides:
+        if extracted_count >= MAX_SAMPLE_SLIDES:
+            break
+
+        lines = _extract_text_lines_from_slide(slide)
+        if not lines:
+            continue
+
+        title = lines[0]
+        body_lines = lines[1 : 1 + (MAX_BULLETS_PER_SLIDE * 2)]
+        extracted_count += 1
+
+        heuristic_marker = _pick_marker_for_extracted_slide(
+            extracted_index=extracted_count,
+            title=title,
+            body_lines=body_lines,
+        )
+        layout_marker = _detect_layout_marker_from_slide(slide, extracted_index=extracted_count)
+
+        marker = layout_marker or heuristic_marker
+        if layout_marker == "content" and heuristic_marker in {"comparison", "section"}:
+            marker = heuristic_marker
+        if layout_marker == "two_content" and heuristic_marker == "comparison":
+            marker = "comparison"
+
+        layout_label = _marker_to_layout_label(marker)
+        block_lines = [f"[{layout_label}] {title}"]
+        block_lines.extend(body_lines)
+        blocks.append("\n".join(block_lines))
+
+    if not blocks:
+        raise ValueError("\u627e\u4e0d\u5230\u53ef\u62bd\u53d6\u7684\u6587\u5b57\u5167\u5bb9\u3002")
+
+    sample_text = "\n===\n".join(blocks).strip()
+    if len(sample_text) > MAX_SAMPLE_CHARS:
+        sample_text = sample_text[:MAX_SAMPLE_CHARS].rstrip() + "\n...(\u5167\u5bb9\u5df2\u622a\u65b7)"
+
+    return {
+        "sample_text": sample_text,
+        "total_slides": total_slides,
+        "used_slides": extracted_count,
+    }
+
 def _build_template_context() -> Dict[str, Any]:
     templates = _list_pptx_templates()
     ignored_templates = _list_ignored_template_files()
@@ -1218,10 +1504,10 @@ def _resolve_analysis_for_image_prompts(text: str) -> Dict[str, Any]:
                 break
 
     if llm_has_prompt:
-        return llm_result
+        return _autofill_image_prompts_if_all_empty(llm_result)
     if normalized_marked is not None:
-        return normalized_marked
-    return llm_result
+        return _autofill_image_prompts_if_all_empty(normalized_marked)
+    return _autofill_image_prompts_if_all_empty(llm_result)
 
 
 def _image_prompt_preview_lines(analysis_result: Dict[str, Any]) -> List[str]:
@@ -1254,6 +1540,54 @@ def _image_prompt_preview_lines(analysis_result: Dict[str, Any]) -> List[str]:
 def index(request):
     return render(request, "text2pptx/index.html", _build_template_context())
 
+
+@require_node("pptx")
+def sample_extractor(request):
+    context = _build_template_context()
+    context.update(
+        {
+            "sample_text": "",
+            "extract_meta": None,
+            "uploaded_filename": "",
+        }
+    )
+
+    if request.method == "POST":
+        upload = request.FILES.get("pptx_file")
+        if not upload:
+            messages.error(request, "\u8acb\u5148\u9078\u64c7 .pptx \u6a94\u6848\u3002")
+            return render(request, "text2pptx/sample_extractor.html", context)
+
+        filename = _normalize_template_name(upload.name or "")
+        context["uploaded_filename"] = filename
+        if not filename.lower().endswith(".pptx"):
+            messages.error(request, "\u50c5\u652f\u63f4 .pptx \u6a94\u6848\u3002")
+            return render(request, "text2pptx/sample_extractor.html", context)
+
+        if upload.size and upload.size > (MAX_SAMPLE_UPLOAD_MB * 1024 * 1024):
+            messages.error(request, f"\u6a94\u6848\u5927\u5c0f\u4e0d\u53ef\u8d85\u904e {MAX_SAMPLE_UPLOAD_MB} MB\u3002")
+            return render(request, "text2pptx/sample_extractor.html", context)
+
+        try:
+            raw = upload.read()
+            extracted = _extract_sample_text_from_pptx_bytes(raw)
+            context["sample_text"] = str(extracted.get("sample_text") or "")
+            context["extract_meta"] = {
+                "total_slides": int(extracted.get("total_slides") or 0),
+                "used_slides": int(extracted.get("used_slides") or 0),
+            }
+            messages.success(request, "\u62bd\u53d6\u5b8c\u6210\uff0c\u53ef\u76f4\u63a5\u8907\u88fd\u6216\u5e36\u56de\u4e3b\u9801\u4f7f\u7528\u3002")
+        except ValueError as e:
+            raw_error = str(e or "").strip()
+            if "shape does not contain a table" in raw_error.lower():
+                messages.error(request, "\u62bd\u53d6\u5931\u6557\uff1a\u5075\u6e2c\u5230\u975e\u8868\u683c\u7269\u4ef6\uff0c\u5df2\u7565\u904e\u8a72\u7269\u4ef6\u3002\u8acb\u91cd\u8a66\u6216\u6539\u7528\u91cd\u65b0\u532f\u51fa\u7684 PPTX\u3002")
+            else:
+                messages.error(request, f"\u62bd\u53d6\u5931\u6557\uff1a{e}")
+        except Exception as e:
+            logger.warning("Sample extractor failed: %s", e)
+            messages.error(request, "\u62bd\u53d6\u5931\u6557\uff1a\u8acb\u78ba\u8a8d\u6a94\u6848\u5167\u5bb9\u53ef\u8b80\u53d6\uff0c\u6216\u91cd\u65b0\u532f\u51fa\u5f8c\u518d\u8a66\u3002")
+
+    return render(request, "text2pptx/sample_extractor.html", context)
 
 @require_node("pptx")
 def template_admin(request):

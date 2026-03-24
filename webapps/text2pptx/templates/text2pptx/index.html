@@ -31,6 +31,7 @@
       {# ✅ 返回入口頁：有 named url 用 named，沒有就 fallback "/"；並自動吃 proxy prefix #}
       <div class="top-links">
         <a class="backlink" href="{% url 'portal:home' %}">回首頁</a>
+        <a class="backlink" href="{% url 'pptx_sample_extractor' %}">從 PPTX 抽取範例</a>
         <a class="backlink" href="{% url 'pptx_template_admin' %}">前往範本管理（管理者）</a>
       </div>
     </div>
@@ -355,7 +356,20 @@ M6：正式上線與成效追蹤
 同意成立跨部門專案小組"></textarea>
         </div>
         <div>
-          <label>範例</label>
+          <div class="label-row">
+            <label>範例</label>
+            <div class="inline-actions">
+              <input
+                type="file"
+                id="load-sample-file-input"
+                accept=".txt,.md,.text"
+                style="display:none"
+              >
+              <button type="button" id="load-sample-file-btn" class="apply-sample-btn btn-read-file">
+                讀取範本檔
+              </button>
+            </div>
+          </div>
           <div id="pptx_sample_text" class="ex ex-panel">[標題投影片] 專案提案：智慧文件流程優化
 提案單位：資訊處
 提案日期：2026-03-21
