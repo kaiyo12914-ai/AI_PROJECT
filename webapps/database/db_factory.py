@@ -58,7 +58,7 @@ def _external_db_disabled() -> bool:
     - Others: default to external DB.
     """
     env_mode = (os.getenv("ENV") or "").strip().upper()
-    if env_mode == "EXT":
+    if env_mode in ("EXT", "DEV"):
         return True
     if env_mode == "INT":
         return False

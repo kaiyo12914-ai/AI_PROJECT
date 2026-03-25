@@ -142,7 +142,7 @@ else:
 # ============================================================
 # Security / Debug
 # ============================================================
-ENV_NAME = env_str("ENV", "EXT").strip().upper()
+ENV_NAME = env_str("ENV", "DEV").strip().upper()
 
 SECRET_KEY = env_str(
     "DJANGO_SECRET_KEY",
@@ -161,8 +161,8 @@ X_FRAME_OPTIONS = "DENY"
 SECURE_HSTS_SECONDS = 31536000  # 1 year
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
-SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", True)
-CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", True)
+SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", default=(ENV_NAME == "PROD"))
+CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", default=(ENV_NAME == "PROD"))
 SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = True
 
@@ -171,7 +171,7 @@ CSRF_COOKIE_HTTPONLY = True
 # ============================================================
 
 # 根據環境決定基礎磁碟 (H:\AI\AI_TOOLS 或 D:\AI\AI_TOOLS)
-_TARGET_DRIVE = "H:" if ENV_NAME == "EXT" else "D:"
+_TARGET_DRIVE = "H:" if ENV_NAME in ("EXT", "DEV") else "D:"
 _PROJECT_ROOT_STR = f"{_TARGET_DRIVE}\\AI\\AI_TOOLS"
 # 強制修正 BASE_DIR 以驅動器代號開始，避免 UNC 路徑導致 staticfiles.W004 警告
 BASE_DIR = Path(_PROJECT_ROOT_STR)
@@ -552,13 +552,13 @@ DEFAULT_COOKIE_PATH = PROXY_PREFIX if PROXY_PREFIX else "/"
 SESSION_COOKIE_PATH = env_str("SESSION_COOKIE_PATH", DEFAULT_COOKIE_PATH)
 CSRF_COOKIE_PATH = env_str("CSRF_COOKIE_PATH", DEFAULT_COOKIE_PATH)
 
-SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", default=False)
-CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", default=False)
+SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", default=(ENV_NAME == "PROD"))
+CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", default=(ENV_NAME == "PROD"))
 
-CSRF_TRUSTED_ORIGINS = env_list(
-    "CSRF_TRUSTED_ORIGINS",
-    "https://mpcai.mpc.mil.tw,http://mpcai.mpc.mil.tw",
+_DEFAULT_CSRF_TRUSTED_ORIGINS = (
+    "https://mpcai.mpc.mil.tw" if ENV_NAME == "PROD" else "https://mpcai.mpc.mil.tw,http://mpcai.mpc.mil.tw"
 )
+CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS", _DEFAULT_CSRF_TRUSTED_ORIGINS)
 
 # ============================================================
 # Logging

@@ -49,7 +49,7 @@ def _resolved_model_priority() -> list[str]:
     """
     Resolve AUTO backend priority by ENV first, then MODEL_PRIORITY, then legacy fallback.
     - ENV=INT: force OLLAMA only (intranet policy)
-    - ENV=EXT: default GOOGLE -> OPENAI -> OLLAMA
+    - ENV=EXT/DEV: default GOOGLE -> OPENAI -> OLLAMA
     """
     env_name = (os.getenv("ENV") or "").strip().upper()
     raw_prio = (os.getenv("MODEL_PRIORITY") or "").strip()
@@ -57,7 +57,7 @@ def _resolved_model_priority() -> list[str]:
     if env_name == "INT":
         return ["OLLAMA"]
 
-    if env_name == "EXT":
+    if env_name in ("EXT", "DEV"):
         if raw_prio:
             return [x.strip().upper() for x in raw_prio.split(",") if x.strip()]
         return ["GOOGLE", "OPENAI", "OLLAMA"]
