@@ -129,15 +129,6 @@ def _norm_prefix(p: str) -> str:
 # ============================================================
 # ✅ NO_PROXY（強制保護：避免 requests/httpx 走公司代理打內網爆炸）
 # ============================================================
-_DEFAULT_NO_PROXY = "127.0.0.1,localhost,::1,.mpc.mil.tw,mpcai.mpc.mil.tw"
-_no_proxy_env = os.getenv("NO_PROXY")
-if _no_proxy_env is None or not _no_proxy_env.strip():
-    os.environ["NO_PROXY"] = _DEFAULT_NO_PROXY
-    os.environ["no_proxy"] = _DEFAULT_NO_PROXY
-else:
-    os.environ["NO_PROXY"] = _no_proxy_env
-    os.environ["no_proxy"] = _no_proxy_env
-
 
 # ============================================================
 # Security / Debug
@@ -145,6 +136,7 @@ else:
 _raw_env_name = env_str("ENV", "DEV_EXT").strip().upper()
 _ENV_ALIASES = {
     "DEV": "DEV_EXT",
+    "DEV_INT": "DEV_IN",
     "EXT": "DEV_EXT",
     "INT": "DEV_IN",
     "PROD": "PROD_EXT",
@@ -154,6 +146,22 @@ ENV_IS_DEV = ENV_NAME in ("DEV_IN", "DEV_EXT")
 ENV_IS_INT = ENV_NAME in ("DEV_IN", "PROD_INT")
 ENV_IS_EXT = ENV_NAME in ("DEV_EXT", "PROD_EXT")
 ENV_IS_PROD = ENV_NAME in ("PROD_INT", "PROD_EXT", "STAGE", "UAT")
+
+# NO_PROXY policy:
+# - PROD_INT / DEV_INT (DEV_IN alias): apply NO_PROXY
+# - PROD_EXT / DEV_EXT: do not apply NO_PROXY
+_DEFAULT_NO_PROXY = "127.0.0.1,localhost,::1,.mpc.mil.tw,mpcai.mpc.mil.tw"
+if ENV_IS_INT:
+    _no_proxy_env = os.getenv("NO_PROXY")
+    if _no_proxy_env is None or not _no_proxy_env.strip():
+        os.environ["NO_PROXY"] = _DEFAULT_NO_PROXY
+        os.environ["no_proxy"] = _DEFAULT_NO_PROXY
+    else:
+        os.environ["NO_PROXY"] = _no_proxy_env
+        os.environ["no_proxy"] = _no_proxy_env
+else:
+    os.environ.pop("NO_PROXY", None)
+    os.environ.pop("no_proxy", None)
 
 SECRET_KEY = env_str(
     "DJANGO_SECRET_KEY",
