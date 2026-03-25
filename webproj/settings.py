@@ -143,6 +143,10 @@ else:
 # Security / Debug
 # ============================================================
 ENV_NAME = env_str("ENV", "DEV").strip().upper()
+ENV_IS_DEV = ENV_NAME == "DEV"
+ENV_IS_INT = ENV_NAME in ("INT", "PROD_INT")
+ENV_IS_EXT = ENV_NAME in ("EXT", "PROD_EXT", "PROD")
+ENV_IS_PROD = ENV_NAME in ("PROD", "PROD_INT", "PROD_EXT", "STAGE", "UAT")
 
 SECRET_KEY = env_str(
     "DJANGO_SECRET_KEY",
@@ -150,7 +154,7 @@ SECRET_KEY = env_str(
 )
 
 # ✅ 資安加固：正式環境強制關閉 DEBUG
-DEBUG = env_bool("DJANGO_DEBUG", default=False) if ENV_NAME in ("INT", "EXT", "PROD") else env_bool("DJANGO_DEBUG", default=True)
+DEBUG = env_bool("DJANGO_DEBUG", default=ENV_IS_DEV)
 
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "mpcai.mpc.mil.tw,10.29.136.17,127.0.0.1,localhost")
 
@@ -161,8 +165,8 @@ X_FRAME_OPTIONS = "DENY"
 SECURE_HSTS_SECONDS = 31536000  # 1 year
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
-SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", default=(ENV_NAME == "PROD"))
-CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", default=(ENV_NAME == "PROD"))
+SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", default=ENV_IS_PROD)
+CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", default=ENV_IS_PROD)
 SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = True
 
@@ -171,7 +175,7 @@ CSRF_COOKIE_HTTPONLY = True
 # ============================================================
 
 # 根據環境決定基礎磁碟 (H:\AI\AI_TOOLS 或 D:\AI\AI_TOOLS)
-_TARGET_DRIVE = "H:" if ENV_NAME in ("EXT", "DEV") else "D:"
+_TARGET_DRIVE = "H:" if (ENV_IS_EXT or ENV_IS_DEV) else "D:"
 _PROJECT_ROOT_STR = f"{_TARGET_DRIVE}\\AI\\AI_TOOLS"
 # 強制修正 BASE_DIR 以驅動器代號開始，避免 UNC 路徑導致 staticfiles.W004 警告
 BASE_DIR = Path(_PROJECT_ROOT_STR)
@@ -181,7 +185,7 @@ BASE_DIR = Path(_PROJECT_ROOT_STR)
 # ============================================================
 # - PROXY_PREFIX：對外入口前綴（例如 /djangoai）
 # - FORCE_SCRIPT_NAME：只影響 reverse() / {% url %}（專案規範：反代模式通常設空字串）
-ENV_IS_PUBLIC = ENV_NAME in ("INT", "EXT", "PROD", "STAGE", "UAT")
+ENV_IS_PUBLIC = ENV_IS_INT or ENV_IS_EXT or ENV_NAME in ("STAGE", "UAT")
 _DEFAULT_PROXY_PREFIX = "/djangoai" if ENV_IS_PUBLIC else ""
 
 _raw_proxy_prefix = os.getenv("PROXY_PREFIX")
@@ -552,11 +556,11 @@ DEFAULT_COOKIE_PATH = PROXY_PREFIX if PROXY_PREFIX else "/"
 SESSION_COOKIE_PATH = env_str("SESSION_COOKIE_PATH", DEFAULT_COOKIE_PATH)
 CSRF_COOKIE_PATH = env_str("CSRF_COOKIE_PATH", DEFAULT_COOKIE_PATH)
 
-SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", default=(ENV_NAME == "PROD"))
-CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", default=(ENV_NAME == "PROD"))
+SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", default=ENV_IS_PROD)
+CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", default=ENV_IS_PROD)
 
 _DEFAULT_CSRF_TRUSTED_ORIGINS = (
-    "https://mpcai.mpc.mil.tw" if ENV_NAME == "PROD" else "https://mpcai.mpc.mil.tw,http://mpcai.mpc.mil.tw"
+    "https://mpcai.mpc.mil.tw" if ENV_IS_PROD else "https://mpcai.mpc.mil.tw,http://mpcai.mpc.mil.tw"
 )
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS", _DEFAULT_CSRF_TRUSTED_ORIGINS)
 
