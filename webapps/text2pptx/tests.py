@@ -3,8 +3,11 @@ from __future__ import annotations
 import io
 import base64
 import os
+import json
 import tempfile
+import zipfile
 import unicodedata
+from xml.etree import ElementTree as ET
 from urllib.parse import unquote
 from unittest.mock import patch
 
@@ -15,7 +18,66 @@ from webapps.text2pptx import views
 from webapps.text2pptx import image_service
 
 
+def _build_minimal_pptx_bytes_for_upload() -> bytes:
+    from pptx import Presentation
+
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[0])
+    if slide.shapes.title:
+        slide.shapes.title.text = "Template Source"
+    buf = io.BytesIO()
+    prs.save(buf)
+    return buf.getvalue()
+
+
+def _build_multi_slide_pptx_bytes_for_upload(slide_count: int = 3) -> bytes:
+    from pptx import Presentation
+
+    prs = Presentation()
+    layout = prs.slide_layouts[0]
+    for idx in range(max(1, int(slide_count))):
+        slide = prs.slides.add_slide(layout)
+        if slide.shapes.title:
+            slide.shapes.title.text = f"Template Source {idx + 1}"
+    buf = io.BytesIO()
+    prs.save(buf)
+    return buf.getvalue()
+
+
+def _tiny_png_bytes_variant_a() -> bytes:
+    return base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yXioAAAAASUVORK5CYII="
+    )
+
+
+def _tiny_png_bytes_variant_b() -> bytes:
+    return base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR42mNkAAIAAAoAAdYk4XkAAAAASUVORK5CYII="
+    )
+
+
 class Text2PptxHelperTests(SimpleTestCase):
+    def test_clean_extracted_line_removes_page_number_only(self):
+        self.assertEqual(views._clean_extracted_line("Page 01"), "")
+        self.assertEqual(views._clean_extracted_line("第1頁"), "")
+
+    def test_clean_extracted_line_removes_page_prefix_but_keeps_content(self):
+        self.assertEqual(views._clean_extracted_line("Page 02 Design Philosophy"), "Design Philosophy")
+        self.assertEqual(views._clean_extracted_line("第3頁 專案目標"), "專案目標")
+
+    def test_clean_extracted_line_keeps_normal_numeric_content(self):
+        self.assertEqual(views._clean_extracted_line("M3-M4：功能開發與整合"), "M3-M4：功能開發與整合")
+
+    def test_remove_footer_numeric_page_lines_filters_trailing_page_number(self):
+        lines = ["市場缺口", "20XX 年", "募資簡報標題", "3"]
+        out = views._remove_footer_numeric_page_lines(lines)
+        self.assertEqual(out, ["市場缺口", "20XX 年", "募資簡報標題"])
+
+    def test_remove_footer_numeric_page_lines_keeps_numeric_data(self):
+        lines = ["收入", "10", "20", "30"]
+        out = views._remove_footer_numeric_page_lines(lines)
+        self.assertEqual(out, lines)
+
     def test_extract_json_object_from_fenced_text(self):
         raw = """```json
         {"main_title":"A","main_subtitle":"B","slides":[]}
@@ -105,7 +167,7 @@ class Text2PptxHelperTests(SimpleTestCase):
             "image_prompt": "simple blue abstract background",
             "aspect_ratio": "16:9",
         }
-        with tempfile.TemporaryDirectory(dir=os.getcwd()) as td:
+        with tempfile.TemporaryDirectory(dir=os.getcwd(), ignore_cleanup_errors=True) as td:
             with patch.object(views, "GENERATED_IMAGE_DIR", td), patch.object(views, "TEXT2PPTX_IMAGE_MODE", "mock"):
                 path = views._generate_image_for_slide(slide_data)
                 self.assertIsNotNone(path)
@@ -136,7 +198,7 @@ class Text2PptxHelperTests(SimpleTestCase):
             self.assertTrue(os.path.isfile(result["local_path"]))
 
     def test_generate_image_google_raises_when_ok_false(self):
-        with tempfile.TemporaryDirectory(dir=os.getcwd()) as td:
+        with tempfile.TemporaryDirectory(dir=os.getcwd(), ignore_cleanup_errors=True) as td:
             with patch(
                 "webapps.text2pptx.image_service._call_google_provider",
                 return_value={"ok": False, "error": "invalid API key"},
@@ -155,7 +217,7 @@ class Text2PptxHelperTests(SimpleTestCase):
         title_shape = slide.shapes.add_textbox(Inches(0.5), Inches(0.2), Inches(9), Inches(0.8))
         title_shape.text_frame.text = "Title"
 
-        with tempfile.TemporaryDirectory(dir=os.getcwd()) as td:
+        with tempfile.TemporaryDirectory(dir=os.getcwd(), ignore_cleanup_errors=True) as td:
             image_path = os.path.join(td, "probe.png")
             png = base64.b64decode(
                 "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8"
@@ -187,7 +249,7 @@ class Text2PptxHelperTests(SimpleTestCase):
         body = slide.shapes.add_textbox(Inches(0.0), Inches(0.0), Inches(10.0), Inches(7.5))
         body.text_frame.text = "This area is intentionally occupied by text."
 
-        with tempfile.TemporaryDirectory(dir=os.getcwd()) as td:
+        with tempfile.TemporaryDirectory(dir=os.getcwd(), ignore_cleanup_errors=True) as td:
             image_path = os.path.join(td, "probe.png")
             png = base64.b64decode(
                 "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8"
@@ -279,6 +341,43 @@ class Text2PptxHelperTests(SimpleTestCase):
         self.assertEqual(out["slides"][2]["slide_type"], "two_content")
         self.assertEqual(out["slides"][3]["slide_type"], "comparison")
 
+    def test_parse_marked_text_structure_ignores_layout_meta_line(self):
+        text = """[內容頁] 提案背景
+版面名稱：標題及內容
+痛點一
+痛點二"""
+        out = views._parse_marked_text_structure(text)
+        self.assertIsNotNone(out)
+        assert out is not None
+        self.assertEqual(len(out["slides"]), 1)
+        self.assertEqual(out["slides"][0]["title"], "提案背景")
+        self.assertEqual(out["slides"][0]["bullets"], ["痛點一", "痛點二"])
+
+    def test_extract_sample_text_includes_layout_name(self):
+        from pptx import Presentation
+
+        prs = Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[0])
+        if slide.shapes.title:
+            slide.shapes.title.text = "封面標題"
+        buf = io.BytesIO()
+        prs.save(buf)
+        out = views._extract_sample_text_from_pptx_bytes(buf.getvalue())
+        sample_text = str(out.get("sample_text") or "")
+        self.assertRegex(sample_text, r"^\[[^\]]+\]\s*封面標題")
+        self.assertNotIn("版面名稱：", sample_text)
+
+    def test_parse_marked_text_structure_accepts_custom_layout_marker(self):
+        text = """[感謝您]Mirjam Nilsson
+206-555-0146
+mirjam@contoso.com"""
+        out = views._parse_marked_text_structure(text)
+        self.assertIsNotNone(out)
+        assert out is not None
+        self.assertEqual(len(out["slides"]), 1)
+        self.assertEqual(out["slides"][0]["title"], "Mirjam Nilsson")
+        self.assertEqual(out["slides"][0]["bullets"], ["206-555-0146", "mirjam@contoso.com"])
+
     def test_clear_all_slides_removes_existing_template_slides(self):
         from pptx import Presentation
 
@@ -289,8 +388,119 @@ class Text2PptxHelperTests(SimpleTestCase):
         views._clear_all_slides(prs)
         self.assertEqual(len(prs.slides), 0)
 
+    def test_convert_pptx_to_potx_keeps_only_one_main_slide(self):
+        raw = _build_multi_slide_pptx_bytes_for_upload(slide_count=3)
+        potx_raw = views._convert_pptx_bytes_to_potx_bytes(raw)
+
+        ns = {"ct": "http://schemas.openxmlformats.org/package/2006/content-types"}
+        with zipfile.ZipFile(io.BytesIO(potx_raw), "r") as zf:
+            slide_parts = [name for name in zf.namelist() if name.startswith("ppt/slides/slide") and name.endswith(".xml")]
+            self.assertEqual(len(slide_parts), 1)
+
+            slide_root = ET.fromstring(zf.read(slide_parts[0]))
+            a_ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
+            text_nodes = [str(n.text or "").strip() for n in slide_root.findall(".//a:t", a_ns)]
+            self.assertFalse(any(text_nodes))
+
+            root = ET.fromstring(zf.read("[Content_Types].xml"))
+            override = None
+            for node in root.findall("ct:Override", ns):
+                if node.get("PartName") == "/ppt/presentation.xml":
+                    override = node
+                    break
+
+            self.assertIsNotNone(override)
+            assert override is not None
+            self.assertEqual(
+                override.get("ContentType"),
+                "application/vnd.openxmlformats-officedocument.presentationml.template.main+xml",
+            )
+
+    def test_convert_pptx_to_potx_same_layout_keeps_last_picture(self):
+        from pptx import Presentation
+        from pptx.util import Inches
+
+        prs = Presentation()
+        layout = prs.slide_layouts[0]
+
+        slide1 = prs.slides.add_slide(layout)
+        if slide1.shapes.title:
+            slide1.shapes.title.text = "S1"
+        img_a = _tiny_png_bytes_variant_a()
+        slide1.shapes.add_picture(io.BytesIO(img_a), Inches(0.8), Inches(1.2), Inches(0.8), Inches(0.8))
+
+        slide2 = prs.slides.add_slide(layout)
+        if slide2.shapes.title:
+            slide2.shapes.title.text = "S2"
+        img_b = _tiny_png_bytes_variant_b()
+        slide2.shapes.add_picture(io.BytesIO(img_b), Inches(0.8), Inches(1.2), Inches(0.8), Inches(0.8))
+
+        src = io.BytesIO()
+        prs.save(src)
+        potx_raw = views._convert_pptx_bytes_to_potx_bytes(src.getvalue())
+
+        rel_ns = {"r": "http://schemas.openxmlformats.org/package/2006/relationships"}
+        p_ns = {
+            "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
+            "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+            "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+        }
+        with zipfile.ZipFile(io.BytesIO(potx_raw), "r") as zf:
+            slide_parts = [name for name in zf.namelist() if name.startswith("ppt/slides/slide") and name.endswith(".xml")]
+            self.assertEqual(len(slide_parts), 1)
+
+            slide_xml_name = slide_parts[0]
+            slide_idx = os.path.splitext(os.path.basename(slide_xml_name))[0].replace("slide", "")
+            slide_rels_path = f"ppt/slides/_rels/slide{slide_idx}.xml.rels"
+            slide_rels_root = ET.fromstring(zf.read(slide_rels_path))
+            layout_target = None
+            for rel in slide_rels_root.findall("r:Relationship", rel_ns):
+                if rel.get("Type") == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout":
+                    layout_target = rel.get("Target")
+                    break
+            self.assertIsNotNone(layout_target)
+            assert layout_target is not None
+            layout_part_name = ("ppt/slides/" + layout_target).replace("\\", "/")
+            if "/../" in layout_part_name:
+                # resolve "ppt/slides/../slideLayouts/slideLayoutX.xml"
+                parts = []
+                for part in layout_part_name.split("/"):
+                    if part == "..":
+                        if parts:
+                            parts.pop()
+                    elif part and part != ".":
+                        parts.append(part)
+                layout_part_name = "/".join(parts)
+
+            layout_root = ET.fromstring(zf.read(layout_part_name))
+            pic_nodes = layout_root.findall(".//p:pic", p_ns)
+            self.assertEqual(len(pic_nodes), 1)
+            blip = layout_root.find(".//a:blip", p_ns)
+            self.assertIsNotNone(blip)
+            assert blip is not None
+            image_rel_id = blip.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed")
+            self.assertTrue(image_rel_id)
+
+            layout_filename = os.path.basename(layout_part_name)
+            rels_path = f"ppt/slideLayouts/_rels/{layout_filename}.rels"
+            rels_root = ET.fromstring(zf.read(rels_path))
+            image_target = None
+            for rel in rels_root.findall("r:Relationship", rel_ns):
+                if rel.get("Id") == image_rel_id:
+                    image_target = rel.get("Target")
+                    break
+            self.assertIsNotNone(image_target)
+            assert image_target is not None
+
+            if image_target.startswith("../"):
+                image_path = "ppt/" + image_target[3:]
+            else:
+                image_path = "ppt/slideLayouts/" + image_target
+            image_bytes = zf.read(image_path)
+            self.assertEqual(image_bytes, img_b)
+
     def test_safe_select_template_supports_chinese_filename(self):
-        with tempfile.TemporaryDirectory(dir=os.getcwd()) as td:
+        with tempfile.TemporaryDirectory(dir=os.getcwd(), ignore_cleanup_errors=True) as td:
             fname_nfc = "中心測試.pptx"
             with open(os.path.join(td, fname_nfc), "wb") as f:
                 f.write(b"x")
@@ -299,7 +509,7 @@ class Text2PptxHelperTests(SimpleTestCase):
             self.assertEqual(selected, os.path.join(td, fname_nfc))
 
     def test_save_template_bytes_preserves_chinese_filename(self):
-        with tempfile.TemporaryDirectory(dir=os.getcwd()) as td:
+        with tempfile.TemporaryDirectory(dir=os.getcwd(), ignore_cleanup_errors=True) as td:
             with patch.object(views, "PPTX_TEMPLATE_DIR", td):
                 saved1 = views._save_template_bytes("中心測試.pptx", b"a")
                 saved2 = views._save_template_bytes("中心測試.pptx", b"b")
@@ -320,6 +530,91 @@ class Text2PptxViewTests(SimpleTestCase):
     def test_analyze_image_prompts_method_not_allowed(self):
         resp = self.client.get("/text2pptx/analyze-image-prompts/")
         self.assertEqual(resp.status_code, 405)
+
+    @patch("webapps.text2pptx.views._save_generated_potx_bytes")
+    def test_extract_template_returns_potx_download_info(self, mock_save):
+        mock_save.return_value = (
+            "default_master_20260325_000000.potx",
+            "/media/text2pptx/potx/default_master_20260325_000000.potx",
+        )
+        upload = SimpleUploadedFile(
+            "default.pptx",
+            _build_minimal_pptx_bytes_for_upload(),
+            content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        )
+        resp = self.client.post("/text2pptx/extract_template/", {"pptx_file": upload})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data.get("success"))
+        self.assertIn("template_text", data)
+        self.assertEqual(data.get("output_filename"), "default_master_20260325_000000.potx")
+        self.assertIn("/text2pptx/download-potx/default_master_20260325_000000.potx", data.get("download_url", ""))
+        self.assertIn("/media/text2pptx/potx/default_master_20260325_000000.potx", data.get("media_download_url", ""))
+
+    def test_save_generated_potx_bytes_applies_script_name_prefix(self):
+        with tempfile.TemporaryDirectory(dir=os.getcwd(), ignore_cleanup_errors=True) as td:
+            with patch.object(views.settings, "MEDIA_ROOT", td), patch.object(views.settings, "MEDIA_URL", "/media/"):
+                filename, download_url = views._save_generated_potx_bytes(
+                    "default.pptx",
+                    b"fake-potx",
+                    script_name="/djangoai",
+                )
+        self.assertTrue(filename.endswith(".potx"))
+        self.assertTrue(download_url.startswith("/djangoai/media/text2pptx/potx/"))
+
+    def test_download_potx_returns_file(self):
+        with tempfile.TemporaryDirectory(dir=os.getcwd(), ignore_cleanup_errors=True) as td:
+            base = os.path.join(td, "text2pptx", "potx")
+            os.makedirs(base, exist_ok=True)
+            fn = "sample_master.potx"
+            with open(os.path.join(base, fn), "wb") as f:
+                f.write(b"potx-bytes")
+            with patch.object(views.settings, "MEDIA_ROOT", td):
+                resp = self.client.get(f"/text2pptx/download-potx/{fn}")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.content, b"potx-bytes")
+        self.assertIn("attachment", resp.get("Content-Disposition", ""))
+
+    def test_sample_extractor_page_shows_restore_buttons(self):
+        resp = self.client.get("/text2pptx/sample-extractor/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "抽取母片模板")
+        self.assertContains(resp, "抽取範例及母片")
+        self.assertContains(resp, "匯入母片模板")
+        self.assertContains(resp, "生成還原簡報")
+        self.assertContains(resp, "母片模板內容")
+
+    def test_generate_restored_pptx_requires_post(self):
+        resp = self.client.get("/text2pptx/generate_restored_pptx/")
+        self.assertEqual(resp.status_code, 405)
+        self.assertFalse(resp.json().get("success", True))
+
+    def test_generate_restored_pptx_requires_extracted_text(self):
+        resp = self.client.post(
+            "/text2pptx/generate_restored_pptx/",
+            data=json.dumps({"extracted_text": "", "template_text": "x"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json().get("message"), "請先取得抽取文字結果")
+
+    def test_generate_restored_pptx_success(self):
+        resp = self.client.post(
+            "/text2pptx/generate_restored_pptx/",
+            data=json.dumps(
+                {
+                    "extracted_text": "[內容頁] 測試",
+                    "template_text": "{\"layouts\":[]}",
+                    "source_filename": "default.pptx",
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data.get("success"))
+        self.assertEqual(data.get("output_filename"), "restored_default.pptx")
+        self.assertIn("/download/restored_default.pptx", data.get("download_url", ""))
 
     def test_analyze_image_prompts_rejects_empty_text(self):
         resp = self.client.post("/text2pptx/analyze-image-prompts/", {"text": ""})
@@ -361,7 +656,7 @@ class Text2PptxViewTests(SimpleTestCase):
         self.assertIn("文字內容超過上限", resp.json().get("error", ""))
 
     def test_index_lists_chinese_template_filename(self):
-        with tempfile.TemporaryDirectory(dir=os.getcwd()) as td:
+        with tempfile.TemporaryDirectory(dir=os.getcwd(), ignore_cleanup_errors=True) as td:
             with open(os.path.join(td, "中心測試.pptx"), "wb") as f:
                 f.write(b"x")
             with patch.object(views, "PPTX_TEMPLATE_DIR", td):
@@ -376,7 +671,7 @@ class Text2PptxViewTests(SimpleTestCase):
         self.assertNotContains(resp, "匯入範本（含四種版型審查）")
 
     def test_index_uses_default_template_when_available(self):
-        with tempfile.TemporaryDirectory(dir=os.getcwd()) as td:
+        with tempfile.TemporaryDirectory(dir=os.getcwd(), ignore_cleanup_errors=True) as td:
             with open(os.path.join(td, "預設範本.pptx"), "wb") as f:
                 f.write(b"x")
             with open(os.path.join(td, "中心測試.pptx"), "wb") as f:

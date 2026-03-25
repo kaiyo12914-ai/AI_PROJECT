@@ -4,9 +4,13 @@ import io
 import os
 import re
 import json
+import zipfile
+import mimetypes
 import logging
 import platform
 import unicodedata
+from datetime import datetime
+from xml.etree import ElementTree as ET
 from urllib.parse import quote
 from typing import Optional, List, Dict, Any
 
@@ -71,6 +75,8 @@ TITLE_PLACEHOLDER_TYPES = {1, 3}
 SUBTITLE_PLACEHOLDER_TYPES = {4}
 CONTENT_PLACEHOLDER_TYPES = {2, 7}
 IMAGE_PLACEHOLDER_TYPES = {11, 14}
+PPTX_MAIN_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"
+POTX_MAIN_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.template.main+xml"
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +222,407 @@ def _clear_all_slides(prs):
             sld_id_list.remove(sld_id)
     except Exception as e:
         logger.warning("Failed to clear template slides: %s", e)
+
+
+def _keep_only_main_slide(prs):
+    """
+    Keep only the first (main) slide while preserving masters/layouts/theme.
+    """
+    try:
+        sld_id_list = prs.slides._sldIdLst  # pylint: disable=protected-access
+        if len(sld_id_list) <= 1:
+            return
+        for idx, sld_id in enumerate(list(sld_id_list)):
+            if idx == 0:
+                continue
+            r_id = sld_id.rId
+            prs.part.drop_rel(r_id)
+            sld_id_list.remove(sld_id)
+    except Exception as e:
+        logger.warning("Failed to keep only main slide: %s", e)
+
+    # Clear any text content on the retained main slide.
+    try:
+        if len(prs.slides) > 0:
+            _clear_all_text_on_slide(prs.slides[0])
+    except Exception as e:
+        logger.warning("Failed to clear text on main slide: %s", e)
+
+
+def _shape_has_picture(shape) -> bool:
+    try:
+        shape_type_name = str(getattr(getattr(shape, "shape_type", None), "name", "") or "")
+    except Exception:
+        shape_type_name = ""
+    if shape_type_name == "PICTURE":
+        return True
+
+    try:
+        return getattr(shape, "image", None) is not None
+    except Exception:
+        return False
+
+
+def _count_picture_shapes_on_slide(slide) -> int:
+    count = 0
+
+    def _walk(shapes):
+        nonlocal count
+        for shp in list(shapes):
+            if _shape_has_picture(shp):
+                count += 1
+            child_shapes = getattr(shp, "shapes", None)
+            if child_shapes is not None:
+                try:
+                    _walk(child_shapes)
+                except Exception:
+                    pass
+
+    try:
+        _walk(getattr(slide, "shapes", []))
+    except Exception:
+        return count
+    return count
+
+
+def _extract_picture_specs_from_slide(slide) -> List[Dict[str, Any]]:
+    specs: List[Dict[str, Any]] = []
+
+    def _walk(shapes):
+        for shp in list(shapes):
+            if _shape_has_picture(shp):
+                try:
+                    image = shp.image
+                    blob = bytes(image.blob or b"")
+                    if blob:
+                        specs.append(
+                            {
+                                "left": int(getattr(shp, "left", 0) or 0),
+                                "top": int(getattr(shp, "top", 0) or 0),
+                                "width": int(getattr(shp, "width", 0) or 0),
+                                "height": int(getattr(shp, "height", 0) or 0),
+                                "ext": str(getattr(image, "ext", "") or "").lower() or "png",
+                                "blob": blob,
+                            }
+                        )
+                except Exception:
+                    pass
+
+            child_shapes = getattr(shp, "shapes", None)
+            if child_shapes is not None:
+                try:
+                    _walk(child_shapes)
+                except Exception:
+                    pass
+
+    try:
+        _walk(getattr(slide, "shapes", []))
+    except Exception:
+        return specs
+    return specs
+
+
+def _slide_layout_identity(slide, fallback_index: int) -> str:
+    try:
+        layout = getattr(slide, "slide_layout", None)
+        layout_name = str(getattr(layout, "name", "") or "").strip() or f"layout_{fallback_index}"
+        master = getattr(layout, "slide_master", None)
+        master_name = str(getattr(master, "name", "") or "").strip() or "master"
+        return f"{master_name}::{layout_name}"
+    except Exception:
+        return f"layout_{fallback_index}"
+
+
+def _collect_layout_representative_pictures(prs) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    For each layout, keep the picture set from the last slide that contains pictures.
+    """
+    by_layout: Dict[str, List[Dict[str, Any]]] = {}
+    for idx, slide in enumerate(prs.slides):
+        key = _slide_layout_identity(slide, idx)
+        pics = _extract_picture_specs_from_slide(slide)
+        if pics:
+            by_layout[key] = pics
+    return by_layout
+
+
+def _layout_identity_to_partname_map(prs) -> Dict[str, str]:
+    out: Dict[str, str] = {}
+    for _midx, master in enumerate(prs.slide_masters):
+        master_name = str(getattr(master, "name", "") or "").strip() or "master"
+        for lidx, layout in enumerate(master.slide_layouts):
+            layout_name = str(getattr(layout, "name", "") or "").strip() or f"layout_{lidx}"
+            key = f"{master_name}::{layout_name}"
+            try:
+                partname = str(layout.part.partname or "").strip()
+            except Exception:
+                partname = ""
+            if partname:
+                out[key] = partname
+    return out
+
+
+def _rel_path_for_part(part_path: str) -> str:
+    # ppt/slideLayouts/slideLayout1.xml -> ppt/slideLayouts/_rels/slideLayout1.xml.rels
+    base_dir, filename = os.path.split(part_path)
+    return "/".join([base_dir, "_rels", f"{filename}.rels"])
+
+
+def _next_rid(rels_root: ET.Element) -> str:
+    used: List[int] = []
+    for rel in rels_root.findall("{http://schemas.openxmlformats.org/package/2006/relationships}Relationship"):
+        rid = str(rel.get("Id") or "")
+        m = re.match(r"^rId(\d+)$", rid)
+        if m:
+            used.append(int(m.group(1)))
+    return f"rId{(max(used) + 1) if used else 1}"
+
+
+def _next_shape_id(layout_root: ET.Element) -> int:
+    ns = {"p": "http://schemas.openxmlformats.org/presentationml/2006/main"}
+    used: List[int] = []
+    for node in layout_root.findall(".//p:cNvPr", ns):
+        try:
+            used.append(int(node.get("id") or 0))
+        except Exception:
+            continue
+    return (max(used) + 1) if used else 1
+
+
+def _build_pic_element(shape_id: int, name: str, rid: str, *, left: int, top: int, width: int, height: int) -> ET.Element:
+    p_ns = "http://schemas.openxmlformats.org/presentationml/2006/main"
+    a_ns = "http://schemas.openxmlformats.org/drawingml/2006/main"
+    r_ns = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+
+    pic = ET.Element(f"{{{p_ns}}}pic")
+    nv_pic_pr = ET.SubElement(pic, f"{{{p_ns}}}nvPicPr")
+    c_nv_pr = ET.SubElement(nv_pic_pr, f"{{{p_ns}}}cNvPr")
+    c_nv_pr.set("id", str(shape_id))
+    c_nv_pr.set("name", name)
+    c_nv_pic_pr = ET.SubElement(nv_pic_pr, f"{{{p_ns}}}cNvPicPr")
+    pic_locks = ET.SubElement(c_nv_pic_pr, f"{{{a_ns}}}picLocks")
+    pic_locks.set("noChangeAspect", "1")
+    ET.SubElement(nv_pic_pr, f"{{{p_ns}}}nvPr")
+
+    blip_fill = ET.SubElement(pic, f"{{{p_ns}}}blipFill")
+    blip = ET.SubElement(blip_fill, f"{{{a_ns}}}blip")
+    blip.set(f"{{{r_ns}}}embed", rid)
+    stretch = ET.SubElement(blip_fill, f"{{{a_ns}}}stretch")
+    ET.SubElement(stretch, f"{{{a_ns}}}fillRect")
+
+    sp_pr = ET.SubElement(pic, f"{{{p_ns}}}spPr")
+    xfrm = ET.SubElement(sp_pr, f"{{{a_ns}}}xfrm")
+    off = ET.SubElement(xfrm, f"{{{a_ns}}}off")
+    off.set("x", str(max(0, int(left))))
+    off.set("y", str(max(0, int(top))))
+    ext = ET.SubElement(xfrm, f"{{{a_ns}}}ext")
+    ext.set("cx", str(max(1, int(width))))
+    ext.set("cy", str(max(1, int(height))))
+    prst_geom = ET.SubElement(sp_pr, f"{{{a_ns}}}prstGeom")
+    prst_geom.set("prst", "rect")
+    ET.SubElement(prst_geom, f"{{{a_ns}}}avLst")
+    return pic
+
+
+def _image_content_type_by_ext(ext: str) -> str:
+    mapping = {
+        "png": "image/png",
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "gif": "image/gif",
+        "bmp": "image/bmp",
+        "tif": "image/tiff",
+        "tiff": "image/tiff",
+    }
+    return mapping.get((ext or "").lower(), "image/png")
+
+
+def _ensure_content_type_default_for_ext(content_types_root: ET.Element, ext: str) -> None:
+    ct_ns = "http://schemas.openxmlformats.org/package/2006/content-types"
+    wanted_ext = (ext or "png").lower()
+    for node in content_types_root.findall(f"{{{ct_ns}}}Default"):
+        if str(node.get("Extension") or "").lower() == wanted_ext:
+            return
+    default_node = ET.SubElement(content_types_root, f"{{{ct_ns}}}Default")
+    default_node.set("Extension", wanted_ext)
+    default_node.set("ContentType", _image_content_type_by_ext(wanted_ext))
+
+
+def _inject_layout_representative_pictures(
+    normalized_raw: bytes,
+    *,
+    layout_picture_specs: Dict[str, List[Dict[str, Any]]],
+    layout_part_map: Dict[str, str],
+) -> bytes:
+    if not layout_picture_specs:
+        return normalized_raw
+
+    p_ns = "http://schemas.openxmlformats.org/presentationml/2006/main"
+    rel_ns = "http://schemas.openxmlformats.org/package/2006/relationships"
+    ns = {"p": p_ns}
+    content_types_name = "[Content_Types].xml"
+
+    src = io.BytesIO(normalized_raw)
+    out = io.BytesIO()
+    with zipfile.ZipFile(src, "r") as zin:
+        all_names = zin.namelist()
+        file_map: Dict[str, bytes] = {name: zin.read(name) for name in all_names}
+
+    content_types_root = ET.fromstring(file_map[content_types_name])
+    media_idx = 1
+    while f"ppt/media/layout_img_{media_idx}.png" in file_map:
+        media_idx += 1
+
+    for key, pic_specs in layout_picture_specs.items():
+        if not pic_specs:
+            continue
+        part_name = layout_part_map.get(key)
+        if not part_name:
+            continue
+        layout_path = str(part_name).lstrip("/")
+        if layout_path not in file_map:
+            continue
+
+        layout_root = ET.fromstring(file_map[layout_path])
+        sp_tree = layout_root.find(".//p:spTree", ns)
+        if sp_tree is None:
+            continue
+
+        # Replace existing picture shapes in this layout with representative pictures.
+        for old_pic in list(sp_tree.findall("p:pic", ns)):
+            sp_tree.remove(old_pic)
+
+        rels_path = _rel_path_for_part(layout_path)
+        if rels_path in file_map:
+            rels_root = ET.fromstring(file_map[rels_path])
+            for old_rel in list(
+                rels_root.findall(f"{{{rel_ns}}}Relationship[@Type='http://schemas.openxmlformats.org/officeDocument/2006/relationships/image']")
+            ):
+                rels_root.remove(old_rel)
+        else:
+            rels_root = ET.Element(f"{{{rel_ns}}}Relationships")
+
+        next_shape_id = _next_shape_id(layout_root)
+        for pic_idx, spec in enumerate(pic_specs, start=1):
+            ext = str(spec.get("ext") or "png").lower()
+            blob = bytes(spec.get("blob") or b"")
+            if not blob:
+                continue
+            media_name = f"layout_img_{media_idx}.{ext}"
+            media_idx += 1
+            media_path = f"ppt/media/{media_name}"
+            file_map[media_path] = blob
+            _ensure_content_type_default_for_ext(content_types_root, ext)
+
+            rid = _next_rid(rels_root)
+            rel = ET.SubElement(rels_root, f"{{{rel_ns}}}Relationship")
+            rel.set("Id", rid)
+            rel.set("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image")
+            rel.set("Target", f"../media/{media_name}")
+
+            pic_el = _build_pic_element(
+                next_shape_id,
+                f"Layout Picture {pic_idx}",
+                rid,
+                left=int(spec.get("left") or 0),
+                top=int(spec.get("top") or 0),
+                width=int(spec.get("width") or 1),
+                height=int(spec.get("height") or 1),
+            )
+            next_shape_id += 1
+            sp_tree.append(pic_el)
+
+        file_map[layout_path] = ET.tostring(layout_root, encoding="utf-8", xml_declaration=True)
+        file_map[rels_path] = ET.tostring(rels_root, encoding="utf-8", xml_declaration=True)
+
+    file_map[content_types_name] = ET.tostring(content_types_root, encoding="utf-8", xml_declaration=True)
+
+    with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zout:
+        for name, raw_data in file_map.items():
+            zout.writestr(name, raw_data)
+    return out.getvalue()
+
+
+def _retain_layout_representative_slides_and_clear_text(prs):
+    """
+    Keep one representative slide per layout identity.
+    Representative priority:
+    1) the last slide with pictures for the same layout
+    2) if no slide has pictures, keep the last encountered slide
+    Then clear all text from retained slides.
+    """
+    try:
+        total = len(prs.slides)
+    except Exception:
+        total = 0
+    if total <= 0:
+        return
+
+    selected_by_layout: Dict[str, tuple[int, bool]] = {}
+    for idx, slide in enumerate(prs.slides):
+        key = _slide_layout_identity(slide, idx)
+        picture_count = _count_picture_shapes_on_slide(slide)
+        has_picture = picture_count > 0
+        existing = selected_by_layout.get(key)
+        if has_picture:
+            # Always override so the last picture slide wins.
+            selected_by_layout[key] = (idx, True)
+        elif existing is None or not existing[1]:
+            # No picture seen yet: keep moving to the last encountered slide.
+            selected_by_layout[key] = (idx, False)
+
+    keep_indices = {v[0] for v in selected_by_layout.values()}
+    if not keep_indices:
+        keep_indices = {0}
+
+    try:
+        sld_id_list = prs.slides._sldIdLst  # pylint: disable=protected-access
+        for idx, sld_id in enumerate(list(sld_id_list)):
+            if idx in keep_indices:
+                continue
+            r_id = sld_id.rId
+            prs.part.drop_rel(r_id)
+            sld_id_list.remove(sld_id)
+    except Exception as e:
+        logger.warning("Failed to retain representative layout slides: %s", e)
+
+    for slide in prs.slides:
+        _clear_all_text_on_slide(slide)
+
+
+def _clear_all_text_on_slide(slide):
+    for shape in list(getattr(slide, "shapes", [])):
+        _clear_all_text_on_shape(shape)
+
+
+def _clear_all_text_on_shape(shape):
+    if getattr(shape, "has_text_frame", False):
+        try:
+            shape.text_frame.clear()
+        except Exception:
+            pass
+
+    # Some shapes may raise while accessing has_table/table.
+    try:
+        has_table = bool(getattr(shape, "has_table", False))
+    except Exception:
+        has_table = False
+    if has_table:
+        try:
+            for row in shape.table.rows:
+                for cell in row.cells:
+                    cell.text = ""
+        except Exception:
+            pass
+
+    # Group shape recursion.
+    child_shapes = getattr(shape, "shapes", None)
+    if child_shapes is not None:
+        try:
+            for child in list(child_shapes):
+                _clear_all_text_on_shape(child)
+        except Exception:
+            pass
 
 
 def _layout_has_title(layout) -> bool:
@@ -527,6 +934,13 @@ def _resolve_marker(raw_marker: str) -> str | None:
     return MARKER_TO_SLIDE_TYPE.get(marker)
 
 
+def _is_layout_meta_line(line: str) -> bool:
+    text = str(line or "").strip()
+    if not text:
+        return False
+    return bool(re.match(r"^(?:版面名稱|版型名稱|layout(?:\s*name)?)\s*[:：]", text, flags=re.IGNORECASE))
+
+
 def _parse_marked_text_structure(text: str) -> Dict[str, Any] | None:
     blocks = [s.strip() for s in text.split("===") if s.strip()]
     if not blocks:
@@ -564,7 +978,17 @@ def _parse_marked_text_structure(text: str) -> Dict[str, Any] | None:
     for idx, item in enumerate(parsed, start=1):
         marker_type = _resolve_marker(item.get("marker") or "")
         title = (item.get("title") or "").strip() or f"投影片 {idx}"
-        lines = item.get("lines") or []
+        lines = [
+            str(x).strip()
+            for x in (item.get("lines") or [])
+            if str(x).strip() and not _is_layout_meta_line(str(x))
+        ]
+        if marker_type is None:
+            marker_type = _pick_marker_for_extracted_slide(
+                extracted_index=max(2, idx),  # Unknown custom markers should not auto-become cover.
+                title=title,
+                body_lines=lines,
+            )
 
         if marker_type == "cover":
             out["main_title"] = title or DEFAULT_MAIN_TITLE
@@ -589,7 +1013,7 @@ def _parse_marked_text_structure(text: str) -> Dict[str, Any] | None:
                 "slide_type": slide_type,
                 "left_title": "",
                 "right_title": "",
-                "bullets": [str(x).strip() for x in lines if str(x).strip()],
+                "bullets": lines,
                 "image_required": False,
                 "image_prompt": "",
                 "image_intent": "",
@@ -1288,7 +1712,82 @@ def _clean_extracted_line(value: Any) -> str:
     text = str(value or "")
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"\s+", " ", text).strip()
+    text = _strip_page_number_prefix(text)
+    if _is_page_number_only(text):
+        return ""
     return text
+
+
+def _strip_page_number_prefix(text: str) -> str:
+    t = str(text or "").strip()
+    if not t:
+        return ""
+    t = re.sub(
+        r"^\s*page\s*[0-9０-９]+(?:\s*(?:/|of)\s*[0-9０-９]+)?\s*[-:：|·.)）]*\s*",
+        "",
+        t,
+        flags=re.IGNORECASE,
+    )
+    t = re.sub(
+        r"^\s*第\s*[0-9０-９一二三四五六七八九十百千]+\s*頁(?:\s*/\s*[0-9０-９一二三四五六七八九十百千]+\s*頁?)?\s*[-:：|·.)）]*\s*",
+        "",
+        t,
+    )
+    return t.strip()
+
+
+def _is_page_number_only(text: str) -> bool:
+    t = str(text or "").strip()
+    if not t:
+        return True
+    if re.fullmatch(r"page\s*[0-9０-９]+(?:\s*(?:/|of)\s*[0-9０-９]+)?", t, flags=re.IGNORECASE):
+        return True
+    if re.fullmatch(r"第\s*[0-9０-９一二三四五六七八九十百千]+\s*頁(?:\s*/\s*[0-9０-９一二三四五六七八九十百千]+\s*頁?)?", t):
+        return True
+    return False
+
+
+def _is_pure_small_number_line(text: str) -> bool:
+    t = str(text or "").strip()
+    if not t:
+        return False
+    t = t.replace(",", "").replace("，", "")
+    t = t.translate(str.maketrans("０１２３４５６７８９", "0123456789"))
+    return bool(re.fullmatch(r"\d{1,3}", t))
+
+
+def _looks_like_footer_context_line(text: str) -> bool:
+    t = str(text or "").strip()
+    if not t:
+        return False
+    if _is_page_number_only(t):
+        return True
+    if re.search(r"(?:19\d{2}|20\d{2}|20XX)", t, flags=re.IGNORECASE):
+        return True
+    if re.search(r"(?:民國)\s*\d+\s*年", t):
+        return True
+    if re.search(r"(?:簡報|投影片|presentation|pitch|deck|slide)", t, flags=re.IGNORECASE):
+        return True
+    return False
+
+
+def _remove_footer_numeric_page_lines(lines: List[str]) -> List[str]:
+    if not lines:
+        return []
+    out: List[str] = []
+    total = len(lines)
+    for idx, line in enumerate(lines):
+        if not _is_pure_small_number_line(line):
+            out.append(line)
+            continue
+        if idx < max(0, total - 3):
+            out.append(line)
+            continue
+        neighbors = lines[max(0, idx - 2) : idx] + lines[idx + 1 : min(total, idx + 2)]
+        if any(_looks_like_footer_context_line(x) for x in neighbors):
+            continue
+        out.append(line)
+    return out
 
 
 def _shape_position_key(shape: Any) -> tuple[int, int]:
@@ -1336,7 +1835,7 @@ def _extract_text_lines_from_slide(slide: Any) -> List[str]:
             if lines and lines[-1] == line:
                 continue
             lines.append(line)
-    return lines
+    return _remove_footer_numeric_page_lines(lines)
 
 
 def _marker_to_layout_label(marker: str) -> str:
@@ -1348,6 +1847,14 @@ def _marker_to_layout_label(marker: str) -> str:
         "comparison": "\u96d9\u6b04\u5fc5\u8f03\u9801",
     }
     return labels.get(marker, labels["content"])
+
+
+def _extract_slide_layout_name(slide: Any) -> str:
+    try:
+        name = str(getattr(getattr(slide, "slide_layout", None), "name", "") or "").strip()
+    except Exception:
+        name = ""
+    return _clean_extracted_line(name)
 
 
 def _detect_layout_marker_from_slide(slide: Any, *, extracted_index: int) -> str | None:
@@ -1454,8 +1961,9 @@ def _extract_sample_text_from_pptx_bytes(raw: bytes) -> Dict[str, Any]:
         if layout_marker == "two_content" and heuristic_marker == "comparison":
             marker = "comparison"
 
-        layout_label = _marker_to_layout_label(marker)
-        block_lines = [f"[{layout_label}] {title}"]
+        layout_name = _extract_slide_layout_name(slide)
+        marker_label = layout_name or _marker_to_layout_label(marker)
+        block_lines = [f"[{marker_label}]{title}"]
         block_lines.extend(body_lines)
         blocks.append("\n".join(block_lines))
 
@@ -1471,6 +1979,144 @@ def _extract_sample_text_from_pptx_bytes(raw: bytes) -> Dict[str, Any]:
         "total_slides": total_slides,
         "used_slides": extracted_count,
     }
+
+
+def _extract_master_template_text_from_pptx_bytes(raw: bytes) -> str:
+    from pptx import Presentation
+
+    presentation = Presentation(io.BytesIO(raw))
+    lines: List[str] = []
+    lines.append("[母片模板摘要]")
+
+    master_count = 0
+    for idx, master in enumerate(presentation.slide_masters, start=1):
+        master_count += 1
+        master_name = _clean_extracted_line(getattr(master, "name", "")) or f"母片 {idx}"
+        lines.append(f"母片 {idx}：{master_name}")
+
+        layout_names: List[str] = []
+        for layout in getattr(master, "slide_layouts", []):
+            layout_name = _clean_extracted_line(getattr(layout, "name", "")) or "未命名版面"
+            if layout_name not in layout_names:
+                layout_names.append(layout_name)
+
+        if layout_names:
+            for layout_name in layout_names:
+                lines.append(f"- {layout_name}")
+        else:
+            lines.append("- （未偵測到版面配置）")
+
+    if master_count == 0:
+        lines.append("未偵測到母片資料。")
+
+    lines.append("===")
+    lines.append("[投影片版面對應]")
+    for slide_idx, slide in enumerate(presentation.slides, start=1):
+        layout_name = _extract_slide_layout_name(slide) or "未命名版面"
+        lines.append(f"第 {slide_idx} 頁：{layout_name}")
+
+    template_text = "\n".join(lines).strip()
+    if len(template_text) > MAX_SAMPLE_CHARS:
+        template_text = template_text[:MAX_SAMPLE_CHARS].rstrip() + "\n...（內容已截斷）"
+    return template_text
+
+
+def _convert_pptx_bytes_to_potx_bytes(raw: bytes) -> bytes:
+    from pptx import Presentation
+
+    content_types_name = "[Content_Types].xml"
+    ns = {"ct": "http://schemas.openxmlformats.org/package/2006/content-types"}
+
+    # Keep only main slide (page 1), clear text, and move representative layout images
+    # into corresponding layout parts so new slides can inherit those images.
+    normalized_raw = raw
+    try:
+        src_prs = Presentation(io.BytesIO(raw))
+        layout_picture_specs = _collect_layout_representative_pictures(src_prs)
+
+        prs = Presentation(io.BytesIO(raw))
+        _keep_only_main_slide(prs)
+        normalized_buf = io.BytesIO()
+        prs.save(normalized_buf)
+        normalized_raw = normalized_buf.getvalue()
+
+        if layout_picture_specs:
+            normalized_prs = Presentation(io.BytesIO(normalized_raw))
+            layout_part_map = _layout_identity_to_partname_map(normalized_prs)
+            normalized_raw = _inject_layout_representative_pictures(
+                normalized_raw,
+                layout_picture_specs=layout_picture_specs,
+                layout_part_map=layout_part_map,
+            )
+    except Exception as e:
+        logger.warning("normalize before potx conversion failed: %s", e)
+
+    src = io.BytesIO(normalized_raw)
+    out = io.BytesIO()
+    with zipfile.ZipFile(src, "r") as zin, zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zout:
+        for info in zin.infolist():
+            data = zin.read(info.filename)
+            if info.filename == content_types_name:
+                try:
+                    root = ET.fromstring(data)
+                    updated = False
+                    for override in root.findall("ct:Override", ns):
+                        if override.get("PartName") == "/ppt/presentation.xml":
+                            if override.get("ContentType") != POTX_MAIN_CONTENT_TYPE:
+                                override.set("ContentType", POTX_MAIN_CONTENT_TYPE)
+                                updated = True
+                    if updated:
+                        data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+                except Exception as e:
+                    logger.warning("convert pptx to potx content-type adjust failed: %s", e)
+            zout.writestr(info, data)
+    return out.getvalue()
+
+
+def _save_generated_potx_bytes(
+    source_filename: str,
+    raw_potx: bytes,
+    *,
+    script_name: str = "",
+) -> tuple[str, str]:
+    source_stem = os.path.splitext(os.path.basename(source_filename or ""))[0] or "template"
+    safe_stem = _safe_filename(source_stem, default="template")
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_filename = f"{safe_stem}_master_{ts}.potx"
+
+    rel_dir = os.path.join("text2pptx", "potx")
+    abs_dir = os.path.join(settings.MEDIA_ROOT, rel_dir)
+    os.makedirs(abs_dir, exist_ok=True)
+    abs_path = os.path.join(abs_dir, output_filename)
+    with open(abs_path, "wb") as f:
+        f.write(raw_potx)
+
+    media_url = str(getattr(settings, "MEDIA_URL", "/media/") or "/media/")
+    if not media_url.endswith("/"):
+        media_url += "/"
+    if not media_url.startswith("/"):
+        media_url = "/" + media_url
+
+    script = (script_name or "").strip()
+    if script.endswith("/"):
+        script = script[:-1]
+
+    rel_path = "/".join(["text2pptx", "potx", output_filename])
+    download_url = f"{script}{media_url}{quote(rel_path)}"
+    return output_filename, download_url
+
+
+def _resolve_saved_potx_path(filename: str) -> str:
+    safe_name = _safe_filename(filename or "", default="")
+    if not safe_name or not safe_name.lower().endswith(".potx"):
+        raise ValueError("invalid potx filename")
+    abs_path = os.path.join(settings.MEDIA_ROOT, "text2pptx", "potx", safe_name)
+    abs_path_norm = os.path.normpath(abs_path)
+    base_dir = os.path.normpath(os.path.join(settings.MEDIA_ROOT, "text2pptx", "potx"))
+    if not abs_path_norm.startswith(base_dir):
+        raise ValueError("invalid potx path")
+    return abs_path_norm
+
 
 def _build_template_context() -> Dict[str, Any]:
     templates = _list_pptx_templates()
@@ -1589,6 +2235,116 @@ def sample_extractor(request):
 
     return render(request, "text2pptx/sample_extractor.html", context)
 
+
+@require_node("pptx", api=True)
+def extract_template(request):
+    if request.method != "POST":
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "method not allowed",
+                "template_text": "",
+                "output_filename": "",
+                "download_url": "",
+            },
+            status=405,
+        )
+
+    upload = request.FILES.get("pptx_file") or request.FILES.get("file")
+    if not upload:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "請先選擇 PPTX 檔案",
+                "template_text": "",
+                "output_filename": "",
+                "download_url": "",
+            },
+            status=400,
+        )
+
+    filename = _normalize_template_name(upload.name or "")
+    if not filename.lower().endswith(".pptx"):
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "只支援 .pptx 檔案",
+                "template_text": "",
+                "output_filename": "",
+                "download_url": "",
+            },
+            status=400,
+        )
+
+    if upload.size and upload.size > (MAX_SAMPLE_UPLOAD_MB * 1024 * 1024):
+        return JsonResponse(
+            {
+                "success": False,
+                "message": f"檔案大小不可超過 {MAX_SAMPLE_UPLOAD_MB} MB",
+                "template_text": "",
+                "output_filename": "",
+                "download_url": "",
+            },
+            status=400,
+        )
+
+    try:
+        raw_pptx = upload.read()
+        template_text = _extract_master_template_text_from_pptx_bytes(raw_pptx)
+        potx_bytes = _convert_pptx_bytes_to_potx_bytes(raw_pptx)
+        script_name = getattr(request, "script_name", "") or request.META.get("SCRIPT_NAME", "")
+        output_filename, media_download_url = _save_generated_potx_bytes(
+            filename,
+            potx_bytes,
+            script_name=script_name,
+        )
+        script = (script_name or "").rstrip("/")
+        api_download_url = f"{script}/text2pptx/download-potx/{quote(output_filename)}"
+        return JsonResponse(
+            {
+                "success": True,
+                "message": "母片模板抽取成功",
+                "template_text": template_text,
+                "output_filename": output_filename,
+                "download_url": api_download_url,
+                "media_download_url": media_download_url,
+            },
+            status=200,
+        )
+    except Exception as e:
+        logger.warning("extract_template failed: %s", e)
+        return JsonResponse(
+            {
+                "success": False,
+                "message": f"母片模板抽取失敗：{e}",
+                "template_text": "",
+                "output_filename": "",
+                "download_url": "",
+            },
+            status=500,
+        )
+
+
+@require_node("pptx", api=True)
+def download_potx(request, filename: str):
+    try:
+        abs_path = _resolve_saved_potx_path(filename)
+    except ValueError:
+        return HttpResponse("invalid filename", status=400)
+
+    if not os.path.isfile(abs_path):
+        return HttpResponse("file not found", status=404)
+
+    ctype, _ = mimetypes.guess_type(abs_path)
+    ctype = ctype or "application/vnd.openxmlformats-officedocument.presentationml.template"
+    with open(abs_path, "rb") as f:
+        raw = f.read()
+    resp = HttpResponse(raw, content_type=ctype)
+    safe_name = os.path.basename(abs_path)
+    resp["Content-Disposition"] = f"attachment; filename=\"{safe_name}\"; filename*=UTF-8''{quote(safe_name)}"
+    return resp
+
+
 @require_node("pptx")
 def template_admin(request):
     return render(request, "text2pptx/template_admin.html", _build_template_context())
@@ -1685,6 +2441,124 @@ def analyze_image_prompts(request):
         )
     except Exception as e:
         logger.warning("Analyze image prompts failed: %s", e)
+        return JsonResponse({"ok": False, "error": str(e)}, status=500)
+
+
+@require_node("pptx", api=True)
+def generate_restored_pptx(request):
+    if request.method != "POST":
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "method not allowed",
+                "output_filename": "",
+                "download_url": "",
+            },
+            status=405,
+        )
+
+    try:
+        payload = json.loads((request.body or b"").decode("utf-8") or "{}")
+    except Exception:
+        payload = {}
+
+    extracted_text = str(payload.get("extracted_text") or "").strip()
+    template_text = str(payload.get("template_text") or "").strip()
+    source_filename = _normalize_template_name(str(payload.get("source_filename") or "").strip())
+
+    if not extracted_text:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "請先取得抽取文字結果",
+                "output_filename": "",
+                "download_url": "",
+            },
+            status=400,
+        )
+    if not template_text:
+        return JsonResponse(
+            {
+                "success": False,
+                "message": "請先匯入母片模板",
+                "output_filename": "",
+                "download_url": "",
+            },
+            status=400,
+        )
+
+    source_stem = os.path.splitext(os.path.basename(source_filename))[0] if source_filename else "source"
+    safe_stem = _safe_filename(source_stem, default="source")
+    output_filename = f"restored_{safe_stem}.pptx"
+
+    # Stub only:
+    # 1) 未來將在此串接 text2pptx renderer 產生實體簡報檔
+    # 2) 未來將導入 template schema / 母片模板解析與校驗
+    # 3) 未來將加入版型套用邏輯（layout mapping / placeholder fill / fallback）
+    script_name = (getattr(request, "script_name", "") or request.META.get("SCRIPT_NAME", "")).rstrip("/")
+    download_url = f"{script_name}/download/{quote(output_filename)}" if script_name else f"/download/{quote(output_filename)}"
+
+    return JsonResponse(
+        {
+            "success": True,
+            "message": "還原簡報生成成功",
+            "output_filename": output_filename,
+            "download_url": download_url,
+        },
+        status=200,
+    )
+
+
+@require_node("pptx", api=True)
+def schema_extract(request):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    upload = request.FILES.get("pptx_file") or request.FILES.get("file")
+    if not upload:
+        return JsonResponse({"ok": False, "error": "請上傳 .pptx 檔案"}, status=400)
+    filename = _normalize_template_name(upload.name or "")
+    if not filename.lower().endswith(".pptx"):
+        return JsonResponse({"ok": False, "error": "只支援 .pptx 檔案"}, status=400)
+
+    try:
+        from webapps.text2pptx.pptx2schema.pipelines.extract_pipeline import run_extract
+
+        result = run_extract(upload.read(), source_file=filename)
+        return JsonResponse({"ok": True, "raw": result.model_dump()}, status=200)
+    except Exception as e:
+        logger.warning("schema_extract failed: %s", e)
+        return JsonResponse({"ok": False, "error": str(e)}, status=500)
+
+
+@require_node("pptx", api=True)
+def schema_analyze(request):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    upload = request.FILES.get("pptx_file") or request.FILES.get("file")
+    if not upload:
+        return JsonResponse({"ok": False, "error": "請上傳 .pptx 檔案"}, status=400)
+    filename = _normalize_template_name(upload.name or "")
+    if not filename.lower().endswith(".pptx"):
+        return JsonResponse({"ok": False, "error": "只支援 .pptx 檔案"}, status=400)
+
+    try:
+        import tempfile
+
+        from webapps.text2pptx.pptx2schema.pipelines.analyze_pipeline import run_analyze
+
+        with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as tf:
+            tf.write(upload.read())
+            temp_path = tf.name
+        bundle = run_analyze(temp_path)
+        try:
+            os.remove(temp_path)
+        except Exception:
+            pass
+        return JsonResponse({"ok": True, "bundle": bundle.model_dump()}, status=200)
+    except Exception as e:
+        logger.warning("schema_analyze failed: %s", e)
         return JsonResponse({"ok": False, "error": str(e)}, status=500)
 
 

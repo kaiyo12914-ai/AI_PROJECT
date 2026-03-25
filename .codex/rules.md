@@ -188,3 +188,7 @@ DEV_LOGIN_NAME=
   - `[System.IO.File]::WriteAllText(path, text, (New-Object System.Text.UTF8Encoding($false)))`
   - In PowerShell 7+, prefer `-Encoding utf8NoBOM`.
 - VS Code default encoding must be UTF-8 (without BOM).
+
+## Git Commit Rule (Mandatory)
+- 每次完成功能修正後，必須立即執行一次 `git commit`。
+- Commit 訊息需清楚描述本次修正重點，避免使用空泛訊息。
