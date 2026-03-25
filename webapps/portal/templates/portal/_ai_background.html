@@ -1,77 +1,142 @@
 <div class="ai-bg ai-bg--{{ variant|default:'a' }}" aria-hidden="true">
-  <svg class="ai-bg__layer ai-bg__layer--grid" viewBox="0 0 1920 1080" preserveAspectRatio="none">
+  <svg class="ai-bg__layer ai-bg__layer--base" viewBox="0 0 1920 1080" preserveAspectRatio="none">
     <defs>
-      <pattern id="aiGridPattern" width="56" height="56" patternUnits="userSpaceOnUse">
-        <path d="M56 0H0V56" class="ai-bg__grid-line"></path>
+      <pattern id="aiGridDense" width="42" height="42" patternUnits="userSpaceOnUse">
+        <path d="M42 0H0V42" class="ai-bg__grid-line"></path>
       </pattern>
-      <linearGradient id="aiGlowA" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="rgba(44, 123, 229, 0.22)"></stop>
-        <stop offset="100%" stop-color="rgba(44, 123, 229, 0)"></stop>
+      <pattern id="aiGridLight" width="84" height="84" patternUnits="userSpaceOnUse">
+        <path d="M84 0H0V84" class="ai-bg__grid-line-light"></path>
+      </pattern>
+
+      <radialGradient id="aiCornerGlowTL" cx="0.05" cy="0.08" r="0.52">
+        <stop offset="0%" stop-color="rgba(37, 99, 235, 0.22)"></stop>
+        <stop offset="100%" stop-color="rgba(37, 99, 235, 0)"></stop>
+      </radialGradient>
+      <radialGradient id="aiCornerGlowBR" cx="0.94" cy="0.9" r="0.56">
+        <stop offset="0%" stop-color="rgba(15, 118, 110, 0.22)"></stop>
+        <stop offset="100%" stop-color="rgba(15, 118, 110, 0)"></stop>
+      </radialGradient>
+      <linearGradient id="aiChipMetal" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="rgba(30, 64, 175, 0.18)"></stop>
+        <stop offset="100%" stop-color="rgba(30, 64, 175, 0.08)"></stop>
       </linearGradient>
-      <linearGradient id="aiGlowB" x1="1" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="rgba(14, 165, 164, 0.2)"></stop>
-        <stop offset="100%" stop-color="rgba(14, 165, 164, 0)"></stop>
+      <linearGradient id="aiFlowStroke" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="rgba(14, 116, 144, 0.18)"></stop>
+        <stop offset="50%" stop-color="rgba(37, 99, 235, 0.3)"></stop>
+        <stop offset="100%" stop-color="rgba(14, 116, 144, 0.18)"></stop>
       </linearGradient>
+      <marker id="aiArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+        <path d="M1 1l7 3.5-7 3.5z" class="ai-bg__arrow-head"></path>
+      </marker>
     </defs>
-    <rect x="0" y="0" width="1920" height="1080" fill="url(#aiGridPattern)"></rect>
-    <ellipse cx="280" cy="150" rx="260" ry="180" fill="url(#aiGlowA)"></ellipse>
-    <ellipse cx="1630" cy="940" rx="300" ry="220" fill="url(#aiGlowB)"></ellipse>
+
+    <rect x="0" y="0" width="1920" height="1080" fill="url(#aiGridLight)"></rect>
+    <rect x="0" y="0" width="1920" height="1080" fill="url(#aiGridDense)"></rect>
+    <rect x="0" y="0" width="1920" height="1080" fill="url(#aiCornerGlowTL)"></rect>
+    <rect x="0" y="0" width="1920" height="1080" fill="url(#aiCornerGlowBR)"></rect>
   </svg>
 
+  <!-- A: 保守版主層，已有明確 AI 意象 -->
   <svg class="ai-bg__layer ai-bg__layer--a" viewBox="0 0 1920 1080" preserveAspectRatio="none">
-    <g class="ai-bg__network ai-bg__network--left">
-      <path d="M100 170L230 230L320 170L430 250L520 190" class="ai-bg__trace"></path>
-      <path d="M210 290L300 240L390 300L480 260" class="ai-bg__trace"></path>
-      <circle cx="100" cy="170" r="6" class="ai-bg__node"></circle>
-      <circle cx="230" cy="230" r="6" class="ai-bg__node"></circle>
-      <circle cx="320" cy="170" r="6" class="ai-bg__node"></circle>
-      <circle cx="430" cy="250" r="6" class="ai-bg__node"></circle>
-      <circle cx="520" cy="190" r="6" class="ai-bg__node"></circle>
-      <circle cx="210" cy="290" r="5" class="ai-bg__node"></circle>
-      <circle cx="300" cy="240" r="5" class="ai-bg__node"></circle>
-      <circle cx="390" cy="300" r="5" class="ai-bg__node"></circle>
-      <circle cx="480" cy="260" r="5" class="ai-bg__node"></circle>
+    <!-- 左上：模型層堆疊 + token 流 -->
+    <g class="ai-bg__cluster ai-bg__cluster--model">
+      <rect x="78" y="72" width="360" height="220" rx="24" class="ai-bg__panel"></rect>
+      <rect x="108" y="105" width="290" height="30" rx="12" class="ai-bg__model-layer"></rect>
+      <rect x="126" y="147" width="256" height="30" rx="12" class="ai-bg__model-layer"></rect>
+      <rect x="143" y="189" width="224" height="30" rx="12" class="ai-bg__model-layer"></rect>
+      <rect x="160" y="231" width="190" height="30" rx="12" class="ai-bg__model-layer"></rect>
+
+      <path d="M102 320C210 292 298 294 426 320" class="ai-bg__flow"></path>
+      <path d="M126 342C238 318 300 318 408 344" class="ai-bg__flow ai-bg__flow--thin"></path>
+      <circle cx="176" cy="316" r="4.3" class="ai-bg__token"></circle>
+      <circle cx="258" cy="307" r="4.3" class="ai-bg__token"></circle>
+      <circle cx="336" cy="309" r="4.3" class="ai-bg__token"></circle>
+      <circle cx="392" cy="318" r="4.3" class="ai-bg__token"></circle>
     </g>
 
-    <g class="ai-bg__network ai-bg__network--right">
-      <path d="M1410 840L1510 770L1620 820L1710 760L1820 820" class="ai-bg__trace"></path>
-      <path d="M1430 930L1530 870L1625 930L1735 870" class="ai-bg__trace"></path>
-      <circle cx="1410" cy="840" r="6" class="ai-bg__node"></circle>
-      <circle cx="1510" cy="770" r="6" class="ai-bg__node"></circle>
-      <circle cx="1620" cy="820" r="6" class="ai-bg__node"></circle>
-      <circle cx="1710" cy="760" r="6" class="ai-bg__node"></circle>
-      <circle cx="1820" cy="820" r="6" class="ai-bg__node"></circle>
-      <circle cx="1430" cy="930" r="5" class="ai-bg__node"></circle>
-      <circle cx="1530" cy="870" r="5" class="ai-bg__node"></circle>
-      <circle cx="1625" cy="930" r="5" class="ai-bg__node"></circle>
-      <circle cx="1735" cy="870" r="5" class="ai-bg__node"></circle>
+    <!-- 右下：多層神經網路拓樸 -->
+    <g class="ai-bg__cluster ai-bg__cluster--neural">
+      <path d="M1365 756L1460 708M1365 756L1460 758M1365 756L1460 808" class="ai-bg__neural-link"></path>
+      <path d="M1365 826L1460 708M1365 826L1460 758M1365 826L1460 808" class="ai-bg__neural-link"></path>
+      <path d="M1365 896L1460 758M1365 896L1460 808M1365 896L1460 858" class="ai-bg__neural-link"></path>
+
+      <path d="M1460 708L1560 678M1460 708L1560 748M1460 708L1560 818" class="ai-bg__neural-link"></path>
+      <path d="M1460 758L1560 678M1460 758L1560 748M1460 758L1560 818" class="ai-bg__neural-link"></path>
+      <path d="M1460 808L1560 678M1460 808L1560 748M1460 808L1560 818" class="ai-bg__neural-link"></path>
+      <path d="M1460 858L1560 748M1460 858L1560 818M1460 858L1560 888" class="ai-bg__neural-link"></path>
+
+      <path d="M1560 678L1670 722M1560 748L1670 722M1560 818L1670 722M1560 888L1670 722" class="ai-bg__neural-link ai-bg__neural-link--strong"></path>
+      <path d="M1670 722L1785 760" class="ai-bg__neural-link ai-bg__neural-link--strong"></path>
+
+      <circle cx="1365" cy="756" r="7" class="ai-bg__neural-node"></circle>
+      <circle cx="1365" cy="826" r="7" class="ai-bg__neural-node"></circle>
+      <circle cx="1365" cy="896" r="7" class="ai-bg__neural-node"></circle>
+
+      <circle cx="1460" cy="708" r="6.4" class="ai-bg__neural-node"></circle>
+      <circle cx="1460" cy="758" r="6.4" class="ai-bg__neural-node"></circle>
+      <circle cx="1460" cy="808" r="6.4" class="ai-bg__neural-node"></circle>
+      <circle cx="1460" cy="858" r="6.4" class="ai-bg__neural-node"></circle>
+
+      <circle cx="1560" cy="678" r="6" class="ai-bg__neural-node"></circle>
+      <circle cx="1560" cy="748" r="6" class="ai-bg__neural-node"></circle>
+      <circle cx="1560" cy="818" r="6" class="ai-bg__neural-node"></circle>
+      <circle cx="1560" cy="888" r="6" class="ai-bg__neural-node"></circle>
+      <circle cx="1670" cy="722" r="7.4" class="ai-bg__neural-node ai-bg__neural-node--hub"></circle>
+      <circle cx="1785" cy="760" r="8" class="ai-bg__neural-node ai-bg__neural-node--hub"></circle>
+    </g>
+
+    <!-- 左下：推理流程與決策節點 -->
+    <g class="ai-bg__cluster ai-bg__cluster--inference">
+      <path d="M70 884H220L285 842H430L506 886H632" class="ai-bg__pipeline" marker-end="url(#aiArrow)"></path>
+      <rect x="98" y="856" width="80" height="24" rx="10" class="ai-bg__stage"></rect>
+      <rect x="304" y="814" width="84" height="24" rx="10" class="ai-bg__stage"></rect>
+      <rect x="522" y="858" width="86" height="24" rx="10" class="ai-bg__stage"></rect>
+      <circle cx="250" cy="866" r="10" class="ai-bg__decision"></circle>
+      <path d="M246 866h8M250 862v8" class="ai-bg__decision-mark"></path>
     </g>
   </svg>
 
+  <!-- B: 強化版附加層 -->
   <svg class="ai-bg__layer ai-bg__layer--b" viewBox="0 0 1920 1080" preserveAspectRatio="none">
-    <g class="ai-bg__chip">
-      <rect x="140" y="640" width="210" height="210" rx="20" class="ai-bg__chip-core"></rect>
-      <rect x="185" y="685" width="120" height="120" rx="12" class="ai-bg__chip-inner"></rect>
-      <path d="M180 625v20M225 625v20M270 625v20M315 625v20" class="ai-bg__pin"></path>
-      <path d="M180 860v20M225 860v20M270 860v20M315 860v20" class="ai-bg__pin"></path>
-      <path d="M125 680h20M125 725h20M125 770h20M125 815h20" class="ai-bg__pin"></path>
-      <path d="M350 680h20M350 725h20M350 770h20M350 815h20" class="ai-bg__pin"></path>
-      <path d="M245 710l0 70M210 745h70" class="ai-bg__chip-mark"></path>
+    <!-- 右上：AI 核心晶片 + 線路 -->
+    <g class="ai-bg__cluster ai-bg__cluster--chip">
+      <rect x="1506" y="82" width="286" height="228" rx="24" class="ai-bg__panel"></rect>
+      <rect x="1586" y="140" width="128" height="112" rx="14" class="ai-bg__chip-core"></rect>
+      <rect x="1616" y="167" width="68" height="58" rx="10" class="ai-bg__chip-inner"></rect>
+      <path d="M1586 196h128M1650 140v112" class="ai-bg__chip-mark"></path>
+
+      <path d="M1582 126v-18M1614 126v-18M1646 126v-18M1678 126v-18M1710 126v-18" class="ai-bg__chip-pin"></path>
+      <path d="M1582 270v18M1614 270v18M1646 270v18M1678 270v18M1710 270v18" class="ai-bg__chip-pin"></path>
+      <path d="M1570 152h-18M1570 182h-18M1570 212h-18M1570 242h-18" class="ai-bg__chip-pin"></path>
+      <path d="M1730 152h18M1730 182h18M1730 212h18M1730 242h18" class="ai-bg__chip-pin"></path>
+
+      <path d="M1508 168H1418V122H1348" class="ai-bg__circuit"></path>
+      <path d="M1508 230H1430V282H1365" class="ai-bg__circuit"></path>
+      <circle cx="1348" cy="122" r="4.5" class="ai-bg__circuit-dot"></circle>
+      <circle cx="1365" cy="282" r="4.5" class="ai-bg__circuit-dot"></circle>
     </g>
 
-    <g class="ai-bg__stream">
-      <path d="M1460 170C1560 130 1650 210 1750 165C1810 140 1870 145 1920 180" class="ai-bg__stream-line"></path>
-      <path d="M1420 235C1520 195 1600 275 1700 230C1785 195 1850 208 1920 250" class="ai-bg__stream-line"></path>
-      <circle cx="1505" cy="152" r="4" class="ai-bg__stream-dot"></circle>
-      <circle cx="1655" cy="175" r="4" class="ai-bg__stream-dot"></circle>
-      <circle cx="1810" cy="158" r="4" class="ai-bg__stream-dot"></circle>
-      <circle cx="1565" cy="226" r="4" class="ai-bg__stream-dot"></circle>
-      <circle cx="1745" cy="224" r="4" class="ai-bg__stream-dot"></circle>
+    <!-- 右下：抽象大腦 + 電路融合 -->
+    <g class="ai-bg__cluster ai-bg__cluster--brain">
+      <path d="M1370 858c0-77 62-130 143-128c27-55 106-67 154-24c66-2 113 52 111 117c46 52 21 144-58 167c-35 58-124 70-177 30c-74 24-173-15-173-103c-42-16-66-47-66-79c0-35 25-69 66-80z" class="ai-bg__brain-outline"></path>
+      <path d="M1452 827c34-36 84-54 133-56M1595 772c54 2 98 21 131 58M1532 742v226M1474 910h160M1612 885c-24 21-52 33-85 35" class="ai-bg__brain-circuit"></path>
+      <circle cx="1452" cy="827" r="5" class="ai-bg__brain-node"></circle>
+      <circle cx="1595" cy="772" r="5" class="ai-bg__brain-node"></circle>
+      <circle cx="1532" cy="742" r="5" class="ai-bg__brain-node"></circle>
+      <circle cx="1532" cy="968" r="5" class="ai-bg__brain-node"></circle>
+      <circle cx="1612" cy="885" r="5" class="ai-bg__brain-node"></circle>
     </g>
 
-    <g class="ai-bg__brain">
-      <path d="M1470 760c-15-70 42-124 110-114c19-54 96-66 140-22c63-3 107 53 99 113c39 45 20 125-44 148c-32 58-120 68-169 29c-75 29-161-20-154-93c-37-17-54-41-54-61c0-31 17-58 72-74z" class="ai-bg__brain-outline"></path>
-      <path d="M1510 800c25-28 59-42 96-44M1618 758c42 2 77 17 105 44M1575 716v160M1537 838h160" class="ai-bg__brain-nerve"></path>
+    <!-- 右側上方：token / inference flow -->
+    <g class="ai-bg__cluster ai-bg__cluster--token-flow">
+      <path d="M1188 156C1312 116 1418 208 1512 168C1602 130 1698 136 1796 188" class="ai-bg__token-flow-path"></path>
+      <path d="M1160 230C1282 190 1388 282 1488 242C1598 200 1706 210 1806 268" class="ai-bg__token-flow-path ai-bg__token-flow-path--thin"></path>
+      <circle cx="1260" cy="142" r="4.5" class="ai-bg__token-flow-dot"></circle>
+      <circle cx="1418" cy="180" r="4.5" class="ai-bg__token-flow-dot"></circle>
+      <circle cx="1580" cy="155" r="4.5" class="ai-bg__token-flow-dot"></circle>
+      <circle cx="1342" cy="238" r="4.5" class="ai-bg__token-flow-dot"></circle>
+      <circle cx="1526" cy="234" r="4.5" class="ai-bg__token-flow-dot"></circle>
+      <circle cx="1706" cy="244" r="4.5" class="ai-bg__token-flow-dot"></circle>
     </g>
   </svg>
 </div>

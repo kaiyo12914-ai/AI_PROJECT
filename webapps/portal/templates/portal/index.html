@@ -15,7 +15,7 @@
 </head>
 <body
   data-base-url="{{ request.script_name }}"
-  class="portal-home {% if request.GET.bg_variant|default:'a'|lower == 'b' %}bg-enhanced{% else %}bg-conservative{% endif %}"
+  class="portal-home {% if request.GET.bg_variant|default:'a'|lower == 'b' %}bg-enhanced{% else %}bg-conservative{% endif %} {% if request.GET.bg_anim == '0' %}bg-anim-off{% endif %}"
 >
 {% with card_variant=request.GET.card_variant|default:'a'|lower bg_variant=request.GET.bg_variant|default:'a'|lower panel_variant=request.GET.panel_variant|default:'a'|lower %}
   {% include "portal/_ai_background.html" with variant=bg_variant %}

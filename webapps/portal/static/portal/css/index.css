@@ -38,98 +38,223 @@ body {
 }
 
 .ai-bg__grid-line {
-  stroke: rgba(37, 99, 235, 0.08);
+  stroke: rgba(30, 64, 175, 0.09);
   stroke-width: 1;
   fill: none;
 }
 
-.ai-bg__trace {
-  stroke: rgba(37, 99, 235, 0.2);
-  stroke-width: 2.2;
+.ai-bg__grid-line-light {
+  stroke: rgba(30, 64, 175, 0.06);
+  stroke-width: 1;
   fill: none;
 }
 
-.ai-bg__node {
-  fill: rgba(37, 99, 235, 0.26);
+.ai-bg__panel {
+  fill: rgba(255, 255, 255, 0.08);
+  stroke: rgba(30, 64, 175, 0.18);
+  stroke-width: 1.4;
 }
 
-.ai-bg__chip-core {
-  fill: rgba(11, 104, 202, 0.16);
-  stroke: rgba(11, 104, 202, 0.32);
-  stroke-width: 1.5;
+.ai-bg__model-layer {
+  fill: rgba(30, 64, 175, 0.12);
+  stroke: rgba(30, 64, 175, 0.2);
+  stroke-width: 1;
 }
 
-.ai-bg__chip-inner {
-  fill: rgba(11, 104, 202, 0.1);
-  stroke: rgba(11, 104, 202, 0.27);
+.ai-bg__flow {
+  stroke: url(#aiFlowStroke);
+  stroke-width: 2.2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-dasharray: 6 10;
+  stroke-linejoin: round;
+}
+
+.ai-bg__flow--thin {
+  stroke-width: 1.6;
+  opacity: 0.86;
+}
+
+.ai-bg__token {
+  fill: rgba(37, 99, 235, 0.45);
+}
+
+.ai-bg__neural-link {
+  stroke: rgba(37, 99, 235, 0.2);
+  stroke-width: 1.45;
+  fill: none;
+  stroke-linecap: round;
+}
+
+.ai-bg__neural-link--strong {
+  stroke: rgba(37, 99, 235, 0.3);
+  stroke-width: 1.75;
+}
+
+.ai-bg__neural-node {
+  fill: rgba(37, 99, 235, 0.28);
+}
+
+.ai-bg__neural-node--hub {
+  fill: rgba(37, 99, 235, 0.42);
+}
+
+.ai-bg__pipeline {
+  stroke: rgba(14, 116, 144, 0.34);
+  stroke-width: 2.2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ai-bg__stage {
+  fill: rgba(14, 116, 144, 0.16);
+  stroke: rgba(14, 116, 144, 0.3);
+  stroke-width: 1;
+}
+
+.ai-bg__decision {
+  fill: rgba(14, 116, 144, 0.2);
+  stroke: rgba(14, 116, 144, 0.34);
   stroke-width: 1.2;
 }
 
-.ai-bg__pin {
-  stroke: rgba(11, 104, 202, 0.28);
-  stroke-width: 2;
+.ai-bg__decision-mark {
+  stroke: rgba(14, 116, 144, 0.38);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.ai-bg__arrow-head {
+  fill: rgba(14, 116, 144, 0.34);
+}
+
+.ai-bg__chip-core {
+  fill: url(#aiChipMetal);
+  stroke: rgba(30, 64, 175, 0.36);
+  stroke-width: 1.4;
+}
+
+.ai-bg__chip-inner {
+  fill: rgba(30, 64, 175, 0.11);
+  stroke: rgba(30, 64, 175, 0.28);
+  stroke-width: 1.2;
 }
 
 .ai-bg__chip-mark {
-  stroke: rgba(11, 104, 202, 0.35);
-  stroke-width: 2.5;
+  stroke: rgba(30, 64, 175, 0.36);
+  stroke-width: 1.8;
 }
 
-.ai-bg__stream-line {
-  stroke: rgba(13, 148, 136, 0.28);
-  stroke-width: 2.3;
+.ai-bg__chip-pin {
+  stroke: rgba(30, 64, 175, 0.34);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.ai-bg__circuit {
+  stroke: rgba(15, 118, 110, 0.3);
+  stroke-width: 2;
   fill: none;
 }
 
-.ai-bg__stream-dot {
-  fill: rgba(13, 148, 136, 0.4);
+.ai-bg__circuit-dot {
+  fill: rgba(15, 118, 110, 0.4);
 }
 
 .ai-bg__brain-outline {
-  fill: rgba(59, 130, 246, 0.07);
-  stroke: rgba(59, 130, 246, 0.24);
-  stroke-width: 2;
+  fill: rgba(37, 99, 235, 0.08);
+  stroke: rgba(37, 99, 235, 0.28);
+  stroke-width: 1.8;
 }
 
-.ai-bg__brain-nerve {
-  stroke: rgba(59, 130, 246, 0.24);
+.ai-bg__brain-circuit {
+  stroke: rgba(37, 99, 235, 0.28);
   stroke-width: 2;
   fill: none;
   stroke-linecap: round;
 }
 
-.bg-conservative .ai-bg__layer--grid {
-  opacity: 0.8;
+.ai-bg__brain-node {
+  fill: rgba(37, 99, 235, 0.4);
+}
+
+.ai-bg__token-flow-path {
+  stroke: rgba(14, 116, 144, 0.32);
+  stroke-width: 2.3;
+  fill: none;
+  stroke-linecap: round;
+  stroke-dasharray: 7 9;
+}
+
+.ai-bg__token-flow-path--thin {
+  stroke-width: 1.7;
+  opacity: 0.84;
+}
+
+.ai-bg__token-flow-dot {
+  fill: rgba(14, 116, 144, 0.42);
+}
+
+.bg-conservative .ai-bg__layer--base {
+  opacity: 0.88;
 }
 
 .bg-conservative .ai-bg__layer--a {
-  opacity: 0.72;
+  opacity: 0.74;
 }
 
 .bg-conservative .ai-bg__layer--b {
   display: none;
 }
 
-.bg-enhanced .ai-bg__layer--grid {
-  opacity: 0.9;
+.bg-enhanced .ai-bg__layer--base {
+  opacity: 0.95;
 }
 
 .bg-enhanced .ai-bg__layer--a {
-  opacity: 0.62;
+  opacity: 0.72;
 }
 
 .bg-enhanced .ai-bg__layer--b {
-  opacity: 0.85;
+  opacity: 0.88;
 }
 
-.bg-enhanced .ai-bg__stream-dot {
-  animation: aiPulse 4.6s ease-in-out infinite;
+.bg-enhanced .ai-bg__flow,
+.bg-enhanced .ai-bg__token-flow-path {
+  animation: aiFlowMove 24s linear infinite;
 }
 
-@keyframes aiPulse {
+.bg-enhanced .ai-bg__neural-node,
+.bg-enhanced .ai-bg__brain-node,
+.bg-enhanced .ai-bg__token-flow-dot,
+.bg-enhanced .ai-bg__token {
+  animation: aiNodePulse 5s ease-in-out infinite;
+}
+
+.bg-enhanced .ai-bg__token-flow-dot:nth-of-type(2),
+.bg-enhanced .ai-bg__token-flow-dot:nth-of-type(4),
+.bg-enhanced .ai-bg__token-flow-dot:nth-of-type(6) {
+  animation-delay: 1.2s;
+}
+
+.bg-anim-off .ai-bg * {
+  animation: none !important;
+}
+
+@keyframes aiFlowMove {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -220;
+  }
+}
+
+@keyframes aiNodePulse {
   0%,
   100% {
-    opacity: 0.46;
+    opacity: 0.38;
   }
   50% {
     opacity: 0.92;
@@ -384,8 +509,8 @@ footer {
     padding: 30px 24px;
   }
 
-  .ai-bg__layer--b {
-    opacity: 0.55;
+  .bg-enhanced .ai-bg__layer--b {
+    opacity: 0.7;
   }
 
   .menu {
@@ -435,23 +560,23 @@ footer {
     font-size: 13px;
   }
 
-  .ai-bg__layer--grid {
-    opacity: 0.5;
+  .ai-bg__layer--base {
+    opacity: 0.58;
   }
 
   .ai-bg__layer--a {
-    opacity: 0.45;
+    opacity: 0.52;
   }
 
-  .ai-bg__chip,
-  .ai-bg__brain,
-  .ai-bg__stream {
+  .ai-bg__cluster--chip,
+  .ai-bg__cluster--brain,
+  .ai-bg__cluster--token-flow {
     display: none;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ai-bg__stream-dot {
+  .ai-bg * {
     animation: none;
   }
 }
