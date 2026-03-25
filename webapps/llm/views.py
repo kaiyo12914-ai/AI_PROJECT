@@ -127,5 +127,14 @@ def translate(request: HttpRequest):
         return JsonResponse(result, status=200)
     except ValueError as ve:
         return _json_error(str(ve), status=400)
+    except RuntimeError as re:
+        msg = str(re)
+        if "AUTO 模式所有後端皆失敗" in msg:
+            return _json_error(
+                "目前無可用翻譯後端，請確認 GOOGLE/OPENAI 金鑰或 OLLAMA 模型是否可用",
+                status=503,
+                detail=msg,
+            )
+        return _json_error("internal error", status=500, detail=repr(re))
     except Exception as e:
         return _json_error("internal error", status=500, detail=repr(e))

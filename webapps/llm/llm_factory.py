@@ -1,8 +1,10 @@
 # webapps/llm/llm_factory.py
 import os
 import inspect
+import json
 import logging
 from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 from dotenv import load_dotenv
 
@@ -183,6 +185,66 @@ def _ollama_fallback_models(primary_model: str) -> list[str]:
     return out
 
 
+def _ollama_list_models(base_url: str, timeout_sec: int = 5) -> list[str]:
+    """
+    Probe Ollama /api/tags and return installed model names.
+    Returns [] when probe fails.
+    """
+    base = (base_url or "").strip().rstrip("/")
+    if not base:
+        return []
+
+    url = f"{base}/api/tags"
+    try:
+        req = Request(url, headers={"Accept": "application/json"})
+        with urlopen(req, timeout=max(1, int(timeout_sec))) as resp:
+            raw = resp.read()
+        payload = json.loads(raw.decode("utf-8", errors="ignore"))
+    except Exception as e:
+        logger.info("[LLM] OLLAMA tags probe failed: %r", e)
+        return []
+
+    models = payload.get("models") or []
+    out: list[str] = []
+    seen = set()
+    for item in models:
+        if isinstance(item, dict):
+            name = (item.get("name") or item.get("model") or "").strip()
+        else:
+            name = str(item).strip()
+        if not name:
+            continue
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(name)
+    return out
+
+
+def _merge_ollama_fallback_models(
+    primary_model: str,
+    *,
+    base_url: str,
+    timeout_sec: int,
+) -> list[str]:
+    merged: list[str] = []
+    seen = set()
+
+    for model_name in _ollama_fallback_models(primary_model) + _ollama_list_models(base_url, timeout_sec):
+        m = (model_name or "").strip()
+        if not m:
+            continue
+        if m.lower() == primary_model.lower():
+            continue
+        key = m.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(m)
+    return merged
+
+
 def _should_try_ollama_fallback(err: Exception) -> bool:
     s = str(err or "").lower()
     return (
@@ -322,18 +384,34 @@ def _make_ollama(temperature: float | None, timeout: int | None):
         kwargs["model"] = model_name
         return OllamaLLM(**kwargs)
 
-    llm = _build_ollama(model)
+    probe_timeout = max(3, min(to, 8))
+    installed_models = _ollama_list_models(base_url, timeout_sec=probe_timeout)
+
+    active_model = model
+    if installed_models and all(m.lower() != model.lower() for m in installed_models):
+        active_model = installed_models[0]
+        logger.warning(
+            "[LLM] OLLAMA model '%s' not found in /api/tags. Auto switch to '%s'.",
+            model,
+            active_model,
+        )
+
+    llm = _build_ollama(active_model)
 
     class LoggedOllama:
         def invoke(self, input, **kwargs):
-            _log_llm_use("OLLAMA", model, temperature=t, timeout=to)
+            _log_llm_use("OLLAMA", active_model, temperature=t, timeout=to)
             try:
                 return llm.invoke(input, **kwargs)
             except Exception as e:
                 if not _should_try_ollama_fallback(e):
                     raise
                 last_err = e
-                for alt in _ollama_fallback_models(model):
+                for alt in _merge_ollama_fallback_models(
+                    active_model,
+                    base_url=base_url,
+                    timeout_sec=probe_timeout,
+                ):
                     try:
                         _log_llm_use("OLLAMA_FALLBACK", alt, temperature=t, timeout=to)
                         return _build_ollama(alt).invoke(input, **kwargs)
@@ -343,14 +421,18 @@ def _make_ollama(temperature: float | None, timeout: int | None):
                 raise last_err
 
         async def ainvoke(self, input, **kwargs):
-            _log_llm_use("OLLAMA", model, temperature=t, timeout=to)
+            _log_llm_use("OLLAMA", active_model, temperature=t, timeout=to)
             try:
                 return await llm.ainvoke(input, **kwargs)
             except Exception as e:
                 if not _should_try_ollama_fallback(e):
                     raise
                 last_err = e
-                for alt in _ollama_fallback_models(model):
+                for alt in _merge_ollama_fallback_models(
+                    active_model,
+                    base_url=base_url,
+                    timeout_sec=probe_timeout,
+                ):
                     try:
                         _log_llm_use("OLLAMA_FALLBACK", alt, temperature=t, timeout=to)
                         return await _build_ollama(alt).ainvoke(input, **kwargs)
@@ -361,7 +443,7 @@ def _make_ollama(temperature: float | None, timeout: int | None):
 
         def __repr__(self):
             backend_name = "OllamaLLM" if _new_pkg else "Ollama(community)"
-            return f"{backend_name}(model={model})"
+            return f"{backend_name}(model={active_model})"
 
     return LoggedOllama()
 
