@@ -251,7 +251,7 @@ def _keep_only_main_slide(prs):
         logger.warning("Failed to clear text on main slide: %s", e)
 
 
-def _retain_representative_slides_and_clear_text(prs, keep_indices: set[int]) -> None:
+def _retain_representative_slides_and_clear_text(prs) -> None:
     """
     Keep total slide count unchanged and clear text on all slides.
     """
@@ -277,19 +277,25 @@ def _slide_layout_identity(slide, fallback_index: int) -> str:
         return f"layout_{fallback_index}"
 
 
-def _collect_layout_representative_slide_parts(prs) -> Dict[str, str]:
+def _collect_layout_occurrences(prs) -> Dict[str, List[Dict[str, Any]]]:
     """
-    For each layout, keep the representative slide part from the last slide.
+    Collect all slide occurrences by layout identity, preserving order.
     """
-    by_layout: Dict[str, str] = {}
+    by_layout: Dict[str, List[Dict[str, Any]]] = {}
     for idx, slide in enumerate(prs.slides):
         key = _slide_layout_identity(slide, idx)
         try:
             part_name = str(slide.part.partname or "").lstrip("/")
         except Exception:
             part_name = ""
-        if part_name:
-            by_layout[key] = part_name
+        if not part_name:
+            continue
+        by_layout.setdefault(key, []).append(
+            {
+                "slide_index": idx,
+                "source_slide_part": part_name,
+            }
+        )
     return by_layout
 
 
@@ -403,142 +409,303 @@ def _copy_content_type_for_part(
             return
 
 
-def _inject_layout_representative_shapes(
-    source_raw: bytes,
-    normalized_raw: bytes,
-    *,
-    layout_representative_slide_map: Dict[str, str],
-    layout_part_map: Dict[str, str],
-) -> bytes:
-    if not layout_representative_slide_map:
-        return normalized_raw
+def _layout_base_name_from_key(layout_key: str) -> str:
+    text = str(layout_key or "")
+    base = text.split("::", 1)[1] if "::" in text else text
+    base = re.sub(r"_\d+$", "", base).strip()
+    return base or "layout"
 
+
+def _next_slide_layout_part_path(file_map: Dict[str, bytes]) -> str:
+    used: List[int] = []
+    for name in file_map.keys():
+        m = re.match(r"^ppt/slideLayouts/slideLayout(\d+)\.xml$", str(name))
+        if m:
+            used.append(int(m.group(1)))
+    nxt = (max(used) + 1) if used else 1
+    return f"ppt/slideLayouts/slideLayout{nxt}.xml"
+
+
+def _copy_content_type_override_for_new_part(content_types_root: ET.Element, source_part: str, new_part: str) -> None:
+    ct_ns = "http://schemas.openxmlformats.org/package/2006/content-types"
+    src_name = f"/{source_part.lstrip('/')}"
+    dst_name = f"/{new_part.lstrip('/')}"
+    exists = any(str(x.get("PartName") or "") == dst_name for x in content_types_root.findall(f"{{{ct_ns}}}Override"))
+    if exists:
+        return
+    for node in content_types_root.findall(f"{{{ct_ns}}}Override"):
+        if str(node.get("PartName") or "") == src_name:
+            new_node = ET.SubElement(content_types_root, f"{{{ct_ns}}}Override")
+            new_node.set("PartName", dst_name)
+            new_node.set("ContentType", str(node.get("ContentType") or "application/xml"))
+            return
+
+
+def _set_layout_display_name(file_map: Dict[str, bytes], layout_part: str, layout_name: str) -> None:
+    p_ns = "http://schemas.openxmlformats.org/presentationml/2006/main"
+    ns = {"p": p_ns}
+    if layout_part not in file_map:
+        return
+    root = ET.fromstring(file_map[layout_part])
+    c_sld = root.find("p:cSld", ns)
+    if c_sld is None:
+        c_sld = root.find(".//p:cSld", ns)
+    if c_sld is not None:
+        c_sld.set("name", layout_name)
+    file_map[layout_part] = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
+def _find_master_binding_for_layout(file_map: Dict[str, bytes], layout_part: str) -> Optional[Dict[str, str]]:
+    rel_ns = "http://schemas.openxmlformats.org/package/2006/relationships"
+    layout_rel_type = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout"
+    for rels_path, raw in file_map.items():
+        if not re.match(r"^ppt/slideMasters/_rels/slideMaster\d+\.xml\.rels$", str(rels_path)):
+            continue
+        master_xml = str(rels_path).replace("/_rels/", "/").replace(".rels", "")
+        if master_xml not in file_map:
+            continue
+        rels_root = ET.fromstring(raw)
+        for rel in rels_root.findall(f"{{{rel_ns}}}Relationship"):
+            if str(rel.get("Type") or "") != layout_rel_type:
+                continue
+            target = str(rel.get("Target") or "")
+            if not target:
+                continue
+            resolved = _resolve_target_part_path(master_xml, target)
+            if resolved == layout_part:
+                return {"master_xml": master_xml, "master_rels": rels_path}
+    return None
+
+
+def _attach_layout_to_master(file_map: Dict[str, bytes], master_xml: str, master_rels: str, new_layout_part: str) -> None:
+    rel_ns = "http://schemas.openxmlformats.org/package/2006/relationships"
+    p_ns = "http://schemas.openxmlformats.org/presentationml/2006/main"
+    r_ns = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    ns = {"p": p_ns}
+
+    rels_root = ET.fromstring(file_map[master_rels])
+    new_rid = _next_rid(rels_root)
+    rel_node = ET.SubElement(rels_root, f"{{{rel_ns}}}Relationship")
+    rel_node.set("Id", new_rid)
+    rel_node.set("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout")
+    rel_target = posixpath.relpath(new_layout_part, posixpath.dirname(master_xml))
+    rel_node.set("Target", rel_target)
+    file_map[master_rels] = ET.tostring(rels_root, encoding="utf-8", xml_declaration=True)
+
+    master_root = ET.fromstring(file_map[master_xml])
+    lst = master_root.find("p:sldLayoutIdLst", ns)
+    if lst is None:
+        lst = ET.SubElement(master_root, f"{{{p_ns}}}sldLayoutIdLst")
+    max_id = 255
+    for node in lst.findall("p:sldLayoutId", ns):
+        try:
+            max_id = max(max_id, int(node.get("id") or 0))
+        except Exception:
+            continue
+    entry = ET.SubElement(lst, f"{{{p_ns}}}sldLayoutId")
+    entry.set("id", str(max_id + 1))
+    entry.set(f"{{{r_ns}}}id", new_rid)
+    file_map[master_xml] = ET.tostring(master_root, encoding="utf-8", xml_declaration=True)
+
+
+def _set_slide_layout_relationship_target(file_map: Dict[str, bytes], slide_part: str, layout_part: str) -> None:
+    rel_ns = "http://schemas.openxmlformats.org/package/2006/relationships"
+    layout_rel_type = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout"
+    rels_path = _rel_path_for_part(slide_part)
+    if rels_path not in file_map:
+        return
+    rels_root = ET.fromstring(file_map[rels_path])
+    changed = False
+    for rel in rels_root.findall(f"{{{rel_ns}}}Relationship"):
+        if str(rel.get("Type") or "") != layout_rel_type:
+            continue
+        target = posixpath.relpath(layout_part, posixpath.dirname(slide_part))
+        rel.set("Target", target)
+        changed = True
+    if changed:
+        file_map[rels_path] = ET.tostring(rels_root, encoding="utf-8", xml_declaration=True)
+
+
+def _replace_layout_content_from_source_slide(
+    *,
+    file_map: Dict[str, bytes],
+    source_map: Dict[str, bytes],
+    src_content_types_root: ET.Element,
+    dst_content_types_root: ET.Element,
+    source_slide_part: str,
+    target_layout_part: str,
+) -> None:
     p_ns = "http://schemas.openxmlformats.org/presentationml/2006/main"
     rel_ns = "http://schemas.openxmlformats.org/package/2006/relationships"
     rel_attr_ns = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
     ns = {"p": p_ns}
-    content_types_name = "[Content_Types].xml"
 
+    if source_slide_part not in source_map or target_layout_part not in file_map:
+        return
+
+    source_slide_root = ET.fromstring(source_map[source_slide_part])
+    source_sp_tree = source_slide_root.find(".//p:spTree", ns)
+    if source_sp_tree is None:
+        return
+
+    source_shape_nodes: List[ET.Element] = []
+    for node in list(source_sp_tree):
+        if _local_name(node.tag) in {"nvGrpSpPr", "grpSpPr"}:
+            continue
+        if _is_placeholder_shape_node(node, ns):
+            continue
+        source_shape_nodes.append(node)
+
+    layout_root = ET.fromstring(file_map[target_layout_part])
+    sp_tree = layout_root.find(".//p:spTree", ns)
+    if sp_tree is None:
+        return
+
+    for node in list(sp_tree):
+        if _local_name(node.tag) in {"nvGrpSpPr", "grpSpPr"}:
+            continue
+        if _is_placeholder_shape_node(node, ns):
+            continue
+        sp_tree.remove(node)
+
+    rels_path = _rel_path_for_part(target_layout_part)
+    if rels_path in file_map:
+        rels_root = ET.fromstring(file_map[rels_path])
+    else:
+        rels_root = ET.Element(f"{{{rel_ns}}}Relationships")
+
+    src_slide_rels_path = _rel_path_for_part(source_slide_part)
+    if src_slide_rels_path in source_map:
+        src_slide_rels_root = ET.fromstring(source_map[src_slide_rels_path])
+    else:
+        src_slide_rels_root = ET.Element(f"{{{rel_ns}}}Relationships")
+    src_rel_by_id: Dict[str, ET.Element] = {
+        str(rel.get("Id") or ""): rel
+        for rel in src_slide_rels_root.findall(f"{{{rel_ns}}}Relationship")
+    }
+
+    for node in source_shape_nodes:
+        cloned = copy.deepcopy(node)
+        _clear_text_in_shape_xml(cloned)
+
+        rid_map: Dict[str, str] = {}
+        for el in cloned.iter():
+            for attr_name, attr_val in list(el.attrib.items()):
+                if not attr_name.startswith("{") or not attr_val:
+                    continue
+                ns_uri, _local = attr_name[1:].split("}", 1)
+                if ns_uri != rel_attr_ns:
+                    continue
+                old_rid = str(attr_val)
+                if old_rid not in rid_map:
+                    src_rel = src_rel_by_id.get(old_rid)
+                    if src_rel is None:
+                        continue
+                    new_rid = _next_rid(rels_root)
+                    rid_map[old_rid] = new_rid
+
+                    new_rel = ET.SubElement(rels_root, f"{{{rel_ns}}}Relationship")
+                    new_rel.set("Id", new_rid)
+                    new_rel.set("Type", str(src_rel.get("Type") or ""))
+                    new_rel.set("Target", str(src_rel.get("Target") or ""))
+                    target_mode = str(src_rel.get("TargetMode") or "")
+                    if target_mode:
+                        new_rel.set("TargetMode", target_mode)
+
+                    if target_mode.lower() != "external":
+                        target = str(src_rel.get("Target") or "")
+                        if target:
+                            src_target_part = _resolve_target_part_path(source_slide_part, target)
+                            if src_target_part in source_map and src_target_part not in file_map:
+                                file_map[src_target_part] = source_map[src_target_part]
+                            if src_target_part in source_map:
+                                _copy_content_type_for_part(
+                                    part_path=src_target_part,
+                                    src_content_types_root=src_content_types_root,
+                                    dst_content_types_root=dst_content_types_root,
+                                )
+                mapped = rid_map.get(old_rid)
+                if mapped:
+                    el.set(attr_name, mapped)
+
+        sp_tree.append(cloned)
+
+    file_map[target_layout_part] = ET.tostring(layout_root, encoding="utf-8", xml_declaration=True)
+    file_map[rels_path] = ET.tostring(rels_root, encoding="utf-8", xml_declaration=True)
+
+
+def _inject_layout_representative_shapes(
+    source_raw: bytes,
+    normalized_raw: bytes,
+    *,
+    layout_occurrences: Dict[str, List[Dict[str, Any]]],
+    layout_part_map: Dict[str, str],
+) -> bytes:
+    if not layout_occurrences:
+        return normalized_raw
+
+    content_types_name = "[Content_Types].xml"
     source_map: Dict[str, bytes] = {}
     with zipfile.ZipFile(io.BytesIO(source_raw), "r") as zf_source:
         for name in zf_source.namelist():
             source_map[name] = zf_source.read(name)
 
-    src = io.BytesIO(normalized_raw)
-    out = io.BytesIO()
-    with zipfile.ZipFile(src, "r") as zin:
-        all_names = zin.namelist()
-        file_map: Dict[str, bytes] = {name: zin.read(name) for name in all_names}
+    with zipfile.ZipFile(io.BytesIO(normalized_raw), "r") as zin:
+        file_map: Dict[str, bytes] = {name: zin.read(name) for name in zin.namelist()}
 
     src_content_types_root = ET.fromstring(source_map[content_types_name])
     content_types_root = ET.fromstring(file_map[content_types_name])
 
-    for key, slide_part_path in layout_representative_slide_map.items():
-        if not slide_part_path:
+    for key, occs in layout_occurrences.items():
+        if not occs:
             continue
-        part_name = layout_part_map.get(key)
-        if not part_name:
-            continue
-        layout_path = str(part_name).lstrip("/")
-        if layout_path not in file_map:
-            continue
-        if slide_part_path not in source_map:
+        original_layout = str(layout_part_map.get(key) or "").lstrip("/")
+        if not original_layout or original_layout not in file_map:
             continue
 
-        source_slide_root = ET.fromstring(source_map[slide_part_path])
-        source_sp_tree = source_slide_root.find(".//p:spTree", ns)
-        if source_sp_tree is None:
-            continue
+        target_layouts = [original_layout]
+        if len(occs) > 1:
+            binding = _find_master_binding_for_layout(file_map, original_layout)
+            if binding:
+                for _ in range(1, len(occs)):
+                    new_layout = _next_slide_layout_part_path(file_map)
+                    file_map[new_layout] = file_map[original_layout]
+                    original_layout_rels = _rel_path_for_part(original_layout)
+                    new_layout_rels = _rel_path_for_part(new_layout)
+                    if original_layout_rels in file_map:
+                        file_map[new_layout_rels] = file_map[original_layout_rels]
+                    _copy_content_type_override_for_new_part(content_types_root, original_layout, new_layout)
+                    _attach_layout_to_master(
+                        file_map,
+                        binding["master_xml"],
+                        binding["master_rels"],
+                        new_layout,
+                    )
+                    target_layouts.append(new_layout)
 
-        source_shape_nodes: List[ET.Element] = []
-        for node in list(source_sp_tree):
-            if _local_name(node.tag) in {"nvGrpSpPr", "grpSpPr"}:
-                continue
-            if _is_placeholder_shape_node(node, ns):
-                continue
-            source_shape_nodes.append(node)
+        if len(occs) > 1:
+            base = _layout_base_name_from_key(key)
+            for idx, layout_part in enumerate(target_layouts, start=1):
+                _set_layout_display_name(file_map, layout_part, f"{base}_{idx}")
 
-        layout_root = ET.fromstring(file_map[layout_path])
-        sp_tree = layout_root.find(".//p:spTree", ns)
-        if sp_tree is None:
-            continue
-
-        # Remove existing non-placeholder content shapes from layout, keep placeholders.
-        for node in list(sp_tree):
-            if _local_name(node.tag) in {"nvGrpSpPr", "grpSpPr"}:
-                continue
-            if _is_placeholder_shape_node(node, ns):
-                continue
-            sp_tree.remove(node)
-
-        rels_path = _rel_path_for_part(layout_path)
-        if rels_path in file_map:
-            rels_root = ET.fromstring(file_map[rels_path])
-        else:
-            rels_root = ET.Element(f"{{{rel_ns}}}Relationships")
-
-        src_slide_rels_path = _rel_path_for_part(slide_part_path)
-        if src_slide_rels_path in source_map:
-            src_slide_rels_root = ET.fromstring(source_map[src_slide_rels_path])
-        else:
-            src_slide_rels_root = ET.Element(f"{{{rel_ns}}}Relationships")
-        src_rel_by_id: Dict[str, ET.Element] = {
-            str(rel.get("Id") or ""): rel
-            for rel in src_slide_rels_root.findall(f"{{{rel_ns}}}Relationship")
-        }
-
-        for node in source_shape_nodes:
-            cloned = copy.deepcopy(node)
-            _clear_text_in_shape_xml(cloned)
-
-            rid_map: Dict[str, str] = {}
-            for el in cloned.iter():
-                for attr_name, attr_val in list(el.attrib.items()):
-                    if not attr_name.startswith("{") or not attr_val:
-                        continue
-                    ns_uri, local = attr_name[1:].split("}", 1)
-                    if ns_uri != rel_attr_ns:
-                        continue
-                    old_rid = str(attr_val)
-                    if old_rid not in rid_map:
-                        src_rel = src_rel_by_id.get(old_rid)
-                        if src_rel is None:
-                            continue
-                        new_rid = _next_rid(rels_root)
-                        rid_map[old_rid] = new_rid
-
-                        new_rel = ET.SubElement(rels_root, f"{{{rel_ns}}}Relationship")
-                        new_rel.set("Id", new_rid)
-                        new_rel.set("Type", str(src_rel.get("Type") or ""))
-                        new_rel.set("Target", str(src_rel.get("Target") or ""))
-                        target_mode = str(src_rel.get("TargetMode") or "")
-                        if target_mode:
-                            new_rel.set("TargetMode", target_mode)
-
-                        # Copy internal related part bytes from source package.
-                        if target_mode.lower() != "external":
-                            target = str(src_rel.get("Target") or "")
-                            if target:
-                                src_target_part = _resolve_target_part_path(slide_part_path, target)
-                                if src_target_part in source_map and src_target_part not in file_map:
-                                    file_map[src_target_part] = source_map[src_target_part]
-                                if src_target_part in source_map:
-                                    _copy_content_type_for_part(
-                                        part_path=src_target_part,
-                                        src_content_types_root=src_content_types_root,
-                                        dst_content_types_root=content_types_root,
-                                    )
-                    mapped = rid_map.get(old_rid)
-                    if mapped:
-                        el.set(attr_name, mapped)
-
-            sp_tree.append(cloned)
-
-        file_map[layout_path] = ET.tostring(layout_root, encoding="utf-8", xml_declaration=True)
-        file_map[rels_path] = ET.tostring(rels_root, encoding="utf-8", xml_declaration=True)
+        for idx, occ in enumerate(occs):
+            target_layout = target_layouts[min(idx, len(target_layouts) - 1)]
+            src_slide_part = str(occ.get("source_slide_part") or "").strip()
+            if src_slide_part:
+                _replace_layout_content_from_source_slide(
+                    file_map=file_map,
+                    source_map=source_map,
+                    src_content_types_root=src_content_types_root,
+                    dst_content_types_root=content_types_root,
+                    source_slide_part=src_slide_part,
+                    target_layout_part=target_layout,
+                )
+            normalized_slide_part = str(occ.get("normalized_slide_part") or "").strip()
+            if normalized_slide_part:
+                _set_slide_layout_relationship_target(file_map, normalized_slide_part, target_layout)
 
     file_map[content_types_name] = ET.tostring(content_types_root, encoding="utf-8", xml_declaration=True)
-
+    out = io.BytesIO()
     with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zout:
         for name, raw_data in file_map.items():
             zout.writestr(name, raw_data)
@@ -1987,21 +2154,31 @@ def _convert_pptx_bytes_to_potx_bytes(raw: bytes) -> bytes:
     normalized_raw = raw
     try:
         src_prs = Presentation(io.BytesIO(raw))
-        layout_representative_slide_map = _collect_layout_representative_slide_parts(src_prs)
+        layout_occurrences = _collect_layout_occurrences(src_prs)
 
         prs = Presentation(io.BytesIO(raw))
-        _retain_representative_slides_and_clear_text(prs, set())
+        _retain_representative_slides_and_clear_text(prs)
         normalized_buf = io.BytesIO()
         prs.save(normalized_buf)
         normalized_raw = normalized_buf.getvalue()
 
-        if layout_representative_slide_map:
+        if layout_occurrences:
             normalized_prs = Presentation(io.BytesIO(normalized_raw))
             layout_part_map = _layout_identity_to_partname_map(normalized_prs)
+            normalized_slide_parts = [
+                str(slide.part.partname or "").lstrip("/")
+                for slide in normalized_prs.slides
+            ]
+            for occs in layout_occurrences.values():
+                for occ in occs:
+                    idx = int(occ.get("slide_index", -1))
+                    occ["normalized_slide_part"] = (
+                        normalized_slide_parts[idx] if 0 <= idx < len(normalized_slide_parts) else ""
+                    )
             normalized_raw = _inject_layout_representative_shapes(
                 raw,
                 normalized_raw,
-                layout_representative_slide_map=layout_representative_slide_map,
+                layout_occurrences=layout_occurrences,
                 layout_part_map=layout_part_map,
             )
     except Exception as e:

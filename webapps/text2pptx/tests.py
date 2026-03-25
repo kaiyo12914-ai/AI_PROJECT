@@ -488,70 +488,84 @@ mirjam@contoso.com"""
             slide_parts = [name for name in zf.namelist() if name.startswith("ppt/slides/slide") and name.endswith(".xml")]
             self.assertEqual(len(slide_parts), 2)
 
-            slide_xml_name = slide_parts[0]
-            slide_idx = os.path.splitext(os.path.basename(slide_xml_name))[0].replace("slide", "")
-            slide_rels_path = f"ppt/slides/_rels/slide{slide_idx}.xml.rels"
-            slide_rels_root = ET.fromstring(zf.read(slide_rels_path))
-            layout_target = None
-            for rel in slide_rels_root.findall("r:Relationship", rel_ns):
-                if rel.get("Type") == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout":
-                    layout_target = rel.get("Target")
-                    break
-            self.assertIsNotNone(layout_target)
-            assert layout_target is not None
-            layout_part_name = ("ppt/slides/" + layout_target).replace("\\", "/")
-            if "/../" in layout_part_name:
-                # resolve "ppt/slides/../slideLayouts/slideLayoutX.xml"
-                parts = []
-                for part in layout_part_name.split("/"):
-                    if part == "..":
-                        if parts:
-                            parts.pop()
-                    elif part and part != ".":
-                        parts.append(part)
-                layout_part_name = "/".join(parts)
+            layout_parts_for_slides: List[str] = []
+            for slide_xml_name in sorted(slide_parts):
+                slide_idx = os.path.splitext(os.path.basename(slide_xml_name))[0].replace("slide", "")
+                slide_rels_path = f"ppt/slides/_rels/slide{slide_idx}.xml.rels"
+                slide_rels_root = ET.fromstring(zf.read(slide_rels_path))
+                layout_target = None
+                for rel in slide_rels_root.findall("r:Relationship", rel_ns):
+                    if rel.get("Type") == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout":
+                        layout_target = rel.get("Target")
+                        break
+                self.assertIsNotNone(layout_target)
+                assert layout_target is not None
+                layout_part_name = ("ppt/slides/" + layout_target).replace("\\", "/")
+                if "/../" in layout_part_name:
+                    parts = []
+                    for part in layout_part_name.split("/"):
+                        if part == "..":
+                            if parts:
+                                parts.pop()
+                        elif part and part != ".":
+                            parts.append(part)
+                    layout_part_name = "/".join(parts)
+                layout_parts_for_slides.append(layout_part_name)
 
-            layout_root = ET.fromstring(zf.read(layout_part_name))
-            pic_nodes = layout_root.findall(".//p:pic", p_ns)
-            self.assertEqual(len(pic_nodes), 1)
+            # Same layout should be split into two variants.
+            self.assertEqual(len(set(layout_parts_for_slides)), 2)
 
-            sp_nodes = layout_root.findall(".//p:sp", p_ns)
-            non_placeholder_sp_nodes = [n for n in sp_nodes if n.find("p:nvSpPr/p:nvPr/p:ph", p_ns) is None]
-            self.assertTrue(len(non_placeholder_sp_nodes) >= 2)
+            extracted_images: List[bytes] = []
+            layout_names: List[str] = []
+            for layout_part_name in layout_parts_for_slides:
+                layout_root = ET.fromstring(zf.read(layout_part_name))
+                c_sld = layout_root.find("p:cSld", p_ns)
+                layout_names.append(str(c_sld.get("name") if c_sld is not None else ""))
 
-            for node in non_placeholder_sp_nodes:
-                node_text_values = [str(t.text or "").strip() for t in node.findall(".//a:t", p_ns)]
-                self.assertFalse(any(node_text_values))
+                pic_nodes = layout_root.findall(".//p:pic", p_ns)
+                self.assertEqual(len(pic_nodes), 1)
 
-            layout_xml_text = zf.read(layout_part_name).decode("utf-8", errors="ignore")
-            self.assertNotIn("OLD_TEXT_1", layout_xml_text)
-            self.assertNotIn("LATEST_TEXT_2", layout_xml_text)
-            self.assertNotIn("OLD_SHAPE_TEXT", layout_xml_text)
-            self.assertNotIn("LATEST_SHAPE_TEXT", layout_xml_text)
+                sp_nodes = layout_root.findall(".//p:sp", p_ns)
+                non_placeholder_sp_nodes = [n for n in sp_nodes if n.find("p:nvSpPr/p:nvPr/p:ph", p_ns) is None]
+                self.assertTrue(len(non_placeholder_sp_nodes) >= 2)
 
-            blip = layout_root.find(".//a:blip", p_ns)
-            self.assertIsNotNone(blip)
-            assert blip is not None
-            image_rel_id = blip.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed")
-            self.assertTrue(image_rel_id)
+                for node in non_placeholder_sp_nodes:
+                    node_text_values = [str(t.text or "").strip() for t in node.findall(".//a:t", p_ns)]
+                    self.assertFalse(any(node_text_values))
 
-            layout_filename = os.path.basename(layout_part_name)
-            rels_path = f"ppt/slideLayouts/_rels/{layout_filename}.rels"
-            rels_root = ET.fromstring(zf.read(rels_path))
-            image_target = None
-            for rel in rels_root.findall("r:Relationship", rel_ns):
-                if rel.get("Id") == image_rel_id:
-                    image_target = rel.get("Target")
-                    break
-            self.assertIsNotNone(image_target)
-            assert image_target is not None
+                layout_xml_text = zf.read(layout_part_name).decode("utf-8", errors="ignore")
+                self.assertNotIn("OLD_TEXT_1", layout_xml_text)
+                self.assertNotIn("LATEST_TEXT_2", layout_xml_text)
+                self.assertNotIn("OLD_SHAPE_TEXT", layout_xml_text)
+                self.assertNotIn("LATEST_SHAPE_TEXT", layout_xml_text)
 
-            if image_target.startswith("../"):
-                image_path = "ppt/" + image_target[3:]
-            else:
-                image_path = "ppt/slideLayouts/" + image_target
-            image_bytes = zf.read(image_path)
-            self.assertEqual(image_bytes, img_b)
+                blip = layout_root.find(".//a:blip", p_ns)
+                self.assertIsNotNone(blip)
+                assert blip is not None
+                image_rel_id = blip.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed")
+                self.assertTrue(image_rel_id)
+
+                layout_filename = os.path.basename(layout_part_name)
+                rels_path = f"ppt/slideLayouts/_rels/{layout_filename}.rels"
+                rels_root = ET.fromstring(zf.read(rels_path))
+                image_target = None
+                for rel in rels_root.findall("r:Relationship", rel_ns):
+                    if rel.get("Id") == image_rel_id:
+                        image_target = rel.get("Target")
+                        break
+                self.assertIsNotNone(image_target)
+                assert image_target is not None
+
+                if image_target.startswith("../"):
+                    image_path = "ppt/" + image_target[3:]
+                else:
+                    image_path = "ppt/slideLayouts/" + image_target
+                extracted_images.append(zf.read(image_path))
+
+            # Verify both source images are preserved across layout variants.
+            self.assertEqual(set(extracted_images), {img_a, img_b})
+            self.assertTrue(any(name.endswith("_1") for name in layout_names))
+            self.assertTrue(any(name.endswith("_2") for name in layout_names))
 
     def test_safe_select_template_supports_chinese_filename(self):
         with tempfile.TemporaryDirectory(dir=os.getcwd(), ignore_cleanup_errors=True) as td:
