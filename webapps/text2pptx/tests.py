@@ -416,6 +416,42 @@ mirjam@contoso.com"""
                 "application/vnd.openxmlformats-officedocument.presentationml.template.main+xml",
             )
 
+    def test_convert_pptx_to_potx_keeps_representative_slides_for_each_layout(self):
+        from pptx import Presentation
+
+        prs = Presentation()
+        layout_a = prs.slide_layouts[0]
+        layout_b = prs.slide_layouts[1] if len(prs.slide_layouts) > 1 else layout_a
+
+        s1 = prs.slides.add_slide(layout_a)
+        if s1.shapes.title:
+            s1.shapes.title.text = "A1"
+        s2 = prs.slides.add_slide(layout_a)
+        if s2.shapes.title:
+            s2.shapes.title.text = "A2"
+
+        s3 = prs.slides.add_slide(layout_b)
+        if s3.shapes.title:
+            s3.shapes.title.text = "B1"
+        s4 = prs.slides.add_slide(layout_b)
+        if s4.shapes.title:
+            s4.shapes.title.text = "B2"
+
+        src = io.BytesIO()
+        prs.save(src)
+        potx_raw = views._convert_pptx_bytes_to_potx_bytes(src.getvalue())
+
+        expected_count = 1 if layout_a == layout_b else 2
+        with zipfile.ZipFile(io.BytesIO(potx_raw), "r") as zf:
+            slide_parts = [name for name in zf.namelist() if name.startswith("ppt/slides/slide") and name.endswith(".xml")]
+            self.assertEqual(len(slide_parts), expected_count)
+
+            a_ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
+            for slide_part in slide_parts:
+                slide_root = ET.fromstring(zf.read(slide_part))
+                text_nodes = [str(n.text or "").strip() for n in slide_root.findall(".//a:t", a_ns)]
+                self.assertFalse(any(text_nodes))
+
     def test_convert_pptx_to_potx_same_layout_keeps_last_picture(self):
         from pptx import Presentation
         from pptx.util import Inches
