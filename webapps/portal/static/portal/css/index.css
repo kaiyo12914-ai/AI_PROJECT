@@ -1,18 +1,151 @@
 body {
   font-family: "Microsoft JhengHei", "Noto Sans TC", Arial, sans-serif;
-  background: #f5f7fa;
+  background: linear-gradient(180deg, #edf2f8 0%, #f5f7fa 40%, #eef3f9 100%);
   margin: 0;
   padding: 0;
   color: #2a3342;
 }
 
+.portal-home {
+  position: relative;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.portal-home::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at center, rgba(255, 255, 255, 0.76) 0%, rgba(255, 255, 255, 0.46) 42%, rgba(255, 255, 255, 0.16) 70%, rgba(255, 255, 255, 0.04) 100%);
+}
+
+.ai-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.ai-bg__layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.ai-bg__grid-line {
+  stroke: rgba(37, 99, 235, 0.08);
+  stroke-width: 1;
+  fill: none;
+}
+
+.ai-bg__trace {
+  stroke: rgba(37, 99, 235, 0.2);
+  stroke-width: 2.2;
+  fill: none;
+}
+
+.ai-bg__node {
+  fill: rgba(37, 99, 235, 0.26);
+}
+
+.ai-bg__chip-core {
+  fill: rgba(11, 104, 202, 0.16);
+  stroke: rgba(11, 104, 202, 0.32);
+  stroke-width: 1.5;
+}
+
+.ai-bg__chip-inner {
+  fill: rgba(11, 104, 202, 0.1);
+  stroke: rgba(11, 104, 202, 0.27);
+  stroke-width: 1.2;
+}
+
+.ai-bg__pin {
+  stroke: rgba(11, 104, 202, 0.28);
+  stroke-width: 2;
+}
+
+.ai-bg__chip-mark {
+  stroke: rgba(11, 104, 202, 0.35);
+  stroke-width: 2.5;
+}
+
+.ai-bg__stream-line {
+  stroke: rgba(13, 148, 136, 0.28);
+  stroke-width: 2.3;
+  fill: none;
+}
+
+.ai-bg__stream-dot {
+  fill: rgba(13, 148, 136, 0.4);
+}
+
+.ai-bg__brain-outline {
+  fill: rgba(59, 130, 246, 0.07);
+  stroke: rgba(59, 130, 246, 0.24);
+  stroke-width: 2;
+}
+
+.ai-bg__brain-nerve {
+  stroke: rgba(59, 130, 246, 0.24);
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+}
+
+.bg-conservative .ai-bg__layer--grid {
+  opacity: 0.8;
+}
+
+.bg-conservative .ai-bg__layer--a {
+  opacity: 0.72;
+}
+
+.bg-conservative .ai-bg__layer--b {
+  display: none;
+}
+
+.bg-enhanced .ai-bg__layer--grid {
+  opacity: 0.9;
+}
+
+.bg-enhanced .ai-bg__layer--a {
+  opacity: 0.62;
+}
+
+.bg-enhanced .ai-bg__layer--b {
+  opacity: 0.85;
+}
+
+.bg-enhanced .ai-bg__stream-dot {
+  animation: aiPulse 4.6s ease-in-out infinite;
+}
+
+@keyframes aiPulse {
+  0%,
+  100% {
+    opacity: 0.46;
+  }
+  50% {
+    opacity: 0.92;
+  }
+}
+
 .container {
   max-width: 960px;
   margin: 80px auto 48px;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(2px);
   padding: 40px;
   border-radius: 12px;
   box-shadow: 0 6px 18px rgba(16, 24, 40, 0.08);
+  position: relative;
+  z-index: 1;
 }
 
 h1 {
@@ -231,6 +364,10 @@ footer {
     padding: 30px 24px;
   }
 
+  .ai-bg__layer--b {
+    opacity: 0.55;
+  }
+
   .menu {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -241,9 +378,14 @@ footer {
 }
 
 @media (max-width: 680px) {
+  .portal-home::before {
+    background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0.62) 46%, rgba(255, 255, 255, 0.24) 100%);
+  }
+
   .container {
     padding: 24px 16px;
     border-radius: 10px;
+    background: rgba(255, 255, 255, 0.95);
   }
 
   .menu {
@@ -260,5 +402,25 @@ footer {
 
   .svg-card__subtitle {
     font-size: 13px;
+  }
+
+  .ai-bg__layer--grid {
+    opacity: 0.5;
+  }
+
+  .ai-bg__layer--a {
+    opacity: 0.45;
+  }
+
+  .ai-bg__chip,
+  .ai-bg__brain,
+  .ai-bg__stream {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-bg__stream-dot {
+    animation: none;
   }
 }

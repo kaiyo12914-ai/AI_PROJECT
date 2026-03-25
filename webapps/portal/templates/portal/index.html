@@ -13,8 +13,12 @@
   <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
   <script defer src="{% static 'portal/js/index.js' %}"></script>
 </head>
-<body data-base-url="{{ request.script_name }}">
-{% with card_variant=request.GET.card_variant|default:'a'|lower %}
+<body
+  data-base-url="{{ request.script_name }}"
+  class="portal-home {% if request.GET.bg_variant|default:'a'|lower == 'b' %}bg-enhanced{% else %}bg-conservative{% endif %}"
+>
+{% with card_variant=request.GET.card_variant|default:'a'|lower bg_variant=request.GET.bg_variant|default:'a'|lower %}
+  {% include "portal/_ai_background.html" with variant=bg_variant %}
   <div class="container">
     <h1>AI（雛形）輔助系統入口</h1>
     <div class="subtitle">請選擇欲使用之系統功能</div>

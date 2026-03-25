@@ -1,0 +1,77 @@
+<div class="ai-bg ai-bg--{{ variant|default:'a' }}" aria-hidden="true">
+  <svg class="ai-bg__layer ai-bg__layer--grid" viewBox="0 0 1920 1080" preserveAspectRatio="none">
+    <defs>
+      <pattern id="aiGridPattern" width="56" height="56" patternUnits="userSpaceOnUse">
+        <path d="M56 0H0V56" class="ai-bg__grid-line"></path>
+      </pattern>
+      <linearGradient id="aiGlowA" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="rgba(44, 123, 229, 0.22)"></stop>
+        <stop offset="100%" stop-color="rgba(44, 123, 229, 0)"></stop>
+      </linearGradient>
+      <linearGradient id="aiGlowB" x1="1" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="rgba(14, 165, 164, 0.2)"></stop>
+        <stop offset="100%" stop-color="rgba(14, 165, 164, 0)"></stop>
+      </linearGradient>
+    </defs>
+    <rect x="0" y="0" width="1920" height="1080" fill="url(#aiGridPattern)"></rect>
+    <ellipse cx="280" cy="150" rx="260" ry="180" fill="url(#aiGlowA)"></ellipse>
+    <ellipse cx="1630" cy="940" rx="300" ry="220" fill="url(#aiGlowB)"></ellipse>
+  </svg>
+
+  <svg class="ai-bg__layer ai-bg__layer--a" viewBox="0 0 1920 1080" preserveAspectRatio="none">
+    <g class="ai-bg__network ai-bg__network--left">
+      <path d="M100 170L230 230L320 170L430 250L520 190" class="ai-bg__trace"></path>
+      <path d="M210 290L300 240L390 300L480 260" class="ai-bg__trace"></path>
+      <circle cx="100" cy="170" r="6" class="ai-bg__node"></circle>
+      <circle cx="230" cy="230" r="6" class="ai-bg__node"></circle>
+      <circle cx="320" cy="170" r="6" class="ai-bg__node"></circle>
+      <circle cx="430" cy="250" r="6" class="ai-bg__node"></circle>
+      <circle cx="520" cy="190" r="6" class="ai-bg__node"></circle>
+      <circle cx="210" cy="290" r="5" class="ai-bg__node"></circle>
+      <circle cx="300" cy="240" r="5" class="ai-bg__node"></circle>
+      <circle cx="390" cy="300" r="5" class="ai-bg__node"></circle>
+      <circle cx="480" cy="260" r="5" class="ai-bg__node"></circle>
+    </g>
+
+    <g class="ai-bg__network ai-bg__network--right">
+      <path d="M1410 840L1510 770L1620 820L1710 760L1820 820" class="ai-bg__trace"></path>
+      <path d="M1430 930L1530 870L1625 930L1735 870" class="ai-bg__trace"></path>
+      <circle cx="1410" cy="840" r="6" class="ai-bg__node"></circle>
+      <circle cx="1510" cy="770" r="6" class="ai-bg__node"></circle>
+      <circle cx="1620" cy="820" r="6" class="ai-bg__node"></circle>
+      <circle cx="1710" cy="760" r="6" class="ai-bg__node"></circle>
+      <circle cx="1820" cy="820" r="6" class="ai-bg__node"></circle>
+      <circle cx="1430" cy="930" r="5" class="ai-bg__node"></circle>
+      <circle cx="1530" cy="870" r="5" class="ai-bg__node"></circle>
+      <circle cx="1625" cy="930" r="5" class="ai-bg__node"></circle>
+      <circle cx="1735" cy="870" r="5" class="ai-bg__node"></circle>
+    </g>
+  </svg>
+
+  <svg class="ai-bg__layer ai-bg__layer--b" viewBox="0 0 1920 1080" preserveAspectRatio="none">
+    <g class="ai-bg__chip">
+      <rect x="140" y="640" width="210" height="210" rx="20" class="ai-bg__chip-core"></rect>
+      <rect x="185" y="685" width="120" height="120" rx="12" class="ai-bg__chip-inner"></rect>
+      <path d="M180 625v20M225 625v20M270 625v20M315 625v20" class="ai-bg__pin"></path>
+      <path d="M180 860v20M225 860v20M270 860v20M315 860v20" class="ai-bg__pin"></path>
+      <path d="M125 680h20M125 725h20M125 770h20M125 815h20" class="ai-bg__pin"></path>
+      <path d="M350 680h20M350 725h20M350 770h20M350 815h20" class="ai-bg__pin"></path>
+      <path d="M245 710l0 70M210 745h70" class="ai-bg__chip-mark"></path>
+    </g>
+
+    <g class="ai-bg__stream">
+      <path d="M1460 170C1560 130 1650 210 1750 165C1810 140 1870 145 1920 180" class="ai-bg__stream-line"></path>
+      <path d="M1420 235C1520 195 1600 275 1700 230C1785 195 1850 208 1920 250" class="ai-bg__stream-line"></path>
+      <circle cx="1505" cy="152" r="4" class="ai-bg__stream-dot"></circle>
+      <circle cx="1655" cy="175" r="4" class="ai-bg__stream-dot"></circle>
+      <circle cx="1810" cy="158" r="4" class="ai-bg__stream-dot"></circle>
+      <circle cx="1565" cy="226" r="4" class="ai-bg__stream-dot"></circle>
+      <circle cx="1745" cy="224" r="4" class="ai-bg__stream-dot"></circle>
+    </g>
+
+    <g class="ai-bg__brain">
+      <path d="M1470 760c-15-70 42-124 110-114c19-54 96-66 140-22c63-3 107 53 99 113c39 45 20 125-44 148c-32 58-120 68-169 29c-75 29-161-20-154-93c-37-17-54-41-54-61c0-31 17-58 72-74z" class="ai-bg__brain-outline"></path>
+      <path d="M1510 800c25-28 59-42 96-44M1618 758c42 2 77 17 105 44M1575 716v160M1537 838h160" class="ai-bg__brain-nerve"></path>
+    </g>
+  </svg>
+</div>
