@@ -1,117 +1,116 @@
 <div class="ai-bg ai-bg--{{ variant|default:'a' }}" aria-hidden="true">
   <svg class="ai-bg__layer ai-bg__layer--base" viewBox="0 0 1920 1080" preserveAspectRatio="none">
     <defs>
-      <pattern id="aiMeshPattern" width="120" height="120" patternUnits="userSpaceOnUse">
-        <path d="M120 0H0V120" class="ai-bg__mesh-line"></path>
+      <pattern id="aiGridSoft" width="128" height="128" patternUnits="userSpaceOnUse">
+        <path d="M128 0H0V128" class="ai-bg__mesh-line"></path>
       </pattern>
-      <pattern id="aiDotPattern" width="80" height="80" patternUnits="userSpaceOnUse">
-        <circle cx="3" cy="3" r="1.4" class="ai-bg__mesh-dot"></circle>
+      <pattern id="aiDotsSoft" width="86" height="86" patternUnits="userSpaceOnUse">
+        <circle cx="3" cy="3" r="1.2" class="ai-bg__mesh-dot"></circle>
       </pattern>
-      <radialGradient id="aiGlowLeft" cx="0.06" cy="0.12" r="0.46">
-        <stop offset="0%" stop-color="rgba(37, 99, 235, 0.16)"></stop>
+
+      <radialGradient id="aiLeftGlow" cx="0.12" cy="0.18" r="0.45">
+        <stop offset="0%" stop-color="rgba(37, 99, 235, 0.20)"></stop>
         <stop offset="100%" stop-color="rgba(37, 99, 235, 0)"></stop>
       </radialGradient>
-      <radialGradient id="aiGlowRight" cx="0.9" cy="0.84" r="0.54">
-        <stop offset="0%" stop-color="rgba(14, 116, 144, 0.16)"></stop>
-        <stop offset="100%" stop-color="rgba(14, 116, 144, 0)"></stop>
+      <radialGradient id="aiRightGlow" cx="0.88" cy="0.80" r="0.48">
+        <stop offset="0%" stop-color="rgba(8, 145, 178, 0.19)"></stop>
+        <stop offset="100%" stop-color="rgba(8, 145, 178, 0)"></stop>
       </radialGradient>
-      <radialGradient id="aiTriggerGlow" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stop-color="rgba(147, 232, 255, 0.92)"></stop>
-        <stop offset="35%" stop-color="rgba(147, 232, 255, 0.35)"></stop>
-        <stop offset="100%" stop-color="rgba(147, 232, 255, 0)"></stop>
+      <radialGradient id="aiTouchGlow" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="rgba(194, 244, 255, 0.95)"></stop>
+        <stop offset="28%" stop-color="rgba(194, 244, 255, 0.33)"></stop>
+        <stop offset="100%" stop-color="rgba(194, 244, 255, 0)"></stop>
       </radialGradient>
-      <marker id="aiFlowArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-        <path d="M1 1L7 4L1 7Z" class="ai-bg__flow-arrow"></path>
+      <marker id="aiFlowArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+        <path d="M1 1L8 4.5L1 8Z" class="ai-bg__flow-arrow"></path>
       </marker>
     </defs>
 
-    <rect x="0" y="0" width="1920" height="1080" fill="url(#aiMeshPattern)"></rect>
-    <rect x="0" y="0" width="1920" height="1080" fill="url(#aiDotPattern)"></rect>
-    <rect x="0" y="0" width="1920" height="1080" fill="url(#aiGlowLeft)"></rect>
-    <rect x="0" y="0" width="1920" height="1080" fill="url(#aiGlowRight)"></rect>
+    <rect x="0" y="0" width="1920" height="1080" fill="url(#aiGridSoft)"></rect>
+    <rect x="0" y="0" width="1920" height="1080" fill="url(#aiDotsSoft)"></rect>
+    <rect x="0" y="0" width="1920" height="1080" fill="url(#aiLeftGlow)"></rect>
+    <rect x="0" y="0" width="1920" height="1080" fill="url(#aiRightGlow)"></rect>
   </svg>
 
-  <!-- A: 保守版，AI 中樞 + HUD + 低調手勢 -->
+  <!-- A: conservative -->
   <svg class="ai-bg__layer ai-bg__layer--a" viewBox="0 0 1920 1080" preserveAspectRatio="none">
-    <!-- 左上：神經網路與模型連線 -->
-    <g class="ai-bg__cluster ai-bg__cluster--network">
-      <path d="M92 138L188 108L274 152L352 116L432 164" class="ai-bg__network-link"></path>
-      <path d="M118 228L204 184L288 228L368 192L450 232" class="ai-bg__network-link"></path>
-      <path d="M84 306L174 256L258 304L336 266L414 308" class="ai-bg__network-link ai-bg__network-link--soft"></path>
-      <circle cx="92" cy="138" r="5" class="ai-bg__node"></circle>
-      <circle cx="188" cy="108" r="5" class="ai-bg__node"></circle>
-      <circle cx="274" cy="152" r="5" class="ai-bg__node"></circle>
-      <circle cx="352" cy="116" r="5" class="ai-bg__node"></circle>
-      <circle cx="432" cy="164" r="5" class="ai-bg__node"></circle>
-      <circle cx="118" cy="228" r="4.6" class="ai-bg__node"></circle>
-      <circle cx="204" cy="184" r="4.6" class="ai-bg__node"></circle>
-      <circle cx="288" cy="228" r="4.6" class="ai-bg__node"></circle>
-      <circle cx="368" cy="192" r="4.6" class="ai-bg__node"></circle>
-      <circle cx="450" cy="232" r="4.6" class="ai-bg__node"></circle>
+    <g class="ai-bg__cluster ai-bg__cluster--ai-hand">
+      <path d="M78 312L192 284L286 304L372 286L468 312L564 300L666 322L768 352L878 370L1002 286" class="ai-bg__network-link"></path>
+      <path d="M96 364L206 336L302 354L388 340L486 362L586 350L688 370L792 394L902 410L1008 300" class="ai-bg__network-link"></path>
+      <path d="M122 418L232 392L328 410L420 396L514 420L612 412L712 438L812 462L904 474" class="ai-bg__network-link ai-bg__network-link--soft"></path>
+      <path d="M188 474L302 452L404 466L510 484L612 504L716 526L820 548" class="ai-bg__network-link ai-bg__network-link--soft"></path>
+
+      <circle cx="192" cy="284" r="4.2" class="ai-bg__node"></circle>
+      <circle cx="372" cy="286" r="4.2" class="ai-bg__node"></circle>
+      <circle cx="564" cy="300" r="4.2" class="ai-bg__node"></circle>
+      <circle cx="768" cy="352" r="4.2" class="ai-bg__node"></circle>
+      <circle cx="902" cy="410" r="4.2" class="ai-bg__node"></circle>
+      <circle cx="1008" cy="300" r="4.4" class="ai-bg__node"></circle>
     </g>
 
-    <!-- 右側：AI 核心與 HUD 控制環 -->
-    <g class="ai-bg__cluster ai-bg__cluster--core">
-      <circle cx="1548" cy="522" r="170" class="ai-bg__hud-ring"></circle>
-      <circle cx="1548" cy="522" r="128" class="ai-bg__hud-ring ai-bg__hud-ring--inner"></circle>
-      <circle cx="1548" cy="522" r="92" class="ai-bg__hud-ring ai-bg__hud-ring--core"></circle>
-      <path d="M1398 522H1698M1548 372V672" class="ai-bg__hud-cross"></path>
-      <path d="M1464 404A136 136 0 0 1 1668 470" class="ai-bg__hud-arc"></path>
-      <path d="M1432 588A136 136 0 0 0 1672 602" class="ai-bg__hud-arc ai-bg__hud-arc--soft"></path>
-
-      <rect x="1496" y="470" width="104" height="104" rx="18" class="ai-bg__chip-frame"></rect>
-      <rect x="1524" y="498" width="48" height="48" rx="10" class="ai-bg__chip-inner"></rect>
-      <path d="M1510 522H1586M1548 484V560" class="ai-bg__chip-mark"></path>
-      <path d="M1496 486h-18M1496 514h-18M1496 542h-18M1600 486h18M1600 514h18M1600 542h18" class="ai-bg__chip-pin"></path>
+    <g class="ai-bg__cluster ai-bg__cluster--human-hand">
+      <path d="M1918 262C1780 258 1666 264 1560 286C1452 310 1364 342 1294 376C1238 404 1184 432 1128 454" class="ai-bg__hand-outline"></path>
+      <path d="M1128 454C1098 466 1068 480 1036 494" class="ai-bg__hand-outline ai-bg__hand-outline--finger"></path>
+      <path d="M1678 394C1766 388 1848 394 1918 406" class="ai-bg__hand-outline ai-bg__hand-outline--palm"></path>
+      <path d="M1504 336C1462 338 1418 350 1380 372C1344 392 1316 418 1288 446" class="ai-bg__hand-outline ai-bg__hand-outline--palm"></path>
     </g>
 
-    <!-- 左下：資料推理流程 -->
+    <g class="ai-bg__cluster ai-bg__cluster--touch-core">
+      <circle cx="1030" cy="496" r="62" class="ai-bg__trigger-glow"></circle>
+      <circle cx="1030" cy="496" r="6.4" class="ai-bg__trigger-core"></circle>
+
+      <circle cx="1404" cy="690" r="144" class="ai-bg__hud-ring"></circle>
+      <circle cx="1404" cy="690" r="108" class="ai-bg__hud-ring ai-bg__hud-ring--inner"></circle>
+      <circle cx="1404" cy="690" r="78" class="ai-bg__hud-ring ai-bg__hud-ring--inner"></circle>
+      <path d="M1260 690H1548M1404 546V834" class="ai-bg__hud-cross"></path>
+      <path d="M1284 596A124 124 0 0 1 1506 632" class="ai-bg__hud-arc"></path>
+      <path d="M1290 790A124 124 0 0 0 1512 770" class="ai-bg__hud-arc ai-bg__hud-arc--soft"></path>
+
+      <rect x="1350" y="636" width="108" height="108" rx="18" class="ai-bg__chip-frame"></rect>
+      <rect x="1380" y="666" width="48" height="48" rx="10" class="ai-bg__chip-core"></rect>
+      <path d="M1366 690H1442M1404 652V728" class="ai-bg__chip-mark"></path>
+      <path d="M1350 654h-16M1350 690h-16M1350 726h-16M1458 654h16M1458 690h16M1458 726h16" class="ai-bg__chip-pin"></path>
+
+      <path d="M1030 496C1080 530 1152 576 1230 618C1294 652 1350 674 1404 690" class="ai-bg__token-flow"></path>
+      <circle cx="1122" cy="552" r="4" class="ai-bg__token-dot"></circle>
+      <circle cx="1212" cy="606" r="4" class="ai-bg__token-dot"></circle>
+      <circle cx="1302" cy="650" r="4" class="ai-bg__token-dot"></circle>
+    </g>
+
     <g class="ai-bg__cluster ai-bg__cluster--flow">
-      <path d="M88 898H220L282 860H398L456 896H584" class="ai-bg__flow-line" marker-end="url(#aiFlowArrow)"></path>
-      <rect x="114" y="874" width="68" height="19" rx="8" class="ai-bg__flow-stage"></rect>
-      <rect x="300" y="838" width="70" height="19" rx="8" class="ai-bg__flow-stage"></rect>
-      <rect x="474" y="872" width="72" height="19" rx="8" class="ai-bg__flow-stage"></rect>
-      <circle cx="252" cy="883" r="8" class="ai-bg__flow-node"></circle>
-      <path d="M248 883h8M252 879v8" class="ai-bg__flow-node-mark"></path>
-    </g>
-
-    <!-- 右下：淡化手勢輪廓 -->
-    <g class="ai-bg__cluster ai-bg__cluster--hand-soft">
-      <path d="M1910 926C1824 856 1738 790 1670 724C1618 674 1576 632 1518 592" class="ai-bg__hand-stroke"></path>
-      <path d="M1516 592C1488 572 1468 548 1450 532" class="ai-bg__hand-stroke ai-bg__hand-stroke--finger"></path>
-      <circle cx="1450" cy="532" r="24" class="ai-bg__trigger-dot"></circle>
+      <path d="M88 888H208L284 850H402L468 886H598" class="ai-bg__flow-line" marker-end="url(#aiFlowArrow)"></path>
+      <rect x="110" y="864" width="72" height="20" rx="7" class="ai-bg__flow-stage"></rect>
+      <rect x="304" y="832" width="74" height="20" rx="7" class="ai-bg__flow-stage"></rect>
+      <rect x="486" y="862" width="76" height="20" rx="7" class="ai-bg__flow-stage"></rect>
+      <circle cx="254" cy="874" r="8" class="ai-bg__flow-node"></circle>
+      <path d="M250 874h8M254 870v8" class="ai-bg__flow-node-mark"></path>
     </g>
   </svg>
 
-  <!-- B: 強化版，增加人手觸發與操作台語意 -->
+  <!-- B: enhanced -->
   <svg class="ai-bg__layer ai-bg__layer--b" viewBox="0 0 1920 1080" preserveAspectRatio="none">
-    <!-- 人手觸控輪廓（非寫實） -->
-    <g class="ai-bg__cluster ai-bg__cluster--hand-strong">
-      <path d="M1918 874C1826 804 1748 744 1688 680C1630 620 1588 586 1544 556C1514 536 1494 518 1474 496" class="ai-bg__hand-outline"></path>
-      <path d="M1474 496C1456 480 1440 468 1426 454" class="ai-bg__hand-outline ai-bg__hand-outline--finger"></path>
-      <path d="M1588 668C1628 702 1680 744 1738 792" class="ai-bg__hand-outline ai-bg__hand-outline--palm"></path>
-      <circle cx="1426" cy="454" r="64" class="ai-bg__trigger-glow"></circle>
-      <circle cx="1426" cy="454" r="7.2" class="ai-bg__trigger-core"></circle>
-    </g>
-
-    <!-- 右上：AI 控制台 HUD 刻度 -->
     <g class="ai-bg__cluster ai-bg__cluster--hud-panel">
-      <path d="M1324 156A282 282 0 0 1 1832 244" class="ai-bg__hud-track"></path>
-      <path d="M1312 210A282 282 0 0 1 1820 300" class="ai-bg__hud-track ai-bg__hud-track--thin"></path>
-      <path d="M1386 176L1400 214M1462 164L1472 204M1538 162L1542 202M1614 170L1612 210M1690 188L1682 226M1762 214L1748 248" class="ai-bg__hud-tick"></path>
+      <path d="M1246 90A380 380 0 0 1 1910 242" class="ai-bg__hud-track"></path>
+      <path d="M1238 156A380 380 0 0 1 1902 312" class="ai-bg__hud-track ai-bg__hud-track--thin"></path>
+      <path d="M1320 110L1336 160M1400 96L1412 148M1480 92L1486 146M1560 98L1560 152M1640 114L1632 166M1714 140L1698 188M1782 174L1760 218" class="ai-bg__hud-tick"></path>
     </g>
 
-    <!-- 從觸發點往外的資料流 -->
-    <g class="ai-bg__cluster ai-bg__cluster--token-flow">
-      <path d="M1426 454C1328 418 1224 422 1132 468C1072 498 1010 536 934 550" class="ai-bg__token-flow"></path>
-      <path d="M1426 454C1314 458 1212 506 1128 572C1076 612 1028 654 970 682" class="ai-bg__token-flow ai-bg__token-flow--soft"></path>
-      <circle cx="1338" cy="436" r="4.1" class="ai-bg__token-dot"></circle>
-      <circle cx="1236" cy="456" r="4.1" class="ai-bg__token-dot"></circle>
-      <circle cx="1134" cy="500" r="4.1" class="ai-bg__token-dot"></circle>
-      <circle cx="1058" cy="542" r="4.1" class="ai-bg__token-dot"></circle>
-      <circle cx="1288" cy="486" r="4.1" class="ai-bg__token-dot"></circle>
-      <circle cx="1180" cy="556" r="4.1" class="ai-bg__token-dot"></circle>
-      <circle cx="1080" cy="620" r="4.1" class="ai-bg__token-dot"></circle>
+    <g class="ai-bg__cluster ai-bg__cluster--assistant-panel">
+      <rect x="94" y="106" width="236" height="108" rx="14" class="ai-bg__assist-box"></rect>
+      <path d="M120 136h182M120 160h150M120 184h116" class="ai-bg__assist-line"></path>
+      <rect x="126" y="230" width="170" height="26" rx="10" class="ai-bg__assist-chip"></rect>
+    </g>
+
+    <g class="ai-bg__cluster ai-bg__cluster--trigger-flow">
+      <path d="M1030 496C908 470 774 502 656 578C582 626 514 688 448 750" class="ai-bg__token-flow"></path>
+      <path d="M1404 690C1298 730 1206 804 1128 896C1086 944 1044 990 996 1040" class="ai-bg__token-flow ai-bg__token-flow--soft"></path>
+      <circle cx="930" cy="492" r="4" class="ai-bg__token-dot"></circle>
+      <circle cx="826" cy="520" r="4" class="ai-bg__token-dot"></circle>
+      <circle cx="722" cy="568" r="4" class="ai-bg__token-dot"></circle>
+      <circle cx="620" cy="642" r="4" class="ai-bg__token-dot"></circle>
+      <circle cx="1318" cy="738" r="4" class="ai-bg__token-dot"></circle>
+      <circle cx="1240" cy="806" r="4" class="ai-bg__token-dot"></circle>
+      <circle cx="1168" cy="890" r="4" class="ai-bg__token-dot"></circle>
     </g>
   </svg>
 </div>

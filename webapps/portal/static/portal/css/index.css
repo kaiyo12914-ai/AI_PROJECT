@@ -113,6 +113,12 @@ body {
   stroke-width: 1.2;
 }
 
+.ai-bg__chip-core {
+  fill: rgba(194, 244, 255, 0.2);
+  stroke: rgba(37, 99, 235, 0.2);
+  stroke-width: 1;
+}
+
 .ai-bg__chip-inner {
   fill: rgba(255, 255, 255, 0.08);
   stroke: rgba(37, 99, 235, 0.2);
@@ -192,7 +198,7 @@ body {
 }
 
 .ai-bg__trigger-glow {
-  fill: url(#aiTriggerGlow);
+  fill: url(#aiTouchGlow);
 }
 
 .ai-bg__trigger-core {
@@ -231,6 +237,24 @@ body {
 
 .ai-bg__token-dot {
   fill: rgba(37, 99, 235, 0.25);
+}
+
+.ai-bg__assist-box {
+  fill: rgba(255, 255, 255, 0.03);
+  stroke: rgba(37, 99, 235, 0.12);
+  stroke-width: 1.1;
+}
+
+.ai-bg__assist-line {
+  stroke: rgba(37, 99, 235, 0.16);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+}
+
+.ai-bg__assist-chip {
+  fill: rgba(14, 116, 144, 0.09);
+  stroke: rgba(14, 116, 144, 0.15);
+  stroke-width: 1;
 }
 
 .bg-conservative .ai-bg__layer--base {
@@ -604,10 +628,10 @@ footer {
     opacity: 0.45;
   }
 
-  .ai-bg__cluster--chip,
-  .ai-bg__cluster--brain,
-  .ai-bg__cluster--token-flow,
-  .ai-bg__cluster--hand-strong {
+  .ai-bg__cluster--assistant-panel,
+  .ai-bg__cluster--hud-panel,
+  .ai-bg__cluster--trigger-flow,
+  .ai-bg__cluster--flow {
     display: none;
   }
 }
