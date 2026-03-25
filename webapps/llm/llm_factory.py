@@ -50,19 +50,18 @@ def _resolved_model_priority() -> list[str]:
     Resolve AUTO backend priority by ENV first, then MODEL_PRIORITY, then legacy fallback.
     - ENV=DEV_IN/DEV_INT/PROD_INT: force OLLAMA only (intranet policy)
     - ENV=DEV_EXT/PROD_EXT: default GOOGLE -> OPENAI -> OLLAMA
-    - Legacy aliases: EXT/DEV->DEV_EXT, INT->DEV_IN, PROD->PROD_EXT.
+    - Legacy aliases: EXT/DEV->DEV_EXT, INT->DEV_INT, PROD->PROD_EXT.
     """
     env_name = (os.getenv("ENV") or "").strip().upper()
     env_name = {
         "EXT": "DEV_EXT",
         "DEV": "DEV_EXT",
-        "DEV_INT": "DEV_IN",
-        "INT": "DEV_IN",
+        "INT": "DEV_INT",
         "PROD": "PROD_EXT",
     }.get(env_name, env_name)
     raw_prio = (os.getenv("MODEL_PRIORITY") or "").strip()
 
-    if env_name in ("DEV_IN", "PROD_INT"):
+    if env_name in ("DEV_IN", "DEV_INT", "PROD_INT"):
         return ["OLLAMA"]
 
     if env_name in ("DEV_EXT", "PROD_EXT"):

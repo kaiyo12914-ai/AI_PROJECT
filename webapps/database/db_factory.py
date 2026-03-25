@@ -55,20 +55,19 @@ def _external_db_disabled() -> bool:
     ENV mode hard rules:
     - DEV_EXT / PROD_EXT: always use mock JSON, never connect external DB.
     - DEV_IN / DEV_INT / PROD_INT: always use external DB, never use mock JSON.
-    - Legacy aliases: EXT/DEV->DEV_EXT, INT->DEV_IN, PROD->PROD_EXT.
+    - Legacy aliases: EXT/DEV->DEV_EXT, INT->DEV_INT, PROD->PROD_EXT.
     - Others: default to external DB.
     """
     env_mode = (os.getenv("ENV") or "").strip().upper()
     env_mode = {
         "EXT": "DEV_EXT",
         "DEV": "DEV_EXT",
-        "DEV_INT": "DEV_IN",
-        "INT": "DEV_IN",
+        "INT": "DEV_INT",
         "PROD": "PROD_EXT",
     }.get(env_mode, env_mode)
     if env_mode in ("DEV_EXT", "PROD_EXT"):
         return True
-    if env_mode in ("DEV_IN", "PROD_INT"):
+    if env_mode in ("DEV_IN", "DEV_INT", "PROD_INT"):
         return False
     return False
 
