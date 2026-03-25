@@ -388,14 +388,14 @@ mirjam@contoso.com"""
         views._clear_all_slides(prs)
         self.assertEqual(len(prs.slides), 0)
 
-    def test_convert_pptx_to_potx_keeps_only_one_main_slide(self):
+    def test_convert_pptx_to_potx_keeps_total_slide_count(self):
         raw = _build_multi_slide_pptx_bytes_for_upload(slide_count=3)
         potx_raw = views._convert_pptx_bytes_to_potx_bytes(raw)
 
         ns = {"ct": "http://schemas.openxmlformats.org/package/2006/content-types"}
         with zipfile.ZipFile(io.BytesIO(potx_raw), "r") as zf:
             slide_parts = [name for name in zf.namelist() if name.startswith("ppt/slides/slide") and name.endswith(".xml")]
-            self.assertEqual(len(slide_parts), 1)
+            self.assertEqual(len(slide_parts), 3)
 
             slide_root = ET.fromstring(zf.read(slide_parts[0]))
             a_ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
@@ -441,7 +441,7 @@ mirjam@contoso.com"""
         prs.save(src)
         potx_raw = views._convert_pptx_bytes_to_potx_bytes(src.getvalue())
 
-        expected_count = 1 if layout_a == layout_b else 2
+        expected_count = 4
         with zipfile.ZipFile(io.BytesIO(potx_raw), "r") as zf:
             slide_parts = [name for name in zf.namelist() if name.startswith("ppt/slides/slide") and name.endswith(".xml")]
             self.assertEqual(len(slide_parts), expected_count)
@@ -486,7 +486,7 @@ mirjam@contoso.com"""
         }
         with zipfile.ZipFile(io.BytesIO(potx_raw), "r") as zf:
             slide_parts = [name for name in zf.namelist() if name.startswith("ppt/slides/slide") and name.endswith(".xml")]
-            self.assertEqual(len(slide_parts), 1)
+            self.assertEqual(len(slide_parts), 2)
 
             slide_xml_name = slide_parts[0]
             slide_idx = os.path.splitext(os.path.basename(slide_xml_name))[0].replace("slide", "")

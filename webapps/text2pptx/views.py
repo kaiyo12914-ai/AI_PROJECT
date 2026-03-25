@@ -253,7 +253,7 @@ def _keep_only_main_slide(prs):
 
 def _retain_representative_slides_and_clear_text(prs, keep_indices: set[int]) -> None:
     """
-    Keep only selected representative slides and clear text on retained slides.
+    Keep total slide count unchanged and clear text on all slides.
     """
     try:
         total = len(prs.slides)
@@ -261,20 +261,6 @@ def _retain_representative_slides_and_clear_text(prs, keep_indices: set[int]) ->
         total = 0
     if total <= 0:
         return
-
-    if not keep_indices:
-        keep_indices = {0}
-
-    try:
-        sld_id_list = prs.slides._sldIdLst  # pylint: disable=protected-access
-        for idx, sld_id in enumerate(list(sld_id_list)):
-            if idx in keep_indices:
-                continue
-            r_id = sld_id.rId
-            prs.part.drop_rel(r_id)
-            sld_id_list.remove(sld_id)
-    except Exception as e:
-        logger.warning("Failed to retain representative slides: %s", e)
 
     for slide in prs.slides:
         _clear_all_text_on_slide(slide)
@@ -304,17 +290,6 @@ def _collect_layout_representative_slide_parts(prs) -> Dict[str, str]:
             part_name = ""
         if part_name:
             by_layout[key] = part_name
-    return by_layout
-
-
-def _collect_layout_representative_slide_indices(prs) -> Dict[str, int]:
-    """
-    For each layout, keep the last slide index as representative.
-    """
-    by_layout: Dict[str, int] = {}
-    for idx, slide in enumerate(prs.slides):
-        key = _slide_layout_identity(slide, idx)
-        by_layout[key] = idx
     return by_layout
 
 
@@ -2007,17 +1982,15 @@ def _convert_pptx_bytes_to_potx_bytes(raw: bytes) -> bytes:
     content_types_name = "[Content_Types].xml"
     ns = {"ct": "http://schemas.openxmlformats.org/package/2006/content-types"}
 
-    # Keep representative slides (one per layout), clear text, and move
+    # Keep total slide count, clear text, and move
     # representative-layout shapes (picture/group/freeform/textbox...) into layout parts.
     normalized_raw = raw
     try:
         src_prs = Presentation(io.BytesIO(raw))
         layout_representative_slide_map = _collect_layout_representative_slide_parts(src_prs)
-        layout_representative_index_map = _collect_layout_representative_slide_indices(src_prs)
-        keep_indices = set(layout_representative_index_map.values())
 
         prs = Presentation(io.BytesIO(raw))
-        _retain_representative_slides_and_clear_text(prs, keep_indices)
+        _retain_representative_slides_and_clear_text(prs, set())
         normalized_buf = io.BytesIO()
         prs.save(normalized_buf)
         normalized_raw = normalized_buf.getvalue()
