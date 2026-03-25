@@ -43,7 +43,7 @@
     </div>
 
     <div class="obj-guide">
-      <div class="obj-guide-title">文字內容對應（精簡版）</div>
+      <div class="obj-guide-title">文字內容與模板對應說明</div>
       <div class="obj-grid">
         <div class="obj-card">
           <div class="obj-card-title">封面</div>
@@ -69,6 +69,25 @@
             <li>需包含四種版型；缺少時會提示。</li>
           </ul>
         </div>
+        <div class="obj-card">
+          <div class="obj-card-title">版面名稱（優先）</div>
+          <ul>
+            <li>來源：PPTX 實際使用的版面配置名稱（例如：感謝您、市場比較）。</li>
+            <li>用途：優先匹配模板中同名版型，命中率最高。</li>
+            <li>抽取格式：每頁標頭為 <b>[版面名稱]投影片標題</b>。</li>
+          </ul>
+        </div>
+        <div class="obj-card">
+          <div class="obj-card-title">slide_type（備援）</div>
+          <ul>
+            <li>來源：系統判斷的結構類型（content / section / two_content / comparison）。</li>
+            <li>用途：當版面名稱無法匹配時，改用結構類型挑選相近版型。</li>
+            <li>特性：跨模板通用，但精準度低於版面名稱。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="obj-guide-summary">
+        套用順序：先嘗試 <b>版面名稱</b> 對應模板版型，若找不到再回退到 <b>slide_type</b>。
       </div>
     </div>
 

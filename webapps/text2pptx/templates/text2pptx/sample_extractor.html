@@ -34,12 +34,51 @@
       上傳既有 <b>.pptx</b> 檔案後，系統會擷取投影片文字並轉成 text2pptx 可直接使用的範例格式（以 <b>===</b> 分段）。
     </div>
 
+    <div class="obj-guide">
+      <div class="obj-guide-title">模板套用規則（版面名稱優先，slide_type 備援）</div>
+      <div class="obj-grid">
+        <div class="obj-card">
+          <div class="obj-card-title">版面名稱（優先）</div>
+          <ul>
+            <li>來源：PPTX 實際套用的版面配置名稱（例如：感謝您、市場比較）。</li>
+            <li>用途：優先用來匹配模板中的同名版型，命中率最高。</li>
+            <li>抽取格式：每頁標頭為 <b>[版面名稱]投影片標題</b>。</li>
+          </ul>
+        </div>
+        <div class="obj-card">
+          <div class="obj-card-title">slide_type（備援）</div>
+          <ul>
+            <li>來源：系統判斷的結構類型（content / section / two_content / comparison）。</li>
+            <li>用途：當版面名稱無法匹配時，改用結構類型挑選相近版型。</li>
+            <li>特性：跨模板通用，但精準度低於版面名稱。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="small">
+        套用順序：先嘗試 <b>版面名稱</b> 對應模板版型，若找不到再回退到 <b>slide_type</b>。
+      </div>
+    </div>
+
     <div class="import-box">
       <div class="import-title">上傳 PPTX</div>
       <form method="post" enctype="multipart/form-data" class="import-form">
         {% csrf_token %}
         <input type="file" name="pptx_file" accept=".pptx" required>
         <button type="submit">抽取範例</button>
+        <button
+          type="button"
+          id="extract-master-template-btn"
+          data-api-url="{% url 'pptx_extract_template' %}"
+        >
+          抽取母片模板
+        </button>
+        <button
+          type="button"
+          id="extract-sample-and-master-btn"
+          data-api-url="{% url 'pptx_extract_template' %}"
+        >
+          抽取範例及母片
+        </button>
       </form>
       <div class="small">僅支援 .pptx。若內容過長會依系統上限自動截斷。</div>
     </div>
@@ -72,7 +111,42 @@
       >
         帶回主頁使用
       </button>
+      <button type="button" id="import-master-template-btn" class="btn-secondary">匯入母片模板</button>
+      <button
+        type="button"
+        id="generate-restored-pptx-btn"
+        class="btn-secondary"
+        data-api-url="{% url 'pptx_generate_restored_pptx' %}"
+      >
+        生成還原簡報
+      </button>
+      <input
+        type="file"
+        id="master-template-file-input"
+        accept=".json,.txt,application/json,text/plain"
+        hidden
+      >
     </div>
+
+    <div id="template-import-info" class="small" hidden>
+      已匯入模板檔名：<b id="imported-template-filename"></b>
+    </div>
+    <div id="template-preview-toggle-wrap" class="small" hidden>
+      <label for="toggle-template-preview" class="template-toggle-label">
+        <input type="checkbox" id="toggle-template-preview" checked>
+        顯示模板內容預覽
+      </label>
+    </div>
+    <div id="template-preview-wrap" hidden>
+      <label for="imported-template-text">母片模板內容</label>
+      <textarea id="imported-template-text" class="prompt-preview-textarea" readonly></textarea>
+    </div>
+
+    <div id="restored-pptx-result-wrap" class="small" hidden>
+      <span id="restored-pptx-result-message"></span>
+      <a id="restored-pptx-download-link" class="admin-link" href="#" hidden>下載還原簡報</a>
+    </div>
+    <div id="restored-pptx-feedback" class="msg" style="display:none;"></div>
   </div>
 </body>
 </html>

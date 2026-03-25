@@ -99,6 +99,22 @@ button:hover { background:#c65f0a; }
 .form-actions button {
   margin-top: 0;
 }
+.template-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+#template-preview-wrap {
+  margin-top: 8px;
+}
+#restored-pptx-result-wrap {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 .btn-secondary {
   background: #4f647f;
 }
@@ -219,6 +235,11 @@ button:hover { background:#c65f0a; }
   color: #566274;
   font-size: 12px;
   line-height: 1.6;
+}
+.obj-guide-summary {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #4d5f77;
 }
 @media (max-width: 720px){
   .obj-grid { grid-template-columns: 1fr; }
