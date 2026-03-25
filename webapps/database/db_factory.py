@@ -56,10 +56,6 @@ def _normalize_env_name(raw: str) -> str:
 def _env_scoped_get(name: str) -> str:
     env_name = _normalize_env_name(os.getenv("ENV") or "DEV_EXT")
     candidates = [f"{name}__{env_name}"]
-    if env_name == "DEV_INT":
-        candidates.append(f"{name}__DEV_IN")
-    elif env_name == "DEV_IN":
-        candidates.append(f"{name}__DEV_INT")
     candidates.append(name)
     for key in candidates:
         v = os.getenv(key)
@@ -80,14 +76,14 @@ def _external_db_disabled() -> bool:
     """
     ENV mode hard rules:
     - DEV_EXT / PROD_EXT: always use mock JSON, never connect external DB.
-    - DEV_IN / DEV_INT / PROD_INT: always use external DB, never use mock JSON.
+    - DEV_INT / PROD_INT: always use external DB, never use mock JSON.
     - Legacy aliases: EXT/DEV->DEV_EXT, INT->DEV_INT, PROD->PROD_EXT.
     - Others: default to external DB.
     """
     env_mode = _normalize_env_name(os.getenv("ENV") or "DEV_EXT")
     if env_mode in ("DEV_EXT", "PROD_EXT"):
         return True
-    if env_mode in ("DEV_IN", "DEV_INT", "PROD_INT"):
+    if env_mode in ("DEV_INT", "PROD_INT"):
         return False
     return False
 

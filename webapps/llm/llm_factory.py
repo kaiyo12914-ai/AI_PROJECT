@@ -28,10 +28,6 @@ def _active_env_name() -> str:
 def _env_keys(name: str) -> list[str]:
     env_name = _active_env_name()
     keys = [f"{name}__{env_name}"]
-    if env_name == "DEV_INT":
-        keys.append(f"{name}__DEV_IN")
-    elif env_name == "DEV_IN":
-        keys.append(f"{name}__DEV_INT")
     keys.append(name)
     return keys
 
@@ -88,14 +84,14 @@ def _model_timeout_default() -> int:
 def _resolved_model_priority() -> list[str]:
     """
     Resolve AUTO backend priority by ENV first, then MODEL_PRIORITY, then legacy fallback.
-    - ENV=DEV_IN/DEV_INT/PROD_INT: force OLLAMA only (intranet policy)
+    - ENV=DEV_INT/PROD_INT: force OLLAMA only (intranet policy)
     - ENV=DEV_EXT/PROD_EXT: default GOOGLE -> OPENAI -> OLLAMA
     - Legacy aliases: EXT/DEV->DEV_EXT, INT->DEV_INT, PROD->PROD_EXT.
     """
     env_name = _active_env_name()
     raw_prio = (_env_get("MODEL_PRIORITY", "") or "").strip()
 
-    if env_name in ("DEV_IN", "DEV_INT", "PROD_INT"):
+    if env_name in ("DEV_INT", "PROD_INT"):
         return ["OLLAMA"]
 
     if env_name in ("DEV_EXT", "PROD_EXT"):

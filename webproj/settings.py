@@ -83,10 +83,6 @@ def _normalize_env_name(raw: str) -> str:
 def _env_candidates(name: str) -> list[str]:
     env_name = _normalize_env_name(os.getenv("ENV") or "DEV_EXT")
     keys = [f"{name}__{env_name}"]
-    if env_name == "DEV_INT":
-        keys.append(f"{name}__DEV_IN")
-    elif env_name == "DEV_IN":
-        keys.append(f"{name}__DEV_INT")
     keys.append(name)
     return keys
 
@@ -166,13 +162,13 @@ def _norm_prefix(p: str) -> str:
 # ============================================================
 _raw_env_name = env_str("ENV", "DEV_EXT").strip().upper()
 ENV_NAME = _normalize_env_name(_raw_env_name)
-ENV_IS_DEV = ENV_NAME in ("DEV_IN", "DEV_INT", "DEV_EXT")
-ENV_IS_INT = ENV_NAME in ("DEV_IN", "DEV_INT", "PROD_INT")
+ENV_IS_DEV = ENV_NAME in ("DEV_INT", "DEV_EXT")
+ENV_IS_INT = ENV_NAME in ("DEV_INT", "PROD_INT")
 ENV_IS_EXT = ENV_NAME in ("DEV_EXT", "PROD_EXT")
 ENV_IS_PROD = ENV_NAME in ("PROD_INT", "PROD_EXT", "STAGE", "UAT")
 
 # NO_PROXY policy:
-# - PROD_INT / DEV_INT / DEV_IN: apply NO_PROXY
+# - PROD_INT / DEV_INT: apply NO_PROXY
 # - PROD_EXT / DEV_EXT: do not apply NO_PROXY
 _DEFAULT_NO_PROXY = "127.0.0.1,localhost,::1,.mpc.mil.tw,mpcai.mpc.mil.tw"
 if ENV_IS_INT:
