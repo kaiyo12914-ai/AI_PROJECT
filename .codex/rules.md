@@ -1,78 +1,63 @@
-# DJANGO 主專案規範（Primary Rules）
+# DJANGO 銝餃?獢?蝭?Primary Rules嚗?
+??交?嚗?026-03-23
+?拍頝臬?嚗:\AI\AI_TOOLS嚗蒂雿?嗡?撠?銝餉?蝭?皞?
 
-版本日期：2026-03-23
-適用路徑：H:\AI\AI_TOOLS（並作為其他專案主規範來源）
+## 閬?撅斤?
+1. ?祆?嚗:\AI\AI_TOOLS\.codex\rules.md嚗鈭?獢?擃?蝭?2. ?嗡?撠? rules.md ?芾鋆?嚗?敺??祆?銵???3. ?潛?銵???隞交瑼皞?
+## 撠??函???
+- 瘥?獢蝡蝵脯蝡???摨蝡?撘Ⅳ????- 蝳迫隞?PYTHONPATH ??亥楝敺釣?交撘楊撠? import ?賣??- 撠?????賡? API???臭????Ⅱ鞈?鈭斗?瘚???
+## ?梁?閮剖?
+- ?梁? workspace嚗:\AI\openclaw-workspace
+- ?梁??啣??芸?嚗:\AI\VENV3.12
+- ??啣?嚗:\AI\venv3.12
 
-## 規範層級
-1. 本檔（H:\AI\AI_TOOLS\.codex\rules.md）為五專案最高規範。
-2. 其他專案 rules.md 只能補充，不得與本檔衝突。
-3. 發生衝突時，以本檔為準。
-
-## 專案獨立原則
-- 每個專案獨立部署、獨立啟動程序、獨立程式碼邊界。
-- 禁止以 PYTHONPATH 或直接路徑注入方式跨專案 import 函數。
-- 專案間整合僅能透過 API、訊息佇列或明確資料交換流程。
-
-## 共用開發設定
-- 共用開發 workspace：H:\AI\openclaw-workspace
-- 共用虛擬環境優先：H:\AI\VENV3.12
-- 回退環境：H:\AI\venv3.12
-
-## 變更管理
-- 任何專案規範調整，先更新本檔，再同步更新其他專案 rules.md。
-- 請將長期有效政策同步記錄於：
+## 霈蝞∠?
+- 隞颱?撠?閬?隤踵嚗??湔?祆?嚗??郊?湔?嗡?撠? rules.md??- 隢??瑟????輻??郊閮??潘?
   H:\AI\openclaw-workspace\LONG_TERM_MEMORY.md
 
-# 專案系統架構與開發規範（精簡強制版）
+# 撠?蝟餌絞?嗆????潸?蝭?蝎曄陛撘瑕??
 
-本文件為強制規範（Mandatory Rules）。
-任何違反者，程式碼不得合併（MUST NOT MERGE）。
-
-## 一、適用範圍
-- Django 多節點系統（portal / doc / comment / meetingreply / …）
-- 前端 JS / HTML Template / Static 資源
-- IIS Reverse Proxy（含 proxy prefix）
-- DB_FACTORY / LLM_FACTORY
+?祆?隞嗥撘瑕閬?嚗andatory Rules嚗?隞颱?????蝔?蝣潔?敺?雿蛛?MUST NOT MERGE嚗?
+## 銝??函???- Django 憭?暺頂蝯梧?portal / doc / comment / meetingreply / ?佗?
+- ?垢 JS / HTML Template / Static 鞈?
+- IIS Reverse Proxy嚗 proxy prefix嚗?- DB_FACTORY / LLM_FACTORY
 - ACL / require_node / DEV Login
 
-## 二、URL 與 Proxy 規範（核心鐵則）
+## 鈭RL ??Proxy 閬?嚗敹??
 
-### 鐵則 1：Django 永遠不寫 proxy prefix
-- `urls.py` 不得包含 `/djangoai` 或任何 proxy 前綴
+### ?萄? 1嚗jango 瘞賊?銝神 proxy prefix
+- `urls.py` 銝?? `/djangoai` ?遙雿?proxy ?韌
 
 ```python
-# 正確
+# 甇?Ⅱ
 path("incoming_lookup/", ...)
-# 錯誤
+# ?航炊
 path("djangoai/incoming_lookup/", ...)
 ```
 
-### 鐵則 2：前端不得硬寫任何 prefix / node
-- 禁止 `/djangoai/...`
-- 禁止 `/doc/...`
-- 禁止自行拼接 base URL
+### ?萄? 2嚗?蝡臭?敺′撖思遙雿?prefix / node
+- 蝳迫 `/djangoai/...`
+- 蝳迫 `/doc/...`
+- 蝳迫?芾??潭 base URL
 
-### 鐵則 3：所有 API URL 只能經過 `apiurl()`
-- HTML / JS / Template 唯一合法入口：`apiurl(path)`
-- `apiurl()` 必須來自 `apiurl_factory`
+### ?萄? 3嚗???API URL ?芾蝬? `apiurl()`
+- HTML / JS / Template ?臭????亙嚗apiurl(path)`
+- `apiurl()` 敹?靘 `apiurl_factory`
 
-## 三、apiurl_factory 規範（唯一真相）
-
-### 強制規則
-- JS 只能讀取 `document.body.dataset.baseUrl`
-- 禁止存取：
-  - `window.__FORCE_SCRIPT_NAME__`
+## 銝piurl_factory 閬?嚗銝?嚗?
+### 撘瑕閬?
+- JS ?芾霈??`document.body.dataset.baseUrl`
+- 蝳迫摮?嚗?  - `window.__FORCE_SCRIPT_NAME__`
   - `window.__PROXY_PREFIX__`
-  - 任何 ENV prefix
-  - 任何硬寫 `/djangoai`
+  - 隞颱? ENV prefix
+  - 隞颱?蝖砍神 `/djangoai`
 
-### Template 必須注入
+### Template 敹?瘜典
 ```html
 <body data-base-url="{{ request.script_name }}">
 ```
 
-### 唯一允許的組合邏輯
-```js
+### ?臭??迂????頛?```js
 function apiurl(path) {
   const base = document.body.dataset.baseUrl || "";
   if (!path.startsWith("/")) path = "/" + path;
@@ -80,44 +65,43 @@ function apiurl(path) {
 }
 ```
 
-## 四、前端 Static 資源規範（強制）
-- HTML 內禁止 `<style>`
-- HTML 內禁止大量 `<script>`
-- CSS / JS 一律放 `static/`
-- 只允許少量 inline 設定注入（≤10 行、無邏輯）
-
-### Static 結構（強制）
+## ??蝡?Static 鞈?閬?嚗撥?塚?
+- HTML ?抒?甇?`<style>`
+- HTML ?抒?甇Ｗ之??`<script>`
+- CSS / JS 銝敺 `static/`
+- ?芸?閮勗???inline 閮剖?瘜典嚗10 銵?摩嚗?
+### Static 蝯?嚗撥?塚?
 ```
 webapps/<node>/static/<node>/
   css/<page>.css
   js/<page>.js
 ```
 
-### HTML 標準寫法
+### HTML 璅?撖急?
 ```django
 {% load static %}
 <link rel="stylesheet" href="{% static '<node>/css/<page>.css' %}">
 <script defer src="{% static '<node>/js/<page>.js' %}"></script>
 ```
 
-- 所有資源必須可被 `collectstatic` 收集
+- ???皞??鋡?`collectstatic` ?園?
 
-## 五、DB_FACTORY 規範（強制）
-- 禁止自行建立 DB 連線
-- 禁止使用舊版 db_factory
-- 一律使用 `webapps/database/db_factory.py`
-- 僅允許：`db_query_one` / `db_query_all` / `db_execute`
+## 鈭B_FACTORY 閬?嚗撥?塚?
+- 蝳迫?芾?撱箇? DB ???
+- 蝳迫雿輻?? db_factory
+- 銝敺蝙??`webapps/database/db_factory.py`
+- ??閮梧?`db_query_one` / `db_query_all` / `db_execute`
 
-## 六、LLM_FACTORY 規範（強制）
-- 禁止直接 new OpenAI / Ollama
-- 一律使用 `get_chat_model()`
-- 模型切換只能由 ENV 控制
+## ?准LM_FACTORY 閬?嚗撥?塚?
+- 蝳迫?湔 new OpenAI / Ollama
+- 銝敺蝙??`get_chat_model()`
+- 璅∪????芾??ENV ?批
 
-## 七、Settings / ENV 規範
-- 所有環境判斷只能在 `settings.py`
-- 各模組不得自行判斷 proxy / env / login 行為
+## 銝ettings / ENV 閬?
+- ??憓?瑕?賢 `settings.py`
+- ?芋蝯?敺銵??proxy / env / login 銵
 
-### 必備 ENV（示例）
+### 敹? ENV嚗內靘?
 ```
 NO_PROXY=127.0.0.1,localhost,::1,.mpc.mil.tw
 FORCE_SCRIPT_NAME=
@@ -126,55 +110,42 @@ DEV_LOGIN_USER=
 DEV_LOGIN_NAME=
 ```
 
-## 八、NO_PROXY 規範（強制）
-必須包含：
-- localhost / 127.0.0.1 / ::1
-- 內網網域尾碼
+## ?怒O_PROXY 閬?嚗撥?塚?
+敹??嚗?- localhost / 127.0.0.1 / ::1
+- ?抒雯蝬脣?撠曄Ⅳ
 - DB / Ollama / RAG host
 
-## 九、ACL / require_node 規範（強制）
-- 所有頁面：`@require_node`
-- 所有 API：`@require_node(api=True)`
-- ACL 判斷集中管理，禁止分散實作
+## 銋CL / require_node 閬?嚗撥?塚?
+- ????ｇ?`@require_node`
+- ???API嚗@require_node(api=True)`
+- ACL ?斗?葉蝞∠?嚗?甇Ｗ???祕雿?
+## ?EV Login 閬?
+- 甇???啣?嚗靽∩遙 IIS RemoteUser
+- DEBUG嚗?閮?`DEV_LOGIN_USER`
+- DEV fallback ?芾摮??middleware / utils_login
 
-## 十、DEV Login 規範
-- 正式環境：只信任 IIS RemoteUser
-- DEBUG：允許 `DEV_LOGIN_USER`
-- DEV fallback 只能存在於 middleware / utils_login
+## ???楊蝣潸?蝭?撘瑕嚗?- ?典?獢?敺?UTF-8嚗???BOM嚗?- 蝳迫 Big5 / CP950 / GB 蝟餃?
+- 銝???service / view 撅日脰?隞颱?鈭活 encode/decode
 
-## 十一、編碼規範（強制）
-- 全專案一律 UTF-8（不含 BOM）
-- 禁止 Big5 / CP950 / GB 系列
-- 不得在 service / view 層進行任何二次 encode/decode
+### Sybase 銝剜???
+- 銝剜?甈? SQL 敹?雿輻 `CONVERT(VARBINARY)`
+- 鈭Ⅳ???芾?滲靽格迤 DB_FACTORY / Driver / DSN
 
-### Sybase 中文處理
-- 中文欄位 SQL 必須使用 `CONVERT(VARBINARY)`
-- 亂碼問題只能回溯修正 DB_FACTORY / Driver / DSN
+## ???QL ?葉??嚗OC嚗?- ???SELECT SQL ?葉??service
+- View / 摮芋蝯?敺??SQL
+- ?澆蝡臬?澆 service method
 
-## 十二、SQL 集中原則（DOC）
-- 所有 SELECT SQL 集中於 service
-- View / 子模組不得散落 SQL
-- 呼叫端只呼叫 service method
-
-## 十三、DB / Mock 規範
-- `ENV=EXT`：停用外部 DB，改用 mock JSON
-- `ENV=INT`：一律使用實體 DB
-- 不得自行切換 mock 行為
-- ENV設定請避免內外網差異，請於系統中進行ENV區隔並同時滿足內外網需求
-
+## ???B / Mock 閬?
+- `ENV=EXT`嚗??典???DB嚗??mock JSON
+- `ENV=INT`嚗?敺蝙?典祕擃?DB
+- 銝??芾??? mock 銵
+- ENV閮剖?隢?憭雯撌桃嚗??潛頂蝯曹葉?脰?ENV??蒂??皛輯雲?批?蝬脤?瘙?
 ## Mandatory Startup Rule
-- 每次進入本專案（新對話/新 session）必須先讀取 `/.codex/rules.md`，再開始其他工作。
-- 每次進入本專案（新對話/新 session）在讀完 `/.codex/rules.md` 後，必須再讀取 `H:\AI\openclaw-workspace\LONG_TERM_MEMORY.md` 最新內容，才可開始其他工作。
-- 每次進入本專案（新對話/新 session）在開始開發前，必須再讀取 `H:\AI\openclaw-workspace` 中最新一筆「交接記錄檔」（例如：`AI_TOOLS_交接報告_YYYY-MM-DD.md`）後，方可接續開發。
-
+- 瘥活?脣?砍?獢??啣?閰???session嚗???霈??`/.codex/rules.md`嚗????嗡?撌乩???- 瘥活?脣?砍?獢??啣?閰???session嚗霈摰?`/.codex/rules.md` 敺?敹?????`H:\AI\openclaw-workspace\LONG_TERM_MEMORY.md` ??啣摰對?????嗡?撌乩???- 瘥活?脣?砍?獢??啣?閰???session嚗?????敹?????`H:\AI\openclaw-workspace` 銝剜??唬?蝑漱?亥?????靘?嚗AI_TOOLS_鈭斗?勗?_YYYY-MM-DD.md`嚗?嚗?舀蝥??潦?
 ## UTF-8 / BOM Rule
-- 專案文字與程式碼檔案一律使用 UTF-8（無 BOM）。
-- 在 Windows PowerShell 5.1，避免使用 `Set-Content -Encoding UTF8`（會寫入 BOM）。
-- 請改用：
+- 撠?????撘Ⅳ瑼?銝敺蝙??UTF-8嚗 BOM嚗?- ??Windows PowerShell 5.1嚗?蝙??`Set-Content -Encoding UTF8`嚗?撖怠 BOM嚗?- 隢?剁?
   `[System.IO.File]::WriteAllText(path, text, (New-Object System.Text.UTF8Encoding($false)))`
-- 在 PowerShell 7 可使用 `-Encoding utf8NoBOM`。
-- VS Code 預設編碼請使用 `UTF-8`，不要使用 `UTF-8 with BOM`。
-
+- ??PowerShell 7 ?臭蝙??`-Encoding utf8NoBOM`??- VS Code ?身蝺函Ⅳ隢蝙??`UTF-8`嚗?閬蝙??`UTF-8 with BOM`??
 ## ENV DB Mode Rule (Mandatory)
 - ENV=EXT: MUST NOT connect to physical DB. MUST always use MOCK DATA.
 - ENV=INT: MUST always connect to physical DB. MUST NOT use MOCK DATA.
@@ -190,5 +161,8 @@ DEV_LOGIN_NAME=
 - VS Code default encoding must be UTF-8 (without BOM).
 
 ## Git Commit Rule (Mandatory)
-- 每次完成功能修正後，必須立即執行一次 `git commit`。
-- Commit 訊息需清楚描述本次修正重點，避免使用空泛訊息。
+- 瘥活摰??靽格迤敺?敹?蝡?瑁?銝甈?`git commit`??- Commit 閮?皜??膩?祆活靽格迤??嚗?蝙?函征瘜??胯?
+## Static Build Rule (Mandatory)
+- Every time .css or .js files are modified, you MUST run:
+  - python manage.py collectstatic --noinput
+- This command is required before finishing the task and before commit.
