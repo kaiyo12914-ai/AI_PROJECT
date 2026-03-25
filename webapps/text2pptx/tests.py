@@ -419,19 +419,22 @@ mirjam@contoso.com"""
     def test_convert_pptx_to_potx_same_layout_keeps_last_picture(self):
         from pptx import Presentation
         from pptx.util import Inches
+        from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE
 
         prs = Presentation()
-        layout = prs.slide_layouts[0]
+        layout = next((l for l in prs.slide_layouts if "blank" in (getattr(l, "name", "") or "").lower()), prs.slide_layouts[0])
 
         slide1 = prs.slides.add_slide(layout)
-        if slide1.shapes.title:
-            slide1.shapes.title.text = "S1"
+        slide1.shapes.add_textbox(Inches(1.6), Inches(0.5), Inches(2.6), Inches(0.6)).text_frame.text = "OLD_TEXT_1"
+        shp1 = slide1.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE, Inches(1.6), Inches(2.1), Inches(2.0), Inches(0.8))
+        shp1.text_frame.text = "OLD_SHAPE_TEXT"
         img_a = _tiny_png_bytes_variant_a()
         slide1.shapes.add_picture(io.BytesIO(img_a), Inches(0.8), Inches(1.2), Inches(0.8), Inches(0.8))
 
         slide2 = prs.slides.add_slide(layout)
-        if slide2.shapes.title:
-            slide2.shapes.title.text = "S2"
+        slide2.shapes.add_textbox(Inches(1.6), Inches(0.5), Inches(2.6), Inches(0.6)).text_frame.text = "LATEST_TEXT_2"
+        shp2 = slide2.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE, Inches(1.6), Inches(2.1), Inches(2.0), Inches(0.8))
+        shp2.text_frame.text = "LATEST_SHAPE_TEXT"
         img_b = _tiny_png_bytes_variant_b()
         slide2.shapes.add_picture(io.BytesIO(img_b), Inches(0.8), Inches(1.2), Inches(0.8), Inches(0.8))
 
@@ -475,6 +478,21 @@ mirjam@contoso.com"""
             layout_root = ET.fromstring(zf.read(layout_part_name))
             pic_nodes = layout_root.findall(".//p:pic", p_ns)
             self.assertEqual(len(pic_nodes), 1)
+
+            sp_nodes = layout_root.findall(".//p:sp", p_ns)
+            non_placeholder_sp_nodes = [n for n in sp_nodes if n.find("p:nvSpPr/p:nvPr/p:ph", p_ns) is None]
+            self.assertTrue(len(non_placeholder_sp_nodes) >= 2)
+
+            for node in non_placeholder_sp_nodes:
+                node_text_values = [str(t.text or "").strip() for t in node.findall(".//a:t", p_ns)]
+                self.assertFalse(any(node_text_values))
+
+            layout_xml_text = zf.read(layout_part_name).decode("utf-8", errors="ignore")
+            self.assertNotIn("OLD_TEXT_1", layout_xml_text)
+            self.assertNotIn("LATEST_TEXT_2", layout_xml_text)
+            self.assertNotIn("OLD_SHAPE_TEXT", layout_xml_text)
+            self.assertNotIn("LATEST_SHAPE_TEXT", layout_xml_text)
+
             blip = layout_root.find(".//a:blip", p_ns)
             self.assertIsNotNone(blip)
             assert blip is not None
