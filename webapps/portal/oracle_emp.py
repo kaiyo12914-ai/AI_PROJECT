@@ -139,9 +139,15 @@ def _is_oracle_emp_enabled() -> bool:
     - ORACLE_ENABLED=0 或 ORACLE_EMP_ENABLED=0 => 一律停用（外網/DMZ）
     """
     env_name = (os.getenv("ENV") or "").strip().upper()
-    if env_name == "EXT":
+    env_name = {
+        "DEV": "DEV_EXT",
+        "EXT": "DEV_EXT",
+        "INT": "DEV_INT",
+        "PROD": "PROD_EXT",
+    }.get(env_name, env_name)
+    if env_name in ("DEV_EXT", "PROD_EXT"):
         return False
-    if env_name == "INT":
+    if env_name in ("DEV_INT", "PROD_INT"):
         return True
     return bool(getattr(settings, "ORACLE_ENABLED", False) and getattr(settings, "ORACLE_EMP_ENABLED", False))
 
