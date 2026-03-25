@@ -9,17 +9,57 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+_ENV_ALIASES = {
+    "DEV": "DEV_EXT",
+    "EXT": "DEV_EXT",
+    "INT": "DEV_INT",
+    "PROD": "PROD_EXT",
+}
+
+
+def _normalize_env_name(raw: str) -> str:
+    return _ENV_ALIASES.get((raw or "").strip().upper(), (raw or "").strip().upper())
+
+
+def _active_env_name() -> str:
+    return _normalize_env_name(os.getenv("ENV") or "DEV_EXT")
+
+
+def _env_keys(name: str) -> list[str]:
+    env_name = _active_env_name()
+    keys = [f"{name}__{env_name}"]
+    if env_name == "DEV_INT":
+        keys.append(f"{name}__DEV_IN")
+    elif env_name == "DEV_IN":
+        keys.append(f"{name}__DEV_INT")
+    keys.append(name)
+    return keys
+
+
+def _env_get(name: str, default: str | None = None) -> str | None:
+    for key in _env_keys(name):
+        if key in os.environ:
+            return os.environ.get(key)
+    return default
+
+
+def _env_has(name: str) -> bool:
+    for key in _env_keys(name):
+        if key in os.environ:
+            return True
+    return False
+
 
 def _f(name: str, default: float) -> float:
     try:
-        return float(os.getenv(name, str(default)))
+        return float(_env_get(name, str(default)))
     except Exception:
         return default
 
 
 def _i(name: str, default: int) -> int:
     try:
-        return int(os.getenv(name, str(default)))
+        return int(_env_get(name, str(default)))
     except Exception:
         return default
 
@@ -28,7 +68,7 @@ def _b(name: str, default: bool = False) -> bool:
     """
     env bool: 1/0, true/false, yes/no, on/off
     """
-    v = (os.getenv(name) or "").strip().lower()
+    v = (_env_get(name, "") or "").strip().lower()
     if not v:
         return default
     return v in ("1", "true", "yes", "y", "on")
@@ -52,14 +92,8 @@ def _resolved_model_priority() -> list[str]:
     - ENV=DEV_EXT/PROD_EXT: default GOOGLE -> OPENAI -> OLLAMA
     - Legacy aliases: EXT/DEV->DEV_EXT, INT->DEV_INT, PROD->PROD_EXT.
     """
-    env_name = (os.getenv("ENV") or "").strip().upper()
-    env_name = {
-        "EXT": "DEV_EXT",
-        "DEV": "DEV_EXT",
-        "INT": "DEV_INT",
-        "PROD": "PROD_EXT",
-    }.get(env_name, env_name)
-    raw_prio = (os.getenv("MODEL_PRIORITY") or "").strip()
+    env_name = _active_env_name()
+    raw_prio = (_env_get("MODEL_PRIORITY", "") or "").strip()
 
     if env_name in ("DEV_IN", "DEV_INT", "PROD_INT"):
         return ["OLLAMA"]
@@ -136,7 +170,7 @@ def _ollama_fallback_models(primary_model: str) -> list[str]:
     Override by OLLAMA_FALLBACK_MODELS, e.g.:
       OLLAMA_FALLBACK_MODELS=gemma3:4b,qwen3:8b
     """
-    raw = (os.getenv("OLLAMA_FALLBACK_MODELS") or "gemma3:4b,qwen3:8b").strip()
+    raw = (_env_get("OLLAMA_FALLBACK_MODELS", "gemma3:4b,qwen3:8b") or "gemma3:4b,qwen3:8b").strip()
     out: list[str] = []
     seen = set()
     for x in raw.split(","):
@@ -163,7 +197,7 @@ def _should_try_ollama_fallback(err: Exception) -> bool:
 
 
 def get_chat_model(temperature: float | None = None, timeout: int | None = None):
-    model_type = (os.getenv("MODEL_TYPE") or "AUTO").strip().upper()
+    model_type = (_env_get("MODEL_TYPE", "AUTO") or "AUTO").strip().upper()
 
     if model_type == "GOOGLE":
         return _make_google(temperature=temperature, timeout=timeout)
@@ -191,7 +225,7 @@ def _resolve_temperature(provider_key: str, passed: float | None) -> float:
         return float(passed)
 
     # provider-specific first (if set)
-    if os.getenv(provider_key) is not None:
+    if _env_has(provider_key):
         return _f(provider_key, _model_temperature_default())
 
     # fallback to MODEL_TEMPERATURE
@@ -203,7 +237,7 @@ def _resolve_timeout(provider_key: str, passed: int | None) -> int:
         return int(passed)
 
     # provider-specific first (if set)
-    if os.getenv(provider_key) is not None:
+    if _env_has(provider_key):
         return _i(provider_key, _model_timeout_default())
 
     # fallback to MODEL_TIMEOUT
@@ -214,7 +248,7 @@ def log_llm_config():
     """
     啟動時列印 LLM 配置摘要，方便診斷。
     """
-    model_type = (os.getenv("MODEL_TYPE") or "AUTO").strip().upper()
+    model_type = (_env_get("MODEL_TYPE", "AUTO") or "AUTO").strip().upper()
     logger.info("[LLM CONFIG] MODEL_TYPE=%s", model_type)
 
     def _mask_key(key):
@@ -223,16 +257,16 @@ def log_llm_config():
         return f"SET ({key[:4]}...{key[-4:]})"
 
     if model_type == "GOOGLE":
-        m = os.getenv("GOOGLE_MODEL", "gemini-1.5-flash")
-        k = os.getenv("GOOGLE_API_KEY")
+        m = _env_get("GOOGLE_MODEL", "gemini-1.5-flash")
+        k = _env_get("GOOGLE_API_KEY")
         logger.info("[LLM CONFIG] GOOGLE: model=%s, api_key=%s", m, _mask_key(k))
     elif model_type == "OPENAI":
-        m = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-        k = os.getenv("OPENAI_API_KEY")
+        m = _env_get("OPENAI_MODEL", "gpt-4o-mini")
+        k = _env_get("OPENAI_API_KEY")
         logger.info("[LLM CONFIG] OPENAI: model=%s, api_key=%s", m, _mask_key(k))
     elif model_type == "OLLAMA":
-        m = os.getenv("OLLAMA_MODEL", "mistral_small_3_1_2503:latest")
-        u = os.getenv("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
+        m = _env_get("OLLAMA_MODEL", "mistral_small_3_1_2503:latest")
+        u = _env_get("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
         logger.info("[LLM CONFIG] OLLAMA: model=%s, base_url=%s", m, u)
     elif model_type == "AUTO":
         prio = _resolved_model_priority()
@@ -242,9 +276,9 @@ def log_llm_config():
         status_line = []
         for p in prio:
             if p == "GOOGLE":
-                status_line.append(f"GOOGLE:{_mask_key(os.getenv('GOOGLE_API_KEY'))}")
+                status_line.append(f"GOOGLE:{_mask_key(_env_get('GOOGLE_API_KEY'))}")
             elif p == "OPENAI":
-                status_line.append(f"OPENAI:{_mask_key(os.getenv('OPENAI_API_KEY'))}")
+                status_line.append(f"OPENAI:{_mask_key(_env_get('OPENAI_API_KEY'))}")
             elif p == "OLLAMA":
                 status_line.append(f"OLLAMA:Ready")
         logger.info("[LLM CONFIG] Status: %s", " | ".join(status_line))
@@ -260,8 +294,8 @@ def _make_ollama(temperature: float | None, timeout: int | None):
         from langchain_community.llms.ollama import Ollama as OllamaLLM  # type: ignore
         _new_pkg = False
 
-    base_url = os.getenv("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
-    model = os.getenv("OLLAMA_MODEL", "mistral_small_3_1_2503:latest")
+    base_url = _env_get("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
+    model = _env_get("OLLAMA_MODEL", "mistral_small_3_1_2503:latest")
 
     # ✅ 改：支援 MODEL_TEMPERATURE / MODEL_TIMEOUT fallback
     t = _resolve_temperature("OLLAMA_TEMPERATURE", temperature)
@@ -339,11 +373,11 @@ def _make_ollama(temperature: float | None, timeout: int | None):
 def _make_openai(temperature: float | None, timeout: int | None):
     from langchain_openai import ChatOpenAI
 
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = _env_get("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY 未設定（OpenAI 不可用）")
 
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    model = _env_get("OPENAI_MODEL", "gpt-4o-mini")
 
     # ✅ 改：支援 MODEL_TEMPERATURE / MODEL_TIMEOUT fallback
     t = _resolve_temperature("OPENAI_TEMPERATURE", temperature)
@@ -389,11 +423,11 @@ def _make_google(temperature: float | None, timeout: int | None):
             HarmCategory = None
             HarmBlockThreshold = None
 
-    api_key = os.getenv("GOOGLE_API_KEY")
+    api_key = _env_get("GOOGLE_API_KEY")
     if not api_key:
         raise RuntimeError("GOOGLE_API_KEY 未設定（Google Gemini 不可用）")
 
-    model = os.getenv("GOOGLE_MODEL", "gemini-1.5-flash")
+    model = _env_get("GOOGLE_MODEL", "gemini-1.5-flash")
 
     t = _resolve_temperature("GOOGLE_TEMPERATURE", temperature)
     to = _resolve_timeout("GOOGLE_TIMEOUT", timeout)
@@ -478,7 +512,7 @@ def _make_auto(temperature: float | None, timeout: int | None):
                     continue
                 
                 try:
-                    _log_llm_use(f"AUTO->({name})", os.getenv(f"{name}_MODEL", ""))
+                    _log_llm_use(f"AUTO->({name})", _env_get(f"{name}_MODEL", ""))
                     return llm.invoke(input, config=config, **kwargs)
                 except Exception as e:
                     last_err = e
@@ -495,7 +529,7 @@ def _make_auto(temperature: float | None, timeout: int | None):
                     continue
                 
                 try:
-                    _log_llm_use(f"AUTO->({name})", os.getenv(f"{name}_MODEL", ""))
+                    _log_llm_use(f"AUTO->({name})", _env_get(f"{name}_MODEL", ""))
                     return await llm.ainvoke(input, config=config, **kwargs)
                 except Exception as e:
                     last_err = e

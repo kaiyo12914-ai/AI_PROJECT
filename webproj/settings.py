@@ -68,8 +68,39 @@ _load_db_factory_md_into_environ(BASE_DIR_RESOLVED)
 # ============================================================
 # ENV helpers
 # ============================================================
+_ENV_ALIASES = {
+    "DEV": "DEV_EXT",
+    "EXT": "DEV_EXT",
+    "INT": "DEV_INT",
+    "PROD": "PROD_EXT",
+}
+
+
+def _normalize_env_name(raw: str) -> str:
+    return _ENV_ALIASES.get((raw or "").strip().upper(), (raw or "").strip().upper())
+
+
+def _env_candidates(name: str) -> list[str]:
+    env_name = _normalize_env_name(os.getenv("ENV") or "DEV_EXT")
+    keys = [f"{name}__{env_name}"]
+    if env_name == "DEV_INT":
+        keys.append(f"{name}__DEV_IN")
+    elif env_name == "DEV_IN":
+        keys.append(f"{name}__DEV_INT")
+    keys.append(name)
+    return keys
+
+
+def _env_lookup(name: str) -> str | None:
+    for key in _env_candidates(name):
+        if key in os.environ:
+            return os.environ.get(key)
+    return None
+
+
 def env_bool(name: str, default: bool = False) -> bool:
-    v = (os.getenv(name) or "").strip().lower()
+    raw = _env_lookup(name)
+    v = (raw or "").strip().lower()
     if v == "":
         return default
     return v in ("1", "true", "yes", "y", "on")
@@ -81,7 +112,7 @@ ORACLE_EMP_ENABLED = env_bool("ORACLE_EMP_ENABLED", False)
 
 def env_int(key: str, default: int) -> int:
     try:
-        return int((os.getenv(key) or "").strip() or default)
+        return int((_env_lookup(key) or "").strip() or default)
     except Exception:
         return default
 
@@ -92,7 +123,7 @@ def env_str(key: str, default: str = "") -> str:
     - 沒設（None） → 用 default
     - 有設但為空字串 → 視為「刻意設空」，不要回退 default
     """
-    v = os.getenv(key)
+    v = _env_lookup(key)
     if v is None:
         v = default
     return (v or "").strip()
@@ -134,13 +165,7 @@ def _norm_prefix(p: str) -> str:
 # Security / Debug
 # ============================================================
 _raw_env_name = env_str("ENV", "DEV_EXT").strip().upper()
-_ENV_ALIASES = {
-    "DEV": "DEV_EXT",
-    "EXT": "DEV_EXT",
-    "INT": "DEV_INT",
-    "PROD": "PROD_EXT",
-}
-ENV_NAME = _ENV_ALIASES.get(_raw_env_name, _raw_env_name)
+ENV_NAME = _normalize_env_name(_raw_env_name)
 ENV_IS_DEV = ENV_NAME in ("DEV_IN", "DEV_INT", "DEV_EXT")
 ENV_IS_INT = ENV_NAME in ("DEV_IN", "DEV_INT", "PROD_INT")
 ENV_IS_EXT = ENV_NAME in ("DEV_EXT", "PROD_EXT")
@@ -151,7 +176,7 @@ ENV_IS_PROD = ENV_NAME in ("PROD_INT", "PROD_EXT", "STAGE", "UAT")
 # - PROD_EXT / DEV_EXT: do not apply NO_PROXY
 _DEFAULT_NO_PROXY = "127.0.0.1,localhost,::1,.mpc.mil.tw,mpcai.mpc.mil.tw"
 if ENV_IS_INT:
-    _no_proxy_env = os.getenv("NO_PROXY")
+    _no_proxy_env = _env_lookup("NO_PROXY")
     if _no_proxy_env is None or not _no_proxy_env.strip():
         os.environ["NO_PROXY"] = _DEFAULT_NO_PROXY
         os.environ["no_proxy"] = _DEFAULT_NO_PROXY
@@ -202,13 +227,13 @@ BASE_DIR = Path(_PROJECT_ROOT_STR)
 ENV_IS_PUBLIC = ENV_IS_INT or ENV_IS_EXT or ENV_NAME in ("STAGE", "UAT")
 _DEFAULT_PROXY_PREFIX = "/djangoai" if ENV_IS_PUBLIC else ""
 
-_raw_proxy_prefix = os.getenv("PROXY_PREFIX")
+_raw_proxy_prefix = _env_lookup("PROXY_PREFIX")
 if _raw_proxy_prefix is None:
     PROXY_PREFIX = _norm_prefix(_DEFAULT_PROXY_PREFIX)
 else:
     PROXY_PREFIX = _norm_prefix(_raw_proxy_prefix)
 
-_raw_force_script_name = os.getenv("FORCE_SCRIPT_NAME")
+_raw_force_script_name = _env_lookup("FORCE_SCRIPT_NAME")
 if _raw_force_script_name is None:
     FORCE_SCRIPT_NAME = _norm_prefix(PROXY_PREFIX)
 else:

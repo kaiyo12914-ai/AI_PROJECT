@@ -41,13 +41,39 @@ def load_env() -> None:
 
 load_env()
 
+_ENV_ALIASES = {
+    "DEV": "DEV_EXT",
+    "EXT": "DEV_EXT",
+    "INT": "DEV_INT",
+    "PROD": "PROD_EXT",
+}
+
+
+def _normalize_env_name(raw: str) -> str:
+    return _ENV_ALIASES.get((raw or "").strip().upper(), (raw or "").strip().upper())
+
+
+def _env_scoped_get(name: str) -> str:
+    env_name = _normalize_env_name(os.getenv("ENV") or "DEV_EXT")
+    candidates = [f"{name}__{env_name}"]
+    if env_name == "DEV_INT":
+        candidates.append(f"{name}__DEV_IN")
+    elif env_name == "DEV_IN":
+        candidates.append(f"{name}__DEV_INT")
+    candidates.append(name)
+    for key in candidates:
+        v = os.getenv(key)
+        if v is not None:
+            return v
+    return ""
+
 
 def _env(k: str, d: str = "") -> str:
     md_overrides = _load_db_factory_md_overrides()
     md_val = (md_overrides.get((k or "").strip().upper()) or "").strip()
     if md_val:
         return md_val
-    return (os.getenv(k) or d).strip()
+    return (_env_scoped_get(k) or d).strip()
 
 
 def _external_db_disabled() -> bool:
@@ -58,13 +84,7 @@ def _external_db_disabled() -> bool:
     - Legacy aliases: EXT/DEV->DEV_EXT, INT->DEV_INT, PROD->PROD_EXT.
     - Others: default to external DB.
     """
-    env_mode = (os.getenv("ENV") or "").strip().upper()
-    env_mode = {
-        "EXT": "DEV_EXT",
-        "DEV": "DEV_EXT",
-        "INT": "DEV_INT",
-        "PROD": "PROD_EXT",
-    }.get(env_mode, env_mode)
+    env_mode = _normalize_env_name(os.getenv("ENV") or "DEV_EXT")
     if env_mode in ("DEV_EXT", "PROD_EXT"):
         return True
     if env_mode in ("DEV_IN", "DEV_INT", "PROD_INT"):
@@ -83,11 +103,11 @@ _ORA_THICK_INIT_DONE = False
 
 def _mock_json_path() -> str:
     return (
-        os.getenv("MOCK_DB_JSON")
-        or os.getenv("SQLDOC_JSON")
-        or os.getenv("SQLDOC_JSON_PATH")
-        or os.getenv("SQLTEST_JSON")
-        or os.getenv("SQLTEST_JSON_PATH")
+        _env_scoped_get("MOCK_DB_JSON")
+        or _env_scoped_get("SQLDOC_JSON")
+        or _env_scoped_get("SQLDOC_JSON_PATH")
+        or _env_scoped_get("SQLTEST_JSON")
+        or _env_scoped_get("SQLTEST_JSON_PATH")
         or "SQLTEST_output.json"
     )
 
