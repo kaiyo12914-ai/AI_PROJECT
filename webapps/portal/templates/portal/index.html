@@ -1,131 +1,105 @@
 {% load static %}
-{# webapps/portal/templates/portal/index.html #}
 {% load portal_extras %}
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
-  <title>AI輔助系統功能入口</title>
+  <title>AI（雛形）輔助系統入口</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
   <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
   <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-
   <link rel="stylesheet" href="{% static 'portal/css/index.css' %}">
   <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% static 'portal/js/index.js' %}"></script>
 </head>
-
 <body data-base-url="{{ request.script_name }}">
-<div class="container">
-  <h1>AI (雛形)輔助系統入口</h1>
-  <div class="subtitle">請選擇欲使用之系統功能</div>
+{% with card_variant=request.GET.card_variant|default:'a'|lower %}
+  <div class="container">
+    <h1>AI（雛形）輔助系統入口</h1>
+    <div class="subtitle">請選擇欲使用之系統功能</div>
 
-  <div class="loginbar">
-    <span>歡迎：</span>
-    <span class="pill">
-      {% if request.login_user_name %}
-        {{ request.login_user_name }}
-      {% else %}
-        （未取得姓名）
+    <div class="loginbar">
+      <span>歡迎：</span>
+      <span class="pill">
+        {% if request.login_user_name %}
+          {{ request.login_user_name }}
+        {% else %}
+          （未取得姓名）
+        {% endif %}
+      </span>
+    </div>
+
+    <div class="menu {% if card_variant == 'b' %}menu--b{% else %}menu--a{% endif %}">
+      {% allow "translator" as can_translator %}
+      {% allow "comment" as can_comment %}
+      {% allow "doc" as can_doc %}
+      {% allow "excelproc" as can_excelproc %}
+      {% allow "meetingreply" as can_meetingreply %}
+      {% allow "graph" as can_graph %}
+      {% allow "pdf" as can_pdf %}
+      {% allow "pptx" as can_pptx %}
+      {% allow "tts" as can_tts %}
+      {% allow "portal" as can_portal %}
+      {% allow "vanna" as can_vanna %}
+
+      {% if can_translator %}
+        {% url 'translator_page' as translator_href %}
+        {% include "portal/_svg_card.html" with href=translator_href title="翻譯工具" subtitle="中英 / 多語翻譯" tone="blue" icon="translate" variant=card_variant %}
       {% endif %}
-    </span>
+
+      {% if can_comment %}
+        {% url 'comment:page_index' as comment_href %}
+        {% include "portal/_svg_card.html" with href=comment_href title="考績評量工具" subtitle="評語建議與文字優化" tone="blue" icon="comment" variant=card_variant %}
+      {% endif %}
+
+      {% if can_meetingreply %}
+        {% url 'meetingreply:page' as meetingreply_href %}
+        {% include "portal/_svg_card.html" with href=meetingreply_href title="指裁事項擬答" subtitle="RAG 輔助擬答" tone="green" icon="rag" variant=card_variant %}
+      {% endif %}
+
+      {% if can_doc %}
+        {% url 'doc:doc_page' as doc_href %}
+        {% include "portal/_svg_card.html" with href=doc_href title="簽文輔助系統" subtitle="公文、簽呈擬稿輔助" tone="blue" icon="doc" variant=card_variant %}
+      {% endif %}
+
+      {% if can_graph %}
+        {% url 'graph_page' as graph_href %}
+        {% include "portal/_svg_card.html" with href=graph_href title="截圖 → 文字檔" subtitle="圖表 / 流程圖轉文字" tone="blue" icon="graph" variant=card_variant %}
+      {% endif %}
+
+      {% if can_pdf %}
+        {% url 'pdf_page' as pdf_href %}
+        {% include "portal/_svg_card.html" with href=pdf_href title="PDF → TXT / DOCX" subtitle="PDF 轉文字 / Word" tone="red" icon="pdf" variant=card_variant %}
+      {% endif %}
+
+      {% if can_pptx %}
+        {% url 'pptx_page' as pptx_href %}
+        {% include "portal/_svg_card.html" with href=pptx_href title="文字 → PPTX" subtitle="文字自動產生簡報" tone="orange" icon="pptx" variant=card_variant %}
+      {% endif %}
+
+      {% if can_tts %}
+        {% url 'tts_page' as tts_href %}
+        {% include "portal/_svg_card.html" with href=tts_href title="語音 / 文字" subtitle="TTS / STT" tone="cyan" icon="tts" variant=card_variant %}
+      {% endif %}
+
+      {% if can_portal %}
+        {% url 'portal:usage_page' as usage_href %}
+        {% include "portal/_svg_card.html" with href=usage_href title="Portal 使用紀錄" subtitle="使用紀錄查詢" tone="gray" icon="usage" variant=card_variant %}
+      {% endif %}
+
+      {% if can_excelproc %}
+        {% url 'excelproc:excelproc_page' as excelproc_href %}
+        {% include "portal/_svg_card.html" with href=excelproc_href title="Excel 處理工具" subtitle="分頁 / 欄位 / 合併 Excel" tone="gray" icon="excel" variant=card_variant %}
+      {% endif %}
+
+      {% if can_vanna %}
+        {% include "portal/_svg_card.html" with href="http://mpcai.mpc.mil.tw:8084" title="Vanna" subtitle="SQL 產生 / 查詢助理" tone="cyan" icon="vanna" variant=card_variant new_tab=True %}
+      {% endif %}
+    </div>
+
+    <footer>© {% now "Y" %} 生產製造中心 | 內部系統</footer>
   </div>
-
-  <div class="menu">
-    {% allow "translator" as can_translator %}
-    {% allow "comment" as can_comment %}
-    {% allow "doc" as can_doc %}
-    {% allow "excelproc" as can_excelproc %}
-    {% allow "meetingreply" as can_meetingreply %}
-    {% allow "graph" as can_graph %}
-    {% allow "pdf" as can_pdf %}
-    {% allow "pptx" as can_pptx %}
-    {% allow "tts" as can_tts %}
-    {% allow "portal" as can_portal %}
-    {% allow "vanna" as can_vanna %}
- 
-
-    {% if can_translator %}
-      <a href="{% url 'translator_page' %}">
-        翻譯工具
-        <div class="description">中英／多語翻譯</div>
-      </a>
-    {% endif %}
-
-    {% if can_comment %}
-      <a href="{% url 'comment:page_index' %}">
-        考績評量工具
-        <div class="description">評語建議與文字優化</div>
-      </a>
-    {% endif %}
-
-    {% if can_meetingreply %}
-      <a class="rag" href="{% url 'meetingreply:page' %}">
-        指裁事項擬答
-        <div class="description">RAG 輔助擬答</div>
-      </a>
-    {% endif %}
-
-    {% if can_doc %}
-      <a href="{% url 'doc:doc_page' %}">
-        簽文輔助系統
-        <div class="description">公文、簽呈撰寫輔助</div>
-      </a>
-    {% endif %}
-
-    {% if can_vanna %}
-      <a class="vanna" href="http://mpcai.mpc.mil.tw:8084">
-        Vanna
-        <div class="description">SQL 問答 / 智慧查詢</div>
-      </a>
-    {% endif %}
-
-    {% if can_graph %}
-      <a class="graph" href="{% url 'graph_page' %}">
-        截圖 → 文字檔
-        <div class="description">圖表／流程圖轉文字</div>
-      </a>
-    {% endif %}
-
-    {% if can_pdf %}
-      <a class="pdf" href="{% url 'pdf_page' %}">
-        PDF → TXT / DOCX
-        <div class="description">PDF 轉文字 / Word</div>
-      </a>
-    {% endif %}
-
-    {% if can_pptx %}
-      <a class="pptx" href="{% url 'pptx_page' %}">
-        文字 → PPTX
-        <div class="description">文字自動產生簡報</div>
-      </a>
-    {% endif %}
-
-    {% if can_tts %}
-      <a class="tts" href="{% url 'tts_page' %}">
-        語音 / 文字
-        <div class="description">TTS / STT</div>
-      </a>
-    {% endif %}
-    
-    {% if can_excelproc %}
-      <a href="{% url 'excelproc:excelproc_page' %}">
-        Excel 處理工具
-        <div class="description">匯入 / 比對 / 匯出 Excel</div>
-      </a>
-    {% endif %}
-
-    {% if can_portal %}
-      <a class="usage" href="{% url 'portal:usage_page' %}">
-        Portal 使用紀錄
-        <div class="description">使用紀錄查詢</div>
-      </a>
-    {% endif %}
-  </div>
-
-  <footer>
-    © {% now "Y" %} 生產製造中心｜內部系統
-  </footer>
-</div>
+{% endwith %}
 </body>
 </html>

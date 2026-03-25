@@ -1,0 +1,55 @@
+<a
+  class="svg-card svg-card--{{ tone }} svg-card--{{ variant|default:'a' }}"
+  href="{{ href }}"
+  aria-label="{{ title }}：{{ subtitle }}"
+  {% if new_tab %}target="_blank" rel="noopener noreferrer"{% endif %}
+>
+  <svg class="svg-card__bg" viewBox="0 0 420 220" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+    <rect class="svg-card__plate" x="4" y="4" width="412" height="212" rx="20"></rect>
+    <rect class="svg-card__shine" x="4" y="4" width="412" height="105" rx="20"></rect>
+    <path class="svg-card__wave" d="M12,155 C120,105 220,205 408,140 L408,212 L12,212 Z"></path>
+    <circle class="svg-card__icon-disc" cx="345" cy="58" r="30"></circle>
+    <g class="svg-card__icon">
+      {% if icon == "translate" %}
+        <path d="M329 67h32M336 57h18M345 50v24M354 62l10 12"></path>
+      {% elif icon == "comment" %}
+        <path d="M326 48h38v24h-20l-9 9v-9h-9z"></path>
+        <path d="M333 58h24M333 64h17"></path>
+      {% elif icon == "rag" %}
+        <path d="M325 72l19-24 18 24"></path>
+        <path d="M333 64h21"></path>
+      {% elif icon == "doc" %}
+        <path d="M332 46h20l10 10v26h-30z"></path>
+        <path d="M352 46v12h10M337 64h18M337 71h14"></path>
+      {% elif icon == "graph" %}
+        <path d="M330 75h32"></path>
+        <path d="M334 75v-18h8v18M346 75v-24h8v24M358 75v-12h8v12"></path>
+      {% elif icon == "pdf" %}
+        <path d="M330 49h30v26h-30z"></path>
+        <path d="M337 58h16M337 65h12"></path>
+      {% elif icon == "pptx" %}
+        <path d="M330 47h30v28h-30z"></path>
+        <path d="M338 58h14M345 53v16"></path>
+      {% elif icon == "tts" %}
+        <path d="M330 63h10l12 12V45L340 57h-10z"></path>
+        <path d="M356 54c4 3 4 9 0 12M361 50c6 5 6 15 0 20"></path>
+      {% elif icon == "usage" %}
+        <path d="M332 74V54l12-8 12 8v20z"></path>
+        <path d="M344 54v20M336 62h16"></path>
+      {% elif icon == "excel" %}
+        <path d="M330 47h30v28h-30z"></path>
+        <path d="M340 55l10 12M350 55l-10 12"></path>
+      {% elif icon == "vanna" %}
+        <path d="M328 50l16 24 16-24"></path>
+      {% else %}
+        <circle cx="345" cy="58" r="12"></circle>
+      {% endif %}
+    </g>
+    <path class="svg-card__edge" d="M20,18 H390"></path>
+  </svg>
+
+  <span class="svg-card__text">
+    <span class="svg-card__title">{{ title }}</span>
+    <span class="svg-card__subtitle">{{ subtitle }}</span>
+  </span>
+</a>
