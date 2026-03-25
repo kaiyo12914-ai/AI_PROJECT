@@ -142,11 +142,18 @@ else:
 # ============================================================
 # Security / Debug
 # ============================================================
-ENV_NAME = env_str("ENV", "DEV").strip().upper()
-ENV_IS_DEV = ENV_NAME == "DEV"
-ENV_IS_INT = ENV_NAME in ("INT", "PROD_INT")
-ENV_IS_EXT = ENV_NAME in ("EXT", "PROD_EXT", "PROD")
-ENV_IS_PROD = ENV_NAME in ("PROD", "PROD_INT", "PROD_EXT", "STAGE", "UAT")
+_raw_env_name = env_str("ENV", "DEV_EXT").strip().upper()
+_ENV_ALIASES = {
+    "DEV": "DEV_EXT",
+    "EXT": "DEV_EXT",
+    "INT": "DEV_IN",
+    "PROD": "PROD_EXT",
+}
+ENV_NAME = _ENV_ALIASES.get(_raw_env_name, _raw_env_name)
+ENV_IS_DEV = ENV_NAME in ("DEV_IN", "DEV_EXT")
+ENV_IS_INT = ENV_NAME in ("DEV_IN", "PROD_INT")
+ENV_IS_EXT = ENV_NAME in ("DEV_EXT", "PROD_EXT")
+ENV_IS_PROD = ENV_NAME in ("PROD_INT", "PROD_EXT", "STAGE", "UAT")
 
 SECRET_KEY = env_str(
     "DJANGO_SECRET_KEY",
@@ -175,7 +182,7 @@ CSRF_COOKIE_HTTPONLY = True
 # ============================================================
 
 # 根據環境決定基礎磁碟 (H:\AI\AI_TOOLS 或 D:\AI\AI_TOOLS)
-_TARGET_DRIVE = "H:" if (ENV_IS_EXT or ENV_IS_DEV) else "D:"
+_TARGET_DRIVE = "H:" if ENV_IS_EXT else "D:"
 _PROJECT_ROOT_STR = f"{_TARGET_DRIVE}\\AI\\AI_TOOLS"
 # 強制修正 BASE_DIR 以驅動器代號開始，避免 UNC 路徑導致 staticfiles.W004 警告
 BASE_DIR = Path(_PROJECT_ROOT_STR)

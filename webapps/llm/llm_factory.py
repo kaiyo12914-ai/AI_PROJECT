@@ -48,16 +48,23 @@ def _model_timeout_default() -> int:
 def _resolved_model_priority() -> list[str]:
     """
     Resolve AUTO backend priority by ENV first, then MODEL_PRIORITY, then legacy fallback.
-    - ENV=INT/PROD_INT: force OLLAMA only (intranet policy)
-    - ENV=EXT/DEV/PROD_EXT: default GOOGLE -> OPENAI -> OLLAMA
+    - ENV=DEV_IN/PROD_INT: force OLLAMA only (intranet policy)
+    - ENV=DEV_EXT/PROD_EXT: default GOOGLE -> OPENAI -> OLLAMA
+    - Legacy aliases: EXT/DEV->DEV_EXT, INT->DEV_IN, PROD->PROD_EXT.
     """
     env_name = (os.getenv("ENV") or "").strip().upper()
+    env_name = {
+        "EXT": "DEV_EXT",
+        "DEV": "DEV_EXT",
+        "INT": "DEV_IN",
+        "PROD": "PROD_EXT",
+    }.get(env_name, env_name)
     raw_prio = (os.getenv("MODEL_PRIORITY") or "").strip()
 
-    if env_name in ("INT", "PROD_INT"):
+    if env_name in ("DEV_IN", "PROD_INT"):
         return ["OLLAMA"]
 
-    if env_name in ("EXT", "DEV", "PROD_EXT", "PROD"):
+    if env_name in ("DEV_EXT", "PROD_EXT"):
         if raw_prio:
             return [x.strip().upper() for x in raw_prio.split(",") if x.strip()]
         return ["GOOGLE", "OPENAI", "OLLAMA"]
