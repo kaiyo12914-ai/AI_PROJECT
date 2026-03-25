@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 import os
 import re
+import sys
 from dotenv import load_dotenv
 
 # Tesseract
@@ -190,6 +191,8 @@ SECRET_KEY = env_str(
 
 # ✅ 資安加固：正式環境強制關閉 DEBUG
 DEBUG = env_bool("DJANGO_DEBUG", default=ENV_IS_DEV)
+IS_RUNSERVER = any(str(arg).startswith("runserver") for arg in sys.argv[1:])
+SERVE_STATIC_WITH_DJANGO = env_bool("SERVE_STATIC_WITH_DJANGO", default=True)
 
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "mpcai.mpc.mil.tw,10.29.136.17,127.0.0.1,localhost")
 
