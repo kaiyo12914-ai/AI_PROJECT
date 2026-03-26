@@ -46,7 +46,28 @@ def graph_page(request):
     return render(request, "graph2doc/index.html", {"app_base_url": _calc_app_base_url(request)})
 
 
-def _generate_ai_text(title: str, notes: str, has_image: bool) -> str:
+def _ocr_image_text(image_path: str, lang: str = "chi_tra+eng") -> str:
+    import pytesseract
+    from PIL import Image, ImageOps
+
+    tcmd = (os.environ.get("TESSERACT_CMD") or "").strip()
+    if tcmd:
+        pytesseract.pytesseract.tesseract_cmd = tcmd
+
+    with Image.open(image_path) as img:
+        # Normalize to improve OCR quality on scanned/photographed documents.
+        gray = ImageOps.grayscale(img)
+        enhanced = ImageOps.autocontrast(gray)
+        text1 = (pytesseract.image_to_string(enhanced, lang=lang, config="--psm 6") or "").strip()
+        if len(text1) >= 40:
+            return text1
+
+        # Fallback pass for sparse/table-like layouts.
+        text2 = (pytesseract.image_to_string(enhanced, lang=lang, config="--psm 11") or "").strip()
+        return text2 if len(text2) >= len(text1) else text1
+
+
+def _generate_ai_text(title: str, notes: str, has_image: bool, ocr_text: str) -> str:
     llm = get_chat_model(temperature=0.2, timeout=120)
 
     system = (
@@ -57,12 +78,13 @@ def _generate_ai_text(title: str, notes: str, has_image: bool) -> str:
 
     user = (
         "請輸出：\n"
-        "1. 主題一句話\n"
-        "2. 重點條列（3~8點）\n"
-        "3. 可行動建議（如適用）\n\n"
+        "1. 文字擷取重點（保留重要專有名詞、數字、日期）\n"
+        "2. 條列重點（3~8點）\n"
+        "3. 若內容為表單/公文，請依欄位整理\n\n"
         f"- 標題：{title or '未提供'}\n"
         f"- 是否有圖片：{'是' if has_image else '否'}\n"
         f"- 補充說明：{notes or '未提供'}\n"
+        f"- OCR 文字內容：\n{ocr_text or '（未擷取到圖片文字）'}\n"
     )
 
     prompt = ChatPromptTemplate.from_messages(
@@ -121,9 +143,28 @@ def graph_build_text(request):
             for chunk in img.chunks():
                 f.write(chunk)
 
+    ocr_lang = (request.POST.get("ocr_lang") or os.environ.get("OCR_LANG") or "chi_tra+eng").strip()
+    ocr_text = ""
+    if saved_img_path:
+        try:
+            ocr_text = _ocr_image_text(saved_img_path, lang=ocr_lang)
+        except Exception:
+            ocr_text = ""
+
     try:
-        text = _generate_ai_text(title=title, notes=notes, has_image=bool(saved_img_path))
-        return JsonResponse({"ok": True, "text": text}, status=200)
+        text = _generate_ai_text(
+            title=title,
+            notes=notes,
+            has_image=bool(saved_img_path),
+            ocr_text=ocr_text,
+        )
+        # If LLM output is empty, fallback to raw OCR so user still gets image-related text.
+        if not text.strip():
+            text = ocr_text.strip()
+        return JsonResponse(
+            {"ok": True, "text": text, "ocr_chars": len(ocr_text), "used_ocr": bool(ocr_text)},
+            status=200,
+        )
     except Exception as e:
         return JsonResponse({"ok": False, "error": str(e)}, status=500)
 

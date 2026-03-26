@@ -81,7 +81,8 @@ async function buildText() {
     }
 
     refs.out.value = data.text || "";
-    setStatus("產生完成", "ok");
+    const ocrTag = data.used_ocr ? `（OCR ${data.ocr_chars || 0} 字）` : "（未擷取到圖片文字）";
+    setStatus(`產生完成 ${ocrTag}`, "ok");
   } catch (err) {
     setStatus(`產生失敗：${err.message || "未知錯誤"}`, "err");
   } finally {
