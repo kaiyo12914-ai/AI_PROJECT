@@ -58,6 +58,11 @@
         {% include "portal/_svg_card.html" with href=comment_href title="考績評量工具" subtitle="評語建議與文字優化" tone="blue" icon="comment" variant=card_variant %}
       {% endif %}
 
+      {% if can_todo %}
+        {% url 'todo_page' as todo_href %}
+        {% include "portal/_svg_card.html" with href=todo_href title="待辦事項管理" subtitle="URL GET / 智慧提醒" tone="green" icon="todo" variant=card_variant %}
+      {% endif %}
+
       {% if can_meetingreply %}
         {% url 'meetingreply:page' as meetingreply_href %}
         {% include "portal/_svg_card.html" with href=meetingreply_href title="指裁事項擬答" subtitle="RAG 輔助擬答" tone="green" icon="rag" variant=card_variant %}
@@ -88,11 +93,6 @@
         {% include "portal/_svg_card.html" with href=tts_href title="語音 / 文字" subtitle="TTS / STT" tone="cyan" icon="tts" variant=card_variant %}
       {% endif %}
 
-      {% if can_todo %}
-        {% url 'todo_page' as todo_href %}
-        {% include "portal/_svg_card.html" with href=todo_href title="待辦事項管理" subtitle="URL GET / 智慧提醒" tone="green" icon="todo" variant=card_variant %}
-      {% endif %}
-
       {% if can_portal %}
         {% url 'portal:usage_page' as usage_href %}
         {% include "portal/_svg_card.html" with href=usage_href title="Portal 使用紀錄" subtitle="使用紀錄查詢" tone="gray" icon="usage" variant=card_variant %}
@@ -113,4 +113,3 @@
 {% endwith %}
 </body>
 </html>
-
