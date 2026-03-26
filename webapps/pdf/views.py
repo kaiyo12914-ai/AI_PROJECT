@@ -13,9 +13,6 @@ from django.views.decorators.csrf import csrf_exempt
 from webapps.llm.llm_factory import get_chat_model
 from webapps.portal.decorators import require_node
 
-# Windows default Tesseract location. Can be overridden by env TESSERACT_CMD.
-os.environ.setdefault("TESSDATA_PREFIX", r"C:\Program Files\Tesseract-OCR")
-
 
 def _norm_base(path: str) -> str:
     s = (path or "").strip()
@@ -30,7 +27,7 @@ def _norm_base(path: str) -> str:
 
 def _calc_app_base_url(request) -> str:
     """
-    Return app base for apiurl():
+    Compute app base url for apiurl():
     - direct: /pdf/... -> /pdf
     - proxied: /djangoai/pdf/... -> /djangoai/pdf
     """
@@ -41,6 +38,43 @@ def _calc_app_base_url(request) -> str:
 @require_node("pdf")
 def index(request):
     return render(request, "pdf/index.html", {"app_base_url": _calc_app_base_url(request)})
+
+
+def _resolve_tesseract_cmd() -> str:
+    env_cmd = (os.environ.get("TESSERACT_CMD") or "").strip()
+    if env_cmd and os.path.exists(env_cmd):
+        return env_cmd
+
+    default_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    if os.path.exists(default_cmd):
+        return default_cmd
+    return ""
+
+
+def _resolve_tessdata_dir(tesseract_cmd: str) -> str:
+    env_dir = (os.environ.get("TESSDATA_PREFIX") or "").strip()
+    candidates: List[str] = []
+    if env_dir:
+        candidates.append(env_dir)
+        if not env_dir.lower().endswith("tessdata"):
+            candidates.append(os.path.join(env_dir, "tessdata"))
+
+    if tesseract_cmd:
+        candidates.append(os.path.join(os.path.dirname(tesseract_cmd), "tessdata"))
+
+    candidates.append(r"C:\Program Files\Tesseract-OCR\tessdata")
+
+    for d in candidates:
+        if d and os.path.isdir(d):
+            return d
+    return ""
+
+
+def _ocr_config(psm: int, tessdata_dir: str) -> str:
+    base = f"--oem 3 --psm {psm}"
+    if tessdata_dir:
+        return f'{base} --tessdata-dir "{tessdata_dir}"'
+    return base
 
 
 def _safe_filename_base(name: str) -> str:
@@ -56,11 +90,9 @@ def _get_uploaded_pdf(request):
         return None, JsonResponse({"ok": False, "error": "請先上傳 PDF"}, status=400)
     if not f.name.lower().endswith(".pdf"):
         return None, JsonResponse({"ok": False, "error": "僅支援 .pdf 檔案"}, status=400)
-
     max_mb = int(os.environ.get("PDF_MAX_MB", "50") or 50)
     if f.size > max_mb * 1024 * 1024:
         return None, JsonResponse({"ok": False, "error": f"檔案大小超過上限 {max_mb}MB"}, status=400)
-
     return f, None
 
 
@@ -70,9 +102,9 @@ def _extract_pdf_text_pypdf(file_obj) -> str:
     reader = PdfReader(file_obj)
     parts: List[str] = []
     for i, page in enumerate(reader.pages, start=1):
-        text = (page.extract_text() or "").strip()
-        if text:
-            parts.append(f"[第 {i} 頁]\n{text}")
+        t = (page.extract_text() or "").strip()
+        if t:
+            parts.append(f"[第 {i} 頁]\n{t}")
     return "\n\n".join(parts).strip()
 
 
@@ -80,16 +112,29 @@ def _ocr_pdf_text(file_bytes: bytes, lang: str = "chi_tra+eng") -> str:
     import pypdfium2 as pdfium
     import pytesseract
 
-    tcmd = os.environ.get("TESSERACT_CMD", "").strip()
-    if tcmd:
-        pytesseract.pytesseract.tesseract_cmd = tcmd
+    tcmd = _resolve_tesseract_cmd()
+    if not tcmd:
+        raise RuntimeError("找不到 tesseract.exe，請設定 TESSERACT_CMD 或確認安裝路徑")
+    pytesseract.pytesseract.tesseract_cmd = tcmd
+
+    tessdata_dir = _resolve_tessdata_dir(tcmd)
+    if not tessdata_dir:
+        raise RuntimeError("找不到 tessdata 目錄，請設定 TESSDATA_PREFIX 指向 tessdata")
+    os.environ["TESSDATA_PREFIX"] = tessdata_dir
 
     pdf = pdfium.PdfDocument(file_bytes)
     parts: List[str] = []
     for i in range(len(pdf)):
         page = pdf.get_page(i)
         pil_img = page.render(scale=2.5).to_pil()
-        text = (pytesseract.image_to_string(pil_img, lang=lang) or "").strip()
+        text = (
+            pytesseract.image_to_string(
+                pil_img,
+                lang=lang,
+                config=_ocr_config(6, tessdata_dir),
+            )
+            or ""
+        ).strip()
         if text:
             parts.append(f"[第 {i + 1} 頁 OCR]\n{text}")
         else:
@@ -99,27 +144,23 @@ def _ocr_pdf_text(file_bytes: bytes, lang: str = "chi_tra+eng") -> str:
 
 
 def _extract_pdf_text_auto(file_obj, ocr_lang: str = "chi_tra+eng", min_chars: int = 40) -> Tuple[str, bool]:
-    """
-    Returns: (text, used_ocr)
-    """
     file_bytes = file_obj.read()
 
-    pypdf_text = ""
+    text = ""
     try:
-        pypdf_text = _extract_pdf_text_pypdf(io.BytesIO(file_bytes))
+        text = _extract_pdf_text_pypdf(io.BytesIO(file_bytes))
     except Exception:
-        pypdf_text = ""
+        text = ""
 
-    if pypdf_text and len(pypdf_text) >= min_chars:
-        return pypdf_text, False
+    if text and len(text) >= min_chars:
+        return text, False
 
     try:
         ocr_text = _ocr_pdf_text(file_bytes, lang=ocr_lang)
         return (ocr_text or "").strip(), True
     except Exception as e:
-        # OCR can fail on malformed/encrypted PDFs; fallback to pypdf if available.
-        if pypdf_text and pypdf_text.strip():
-            return pypdf_text.strip(), False
+        if text and text.strip():
+            return text.strip(), False
         raise RuntimeError(f"PDF OCR 失敗：{e}")
 
 
@@ -137,13 +178,7 @@ def api_extract_text(request):
     try:
         text, used_ocr = _extract_pdf_text_auto(f, ocr_lang=ocr_lang)
         return JsonResponse(
-            {
-                "ok": True,
-                "filename": f.name,
-                "chars": len(text),
-                "text": text,
-                "used_ocr": used_ocr,
-            },
+            {"ok": True, "filename": f.name, "chars": len(text), "text": text, "used_ocr": used_ocr},
             status=200,
         )
     except Exception as e:
@@ -197,9 +232,9 @@ def api_download_docx(request):
 
         if text:
             for block in text.split("\n\n"):
-                b = (block or "").strip()
-                if b:
-                    doc.add_paragraph(b)
+                t = (block or "").strip()
+                if t:
+                    doc.add_paragraph(t)
         else:
             doc.add_paragraph("未擷取到文字")
 
@@ -259,26 +294,21 @@ def _build_summary_prompt(doc_text: str) -> str:
 def _llm_to_text(resp) -> str:
     if resp is None:
         return ""
-
-    content = getattr(resp, "content", None)
-    if isinstance(content, str):
-        return content.strip()
-    if isinstance(content, list):
-        parts: List[str] = []
-        for part in content:
-            if isinstance(part, str):
-                parts.append(part)
-            elif isinstance(part, dict):
-                parts.append(str(part.get("text") or part.get("content") or ""))
-        return "".join(parts).strip()
-
+    if hasattr(resp, "content"):
+        c = resp.content
+        if isinstance(c, list):
+            out = []
+            for part in c:
+                if isinstance(part, str):
+                    out.append(part)
+                elif isinstance(part, dict):
+                    out.append(str(part.get("text") or part.get("content") or ""))
+            return "".join(out).strip()
+        return str(c or "").strip()
     return str(resp).strip()
 
 
 def _local_summary_fallback(doc_text: str) -> str:
-    """
-    Fallback summary when LLM is unavailable.
-    """
     lines = [ln.strip() for ln in doc_text.splitlines() if ln.strip()]
     topic = lines[0] if lines else "未能判定主題"
     key_points = lines[:6]
@@ -338,6 +368,7 @@ def api_summary(request):
         summary = _llm_to_text(llm.invoke(_build_summary_prompt(doc_text)))
         if not summary:
             summary = _local_summary_fallback(doc_text)
+            return JsonResponse({"ok": True, "summary": summary, "fallback": True}, status=200)
         return JsonResponse({"ok": True, "summary": summary, "fallback": False}, status=200)
     except Exception:
         summary = _local_summary_fallback(doc_text)

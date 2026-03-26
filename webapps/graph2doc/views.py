@@ -9,7 +9,6 @@ from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
-
 from langchain_core.prompts import ChatPromptTemplate
 
 from webapps.llm.llm_factory import get_chat_model
@@ -49,8 +48,33 @@ def _resolve_tesseract_cmd() -> str:
     default_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
     if os.path.exists(default_cmd):
         return default_cmd
-
     return ""
+
+
+def _resolve_tessdata_dir(tesseract_cmd: str) -> str:
+    env_dir = (os.environ.get("TESSDATA_PREFIX") or "").strip()
+    candidates: List[str] = []
+    if env_dir:
+        candidates.append(env_dir)
+        if not env_dir.lower().endswith("tessdata"):
+            candidates.append(os.path.join(env_dir, "tessdata"))
+
+    if tesseract_cmd:
+        candidates.append(os.path.join(os.path.dirname(tesseract_cmd), "tessdata"))
+
+    candidates.append(r"C:\Program Files\Tesseract-OCR\tessdata")
+
+    for d in candidates:
+        if d and os.path.isdir(d):
+            return d
+    return ""
+
+
+def _ocr_config(psm: int, tessdata_dir: str) -> str:
+    base = f"--oem 3 --psm {psm}"
+    if tessdata_dir:
+        return f'{base} --tessdata-dir "{tessdata_dir}"'
+    return base
 
 
 @require_node("graph")
@@ -63,21 +87,39 @@ def _ocr_image_text(image_path: str, lang: str = "chi_tra+eng") -> str:
     from PIL import Image, ImageOps
 
     tcmd = _resolve_tesseract_cmd()
-    if tcmd:
-        pytesseract.pytesseract.tesseract_cmd = tcmd
-    else:
-        raise RuntimeError("找不到 tesseract.exe，請設定 TESSERACT_CMD 或安裝到預設路徑")
+    if not tcmd:
+        raise RuntimeError("找不到 tesseract.exe，請設定 TESSERACT_CMD 或確認安裝路徑")
+    pytesseract.pytesseract.tesseract_cmd = tcmd
+
+    tessdata_dir = _resolve_tessdata_dir(tcmd)
+    if not tessdata_dir:
+        raise RuntimeError("找不到 tessdata 目錄，請設定 TESSDATA_PREFIX 指向 tessdata")
+    os.environ["TESSDATA_PREFIX"] = tessdata_dir
 
     with Image.open(image_path) as img:
-        # Normalize to improve OCR quality on scanned/photographed documents.
+        # Improve OCR quality for scanned documents.
         gray = ImageOps.grayscale(img)
         enhanced = ImageOps.autocontrast(gray)
-        text1 = (pytesseract.image_to_string(enhanced, lang=lang, config="--psm 6") or "").strip()
+        text1 = (
+            pytesseract.image_to_string(
+                enhanced,
+                lang=lang,
+                config=_ocr_config(6, tessdata_dir),
+            )
+            or ""
+        ).strip()
         if len(text1) >= 40:
             return text1
 
-        # Fallback pass for sparse/table-like layouts.
-        text2 = (pytesseract.image_to_string(enhanced, lang=lang, config="--psm 11") or "").strip()
+        # Fallback pass for sparse/table-like content.
+        text2 = (
+            pytesseract.image_to_string(
+                enhanced,
+                lang=lang,
+                config=_ocr_config(11, tessdata_dir),
+            )
+            or ""
+        ).strip()
         return text2 if len(text2) >= len(text1) else text1
 
 
@@ -85,20 +127,20 @@ def _generate_ai_text(title: str, notes: str, has_image: bool, ocr_text: str) ->
     llm = get_chat_model(temperature=0.2, timeout=120)
 
     system = (
-        "你是一位專業的圖表與文件轉文字助手。"
-        "請根據使用者提供的標題與補充說明，產生可直接使用的條理化文字。"
-        "回覆請使用繁體中文，語氣專業、精簡。"
+        "你是一位專業的圖文轉文字助手。"
+        "請依照 OCR 結果產生可直接使用的結構化內容。"
+        "請使用繁體中文，避免空泛語句。"
     )
 
     user = (
         "請輸出：\n"
-        "1. 文字擷取重點（保留重要專有名詞、數字、日期）\n"
-        "2. 條列重點（3~8點）\n"
-        "3. 若內容為表單/公文，請依欄位整理\n\n"
-        f"- 標題：{title or '未提供'}\n"
+        "1. 主題一句話\n"
+        "2. 內容重點（3~8點）\n"
+        "3. 若是表單或公文，請整理關鍵欄位\n\n"
+        f"- 標題：{title or '未命名圖文'}\n"
         f"- 是否有圖片：{'是' if has_image else '否'}\n"
         f"- 補充說明：{notes or '未提供'}\n"
-        f"- OCR 文字內容：\n{ocr_text or '（未擷取到圖片文字）'}\n"
+        f"- OCR 文字內容：\n{ocr_text or '（未擷取到文字）'}\n"
     )
 
     prompt = ChatPromptTemplate.from_messages(
@@ -134,7 +176,6 @@ def graph_build_text(request):
     img = request.FILES.get("image")
 
     saved_img_path = None
-
     if img:
         if getattr(img, "size", 0) > MAX_IMAGE_MB * 1024 * 1024:
             return JsonResponse({"ok": False, "error": f"圖片大小不可超過 {MAX_IMAGE_MB}MB"}, status=400)
@@ -152,7 +193,6 @@ def graph_build_text(request):
 
         img_name = f"{uuid.uuid4().hex}_{orig}"
         saved_img_path = os.path.join(upload_dir, img_name)
-
         with open(saved_img_path, "wb") as f:
             for chunk in img.chunks():
                 f.write(chunk)
@@ -164,16 +204,11 @@ def graph_build_text(request):
         try:
             ocr_text = _ocr_image_text(saved_img_path, lang=ocr_lang)
         except Exception as e:
-            ocr_text = ""
             ocr_error = str(e)
 
-    # If user uploaded image but OCR gets nothing, do not generate unrelated generic text.
     if saved_img_path and not ocr_text.strip():
         if ocr_error:
-            return JsonResponse(
-                {"ok": False, "error": f"圖片 OCR 失敗：{ocr_error}"},
-                status=500,
-            )
+            return JsonResponse({"ok": False, "error": f"圖片 OCR 失敗：{ocr_error}"}, status=500)
         return JsonResponse(
             {"ok": False, "error": "未擷取到圖片文字，請提高圖片清晰度或改用 PDF→TXT/OCR。"},
             status=422,
@@ -186,7 +221,6 @@ def graph_build_text(request):
             has_image=bool(saved_img_path),
             ocr_text=ocr_text,
         )
-        # If LLM output is empty, fallback to raw OCR so user still gets image-related text.
         if not text.strip():
             text = ocr_text.strip()
         return JsonResponse(
@@ -242,7 +276,6 @@ def _build_summary_prompt(doc_text: str) -> str:
 def _llm_to_text(resp) -> str:
     if resp is None:
         return ""
-
     content = getattr(resp, "content", None)
     if isinstance(content, str):
         return content.strip()
