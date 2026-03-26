@@ -13,65 +13,60 @@
 </head>
 <body data-base-url="{{ request.script_name }}">
 <div class="wrap">
-
-  <!-- 輸入區 -->
   <div class="card">
-    <h2 style="margin:0 0 8px">GRAPH → TEXT</h2>
+    <h2 class="title">GRAPH → TEXT</h2>
 
-    <div style="margin-top:10px">
+    <div class="field">
       <div class="muted">標題</div>
-      <input id="title" placeholder="例如：生產線異常趨勢圖分析" />
+      <input id="title" placeholder="例如：生產線異常趨勢分析" />
     </div>
 
-    <div style="margin-top:10px">
+    <div class="field">
       <div class="muted">上傳圖檔（可選）</div>
       <input id="image" type="file" accept="image/*" />
-      <div class="muted" style="margin-top:6px;">也可用下方「截圖貼上」直接 Ctrl+V。</div>
+      <div class="muted hint">也可用下方「截圖貼上」直接 Ctrl+V。</div>
     </div>
 
-    <div style="margin-top:10px">
+    <div class="field">
       <div class="muted">補充說明（可選）</div>
       <textarea id="notes" placeholder="例如：此圖為 2025/12 月每日不良率..."></textarea>
     </div>
 
     <div class="row">
       <button id="go">產生文字</button>
+      <button id="summary" type="button">文件摘要</button>
       <button id="copy" type="button">複製</button>
       <button id="downloadTxt" type="button">下載 TXT</button>
-      <span class="muted" id="status"></span>
+      <span class="muted status" id="status"></span>
     </div>
   </div>
 
-  <!-- 輸出區 -->
-  <div class="card" style="margin-top:16px;">
+  <div class="card section-gap">
     <div class="muted">輸出文字</div>
-    <textarea id="out" placeholder="產生後會顯示在這裡" style="min-height:220px"></textarea>
+    <textarea id="out" placeholder="產生後會顯示在這裡" class="out-box"></textarea>
   </div>
 
-  <!-- 截圖貼上 / 上傳 -->
-  <div class="card" style="margin-top:16px;">
-    <h3 style="margin:0 0 8px;">截圖貼上 / 上傳</h3>
+  <div class="card section-gap">
+    <div class="muted">文件摘要結果</div>
+    <div id="summaryStatus" class="status muted"></div>
+    <textarea id="summaryOut" placeholder="摘要結果會顯示在這裡" class="summary-box"></textarea>
+  </div>
+
+  <div class="card section-gap">
+    <h3 class="sub-title">截圖貼上 / 上傳</h3>
 
     <div id="pasteZone">
-      <div style="font-size:14px; color:#334155;">
-        ✅ 點此後直接按 <b>Ctrl+V</b> 貼上截圖（或拖拉圖片到這裡 / 點一下選檔）
-      </div>
-      <div style="font-size:12px; color:#64748b; margin-top:6px;">
-        支援 PNG/JPG/WebP（貼上後會自動帶入上方「上傳圖檔」）
-      </div>
-      <input id="imgInput" type="file" accept="image/*" style="display:none;">
+      <div class="paste-main">可在此區域貼上圖片（Ctrl+V）或點擊選擇檔案</div>
+      <div class="paste-sub">支援 PNG/JPG/WebP；上傳後會自動同步到主上傳欄位。</div>
+      <input id="imgInput" type="file" accept="image/*" hidden>
     </div>
 
-    <div style="display:flex; gap:12px; align-items:flex-start; margin-top:12px; flex-wrap:wrap;">
-      <img id="imgPreview" alt="preview"
-           style="max-width:360px;width:100%;border-radius:12px;display:none;border:1px solid #e2e8f0;">
-      <div style="min-width:220px;">
-        <div id="uploadStatus" class="muted"></div>
-      </div>
+    <div class="preview-wrap">
+      <img id="imgPreview" alt="preview" class="preview">
+      <div id="uploadStatus" class="muted"></div>
     </div>
   </div>
-
 </div>
-  <script defer src="{% static 'graph2doc/js/index.js' %}"></script>
+<script defer src="{% static 'graph2doc/js/index.js' %}"></script>
 </body>
 </html>
