@@ -52,12 +52,13 @@ def _resolve_tesseract_cmd() -> str:
 
 
 def _resolve_tessdata_dir(tesseract_cmd: str) -> str:
-    env_dir = (os.environ.get("TESSDATA_PREFIX") or "").strip()
+    env_dir = (os.environ.get("TESSDATA_PREFIX") or "").strip().strip('"').strip("'")
     candidates: List[str] = []
     if env_dir:
-        candidates.append(env_dir)
+        # Prefer explicit tessdata folder first.
         if not env_dir.lower().endswith("tessdata"):
             candidates.append(os.path.join(env_dir, "tessdata"))
+        candidates.append(env_dir)
 
     if tesseract_cmd:
         candidates.append(os.path.join(os.path.dirname(tesseract_cmd), "tessdata"))

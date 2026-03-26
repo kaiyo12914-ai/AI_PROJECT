@@ -12,7 +12,7 @@ import sys
 from dotenv import load_dotenv
 
 # Tesseract
-os.environ.setdefault("TESSDATA_PREFIX", r"C:\Program Files\Tesseract-OCR")
+os.environ.setdefault("TESSDATA_PREFIX", r"C:\Program Files\Tesseract-OCR\tessdata")
 
 # ============================================================
 # Base
