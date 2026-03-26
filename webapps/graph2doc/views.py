@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from typing import List
 
 from django.conf import settings
 from django.http import JsonResponse
@@ -10,6 +11,7 @@ from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 
 from langchain_core.prompts import ChatPromptTemplate
+
 from webapps.llm.llm_factory import get_chat_model
 from webapps.portal.decorators import require_node
 
@@ -18,44 +20,63 @@ ALLOWED_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
 MAX_IMAGE_MB = 10
 
 
+def _norm_base(path: str) -> str:
+    s = (path or "").strip()
+    if not s:
+        return ""
+    if not s.startswith("/"):
+        s = "/" + s
+    while len(s) > 1 and s.endswith("/"):
+        s = s[:-1]
+    return "" if s == "/" else s
+
+
+def _calc_app_base_url(request) -> str:
+    """
+    Build app base for apiurl():
+    - direct: /graph/... -> /graph
+    - proxied: /djangoai/graph/... -> /djangoai/graph
+    """
+    script = _norm_base(getattr(request, "script_name", "") or request.META.get("SCRIPT_NAME", ""))
+    return _norm_base((script + "/graph").replace("//", "/"))
+
+
 @require_node("graph")
 def graph_page(request):
-    return render(request, "graph2doc/index.html")
+    return render(request, "graph2doc/index.html", {"app_base_url": _calc_app_base_url(request)})
 
 
 def _generate_ai_text(title: str, notes: str, has_image: bool) -> str:
     llm = get_chat_model(temperature=0.2, timeout=120)
 
     system = (
-        "你是政府/製造業場域的文字整理助理。"
-        "請用繁體中文。"
-        "不要提到你是AI或模型。"
-        "不要輸出章節標題或多餘說明，只輸出最後要給使用者貼上的文字內容。"
+        "你是一位專業的圖表與文件轉文字助手。"
+        "請根據使用者提供的標題與補充說明，產生可直接使用的條理化文字。"
+        "回覆請使用繁體中文，語氣專業、精簡。"
     )
 
     user = (
-        "請把以下資訊整理成一段可直接貼上的「純文字」。\n"
-        "限制：\n"
-        "1) 不要寫章節（例如 一、二、三）\n"
-        "2) 不要解釋你在做什麼\n"
-        "3) 用條列或短句即可\n\n"
-        f"- 標題：{title}\n"
-        f"- 有無附圖：{'有' if has_image else '無'}\n"
-        f"- 補充說明：{notes if notes else '（無）'}\n"
+        "請輸出：\n"
+        "1. 主題一句話\n"
+        "2. 重點條列（3~8點）\n"
+        "3. 可行動建議（如適用）\n\n"
+        f"- 標題：{title or '未提供'}\n"
+        f"- 是否有圖片：{'是' if has_image else '否'}\n"
+        f"- 補充說明：{notes or '未提供'}\n"
     )
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system),
-        ("user", user),
-    ])
-
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", system),
+            ("user", user),
+        ]
+    )
     resp = llm.invoke(prompt.format_messages())
     out = getattr(resp, "content", None) or str(resp)
     return (out or "").strip()
 
 
 def _safe_filename(name: str) -> str:
-    # 只留基本字元，避免路徑/控制字元
     name = os.path.basename(name or "upload")
     cleaned = []
     for ch in name:
@@ -72,7 +93,7 @@ def graph_build_text(request):
     if request.method != "POST":
         return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
 
-    title = (request.POST.get("title") or "圖表文字整理").strip()
+    title = (request.POST.get("title") or "未命名圖文").strip()
     notes = (request.POST.get("notes") or "").strip()
     img = request.FILES.get("image")
 
@@ -80,13 +101,13 @@ def graph_build_text(request):
 
     if img:
         if getattr(img, "size", 0) > MAX_IMAGE_MB * 1024 * 1024:
-            return JsonResponse({"ok": False, "error": f"圖片過大（上限 {MAX_IMAGE_MB}MB）"}, status=400)
+            return JsonResponse({"ok": False, "error": f"圖片大小不可超過 {MAX_IMAGE_MB}MB"}, status=400)
 
         orig = _safe_filename(getattr(img, "name", "image.png"))
         _, ext = os.path.splitext(orig.lower())
         if ext not in ALLOWED_IMAGE_EXTS:
             return JsonResponse(
-                {"ok": False, "error": f"不支援的圖片格式（允許：{', '.join(sorted(ALLOWED_IMAGE_EXTS))}）"},
+                {"ok": False, "error": f"僅支援圖片格式：{', '.join(sorted(ALLOWED_IMAGE_EXTS))}"},
                 status=400,
             )
 
@@ -151,15 +172,37 @@ def _llm_to_text(resp) -> str:
     if isinstance(content, str):
         return content.strip()
     if isinstance(content, list):
-        out = []
+        out: List[str] = []
         for part in content:
             if isinstance(part, str):
                 out.append(part)
             elif isinstance(part, dict):
                 out.append(str(part.get("text") or part.get("content") or ""))
         return "".join(out).strip()
-
     return str(resp).strip()
+
+
+def _local_summary_fallback(doc_text: str) -> str:
+    lines = [ln.strip() for ln in doc_text.splitlines() if ln.strip()]
+    topic = lines[0] if lines else "未能判定主題"
+    key_points = lines[:6]
+    data_points = [ln for ln in lines if any(ch.isdigit() for ch in ln)][:5]
+
+    return (
+        "一、文件主題：\n"
+        f"{topic}\n\n"
+        "二、核心摘要：\n"
+        f"文件主要圍繞「{topic}」說明。\n"
+        "內容已完成初步摘要整理，建議人工覆核細節。\n"
+        "可優先檢視關鍵重點與數據欄位。\n\n"
+        "三、關鍵重點：\n"
+        + ("\n".join([f"- {p}" for p in key_points]) if key_points else "- （無可擷取重點）")
+        + "\n\n四、重要數據 / 結論：\n"
+        + ("\n".join([f"- {d}" for d in data_points]) if data_points else "- （未檢出明確數據）")
+        + "\n\n五、可行動建議（若適用）：\n"
+        "- 先確認摘要內容與原文目的是否一致。\n"
+        "- 對關鍵數據進行人工覆核後再引用。"
+    )
 
 
 @csrf_exempt
@@ -189,7 +232,9 @@ def graph_summary(request):
         llm = get_chat_model(temperature=0.2, timeout=120)
         summary = _llm_to_text(llm.invoke(_build_summary_prompt(text)))
         if not summary:
-            return JsonResponse({"ok": False, "error": "摘要回傳為空"}, status=502)
-        return JsonResponse({"ok": True, "summary": summary}, status=200)
-    except Exception as e:
-        return JsonResponse({"ok": False, "error": f"摘要失敗：{e}"}, status=500)
+            summary = _local_summary_fallback(text)
+            return JsonResponse({"ok": True, "summary": summary, "fallback": True}, status=200)
+        return JsonResponse({"ok": True, "summary": summary, "fallback": False}, status=200)
+    except Exception:
+        summary = _local_summary_fallback(text)
+        return JsonResponse({"ok": True, "summary": summary, "fallback": True}, status=200)

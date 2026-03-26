@@ -54,6 +54,15 @@ function setImageFile(file) {
   refs.uploadStatus.textContent = `已選擇：${file.name}`;
 }
 
+async function parseJsonOrThrow(resp, actionName) {
+  const ct = (resp.headers.get("content-type") || "").toLowerCase();
+  if (!ct.includes("application/json")) {
+    const raw = await resp.text();
+    throw new Error(`${actionName}失敗：伺服器回傳非 JSON（可能是路由錯誤）`);
+  }
+  return resp.json();
+}
+
 async function buildText() {
   const fd = new FormData();
   fd.append("title", refs.title.value || "");
@@ -66,7 +75,7 @@ async function buildText() {
   setStatus("產生中...");
   try {
     const resp = await fetch(API_BUILD, { method: "POST", body: fd });
-    const data = await resp.json();
+    const data = await parseJsonOrThrow(resp, "產生文字");
     if (!resp.ok || !data.ok) {
       throw new Error(data.error || `HTTP ${resp.status}`);
     }
@@ -83,7 +92,7 @@ async function buildText() {
 async function summarizeText() {
   const text = (refs.out.value || "").trim();
   if (!text) {
-    alert("請先產生文字內容");
+    alert("請先取得文字結果");
     return;
   }
 
@@ -96,13 +105,13 @@ async function summarizeText() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
     });
-    const data = await resp.json();
+    const data = await parseJsonOrThrow(resp, "文件摘要");
     if (!resp.ok || !data.ok) {
       throw new Error(data.error || `HTTP ${resp.status}`);
     }
 
     refs.summaryOut.value = data.summary || "";
-    setSummaryStatus("摘要完成", "ok");
+    setSummaryStatus(data.fallback ? "摘要完成（備援模式）" : "摘要完成", "ok");
   } catch (err) {
     setSummaryStatus(`摘要失敗：${err.message || "未知錯誤"}`, "err");
   } finally {

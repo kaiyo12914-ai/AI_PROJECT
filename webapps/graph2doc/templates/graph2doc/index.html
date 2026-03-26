@@ -11,8 +11,9 @@
   <link rel="stylesheet" href="{% static 'graph2doc/css/index.css' %}">
   <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
 </head>
-<body data-base-url="{{ request.script_name }}">
+<body data-base-url="{{ app_base_url }}">
 <div class="wrap">
+
   <div class="card">
     <h2 class="title">GRAPH → TEXT</h2>
 
@@ -66,6 +67,7 @@
       <div id="uploadStatus" class="muted"></div>
     </div>
   </div>
+
 </div>
 <script defer src="{% static 'graph2doc/js/index.js' %}"></script>
 </body>
