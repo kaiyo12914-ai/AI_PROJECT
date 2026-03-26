@@ -15,9 +15,30 @@ from django.views.decorators.csrf import csrf_exempt
 from webapps.portal.decorators import require_node
 
 
+def _norm_base(p: str) -> str:
+    s = (p or "").strip()
+    if not s:
+        return ""
+    if not s.startswith("/"):
+        s = "/" + s
+    while len(s) > 1 and s.endswith("/"):
+        s = s[:-1]
+    return "" if s == "/" else s
+
+
+def _calc_app_base_url(request) -> str:
+    """
+    Compute app base url for apiurl():
+    - direct: /pdf/... -> /pdf
+    - proxied: /djangoai/pdf/... -> /djangoai/pdf
+    """
+    script = _norm_base(getattr(request, "script_name", "") or request.META.get("SCRIPT_NAME", ""))
+    return _norm_base((script + "/pdf").replace("//", "/"))
+
+
 @require_node("pdf")
 def index(request):
-    return render(request, "pdf/index.html")
+    return render(request, "pdf/index.html", {"app_base_url": _calc_app_base_url(request)})
 
 
 def _safe_filename_base(name: str) -> str:

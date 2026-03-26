@@ -29,27 +29,38 @@ const API_DOCX = apiurl("download/docx/");
 
       const fd = new FormData();
       fd.append("pdf", f);
+      try {
+        const r = await fetch(API_EXTRACT, { method: "POST", body: fd });
+        const ct = (r.headers.get("content-type") || "").toLowerCase();
+        let j = null;
+        if (ct.includes("application/json")) {
+          j = await r.json();
+        } else {
+          const raw = await r.text();
+          throw new Error("API 回傳非 JSON（可能路徑錯誤）: " + raw.slice(0, 80));
+        }
 
-      const r = await fetch(API_EXTRACT, { method: "POST", body: fd });
-      const j = await r.json();
+        if (!r.ok || !j || !j.ok) {
+          out.value = "";
+          setStatus("<span class='err'>❌ " + ((j && j.error) || ("HTTP " + r.status)) + "</span>");
+          return;
+        }
 
-      if (!j.ok) {
+        out.value = j.text || "";
+        const tag = j.used_ocr ? "（已OCR）" : "（抽字）";
+        setStatus(
+          "<span class='ok'>✅ 完成</span>" +
+            tag +
+            "（" +
+            (j.filename || "") +
+            "，" +
+            (j.chars ?? 0) +
+            "字元）"
+        );
+      } catch (e) {
         out.value = "";
-        setStatus("<span class='err'>❌ " + (j.error || "未知錯誤") + "</span>");
-        return;
+        setStatus("<span class='err'>❌ 擷取失敗：" + ((e && e.message) || "未知錯誤") + "</span>");
       }
-
-      out.value = j.text || "";
-      const tag = j.used_ocr ? "（已OCR）" : "（抽字）";
-      setStatus(
-        "<span class='ok'>✅ 完成</span>" +
-          tag +
-          "（" +
-          (j.filename || "") +
-          "，" +
-          (j.chars ?? 0) +
-          "字元）"
-      );
     }
 
     async function dl(ep, fallback) {
