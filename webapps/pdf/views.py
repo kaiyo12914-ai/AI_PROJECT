@@ -106,8 +106,15 @@ def _extract_pdf_text_auto(file_obj, ocr_lang: str = "chi_tra+eng", min_chars: i
     if text and len(text) >= min_chars:
         return text, False
 
-    ocr_text = _ocr_pdf_text(file_bytes, lang=ocr_lang)
-    return (ocr_text or "").strip(), True
+    try:
+        ocr_text = _ocr_pdf_text(file_bytes, lang=ocr_lang)
+        return (ocr_text or "").strip(), True
+    except Exception as e:
+        # OCR engine can fail on malformed/encrypted PDFs.
+        # If pypdf already extracted some text, return it instead of hard-fail.
+        if text and text.strip():
+            return text.strip(), False
+        raise RuntimeError(f"PDF OCR 失敗：{e}")
 
 
 @csrf_exempt
