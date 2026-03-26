@@ -41,6 +41,18 @@ def _calc_app_base_url(request) -> str:
     return _norm_base((script + "/graph").replace("//", "/"))
 
 
+def _resolve_tesseract_cmd() -> str:
+    env_cmd = (os.environ.get("TESSERACT_CMD") or "").strip()
+    if env_cmd and os.path.exists(env_cmd):
+        return env_cmd
+
+    default_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    if os.path.exists(default_cmd):
+        return default_cmd
+
+    return ""
+
+
 @require_node("graph")
 def graph_page(request):
     return render(request, "graph2doc/index.html", {"app_base_url": _calc_app_base_url(request)})
@@ -50,9 +62,11 @@ def _ocr_image_text(image_path: str, lang: str = "chi_tra+eng") -> str:
     import pytesseract
     from PIL import Image, ImageOps
 
-    tcmd = (os.environ.get("TESSERACT_CMD") or "").strip()
+    tcmd = _resolve_tesseract_cmd()
     if tcmd:
         pytesseract.pytesseract.tesseract_cmd = tcmd
+    else:
+        raise RuntimeError("找不到 tesseract.exe，請設定 TESSERACT_CMD 或安裝到預設路徑")
 
     with Image.open(image_path) as img:
         # Normalize to improve OCR quality on scanned/photographed documents.
@@ -145,11 +159,25 @@ def graph_build_text(request):
 
     ocr_lang = (request.POST.get("ocr_lang") or os.environ.get("OCR_LANG") or "chi_tra+eng").strip()
     ocr_text = ""
+    ocr_error = ""
     if saved_img_path:
         try:
             ocr_text = _ocr_image_text(saved_img_path, lang=ocr_lang)
-        except Exception:
+        except Exception as e:
             ocr_text = ""
+            ocr_error = str(e)
+
+    # If user uploaded image but OCR gets nothing, do not generate unrelated generic text.
+    if saved_img_path and not ocr_text.strip():
+        if ocr_error:
+            return JsonResponse(
+                {"ok": False, "error": f"圖片 OCR 失敗：{ocr_error}"},
+                status=500,
+            )
+        return JsonResponse(
+            {"ok": False, "error": "未擷取到圖片文字，請提高圖片清晰度或改用 PDF→TXT/OCR。"},
+            status=422,
+        )
 
     try:
         text = _generate_ai_text(
@@ -162,7 +190,13 @@ def graph_build_text(request):
         if not text.strip():
             text = ocr_text.strip()
         return JsonResponse(
-            {"ok": True, "text": text, "ocr_chars": len(ocr_text), "used_ocr": bool(ocr_text)},
+            {
+                "ok": True,
+                "text": text,
+                "ocr_chars": len(ocr_text),
+                "used_ocr": bool(ocr_text),
+                "ocr_error": ocr_error,
+            },
             status=200,
         )
     except Exception as e:
