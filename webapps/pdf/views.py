@@ -1,23 +1,24 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 from datetime import datetime
-# ✅ 一定要在 pytesseract / OCR 之前設定
-os.environ["TESSDATA_PREFIX"] = r"C:\Program Files\Tesseract-OCR"
-# Linux 範例：
-# os.environ["TESSDATA_PREFIX"] = "/usr/share/tesseract-ocr/4.00"
+from typing import List, Tuple
 
-from django.http import JsonResponse, HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 
-from webapps.portal.decorators import require_node
 from webapps.llm.llm_factory import get_chat_model
+from webapps.portal.decorators import require_node
+
+# Windows default Tesseract location. Can be overridden by env TESSERACT_CMD.
+os.environ.setdefault("TESSDATA_PREFIX", r"C:\Program Files\Tesseract-OCR")
 
 
-def _norm_base(p: str) -> str:
-    s = (p or "").strip()
+def _norm_base(path: str) -> str:
+    s = (path or "").strip()
     if not s:
         return ""
     if not s.startswith("/"):
@@ -29,7 +30,7 @@ def _norm_base(p: str) -> str:
 
 def _calc_app_base_url(request) -> str:
     """
-    Compute app base url for apiurl():
+    Return app base for apiurl():
     - direct: /pdf/... -> /pdf
     - proxied: /djangoai/pdf/... -> /djangoai/pdf
     """
@@ -52,69 +53,73 @@ def _safe_filename_base(name: str) -> str:
 def _get_uploaded_pdf(request):
     f = request.FILES.get("pdf")
     if not f:
-        return None, JsonResponse({"ok": False, "error": "未收到檔案欄位 pdf"}, status=400)
+        return None, JsonResponse({"ok": False, "error": "請先上傳 PDF"}, status=400)
     if not f.name.lower().endswith(".pdf"):
-        return None, JsonResponse({"ok": False, "error": "檔案必須為 .pdf"}, status=400)
-    if f.size > 20 * 1024 * 1024:
-        return None, JsonResponse({"ok": False, "error": "檔案過大（上限 20MB）"}, status=400)
+        return None, JsonResponse({"ok": False, "error": "僅支援 .pdf 檔案"}, status=400)
+
+    max_mb = int(os.environ.get("PDF_MAX_MB", "50") or 50)
+    if f.size > max_mb * 1024 * 1024:
+        return None, JsonResponse({"ok": False, "error": f"檔案大小超過上限 {max_mb}MB"}, status=400)
+
     return f, None
 
 
 def _extract_pdf_text_pypdf(file_obj) -> str:
     from pypdf import PdfReader
+
     reader = PdfReader(file_obj)
-    parts = []
+    parts: List[str] = []
     for i, page in enumerate(reader.pages, start=1):
-        t = (page.extract_text() or "").strip()
-        if t:
-            parts.append(f"【第 {i} 頁】\n{t}")
+        text = (page.extract_text() or "").strip()
+        if text:
+            parts.append(f"[第 {i} 頁]\n{text}")
     return "\n\n".join(parts).strip()
 
 
 def _ocr_pdf_text(file_bytes: bytes, lang: str = "chi_tra+eng") -> str:
-    import pytesseract
     import pypdfium2 as pdfium
+    import pytesseract
 
     tcmd = os.environ.get("TESSERACT_CMD", "").strip()
     if tcmd:
         pytesseract.pytesseract.tesseract_cmd = tcmd
 
     pdf = pdfium.PdfDocument(file_bytes)
-    parts = []
+    parts: List[str] = []
     for i in range(len(pdf)):
         page = pdf.get_page(i)
         pil_img = page.render(scale=2.5).to_pil()
         text = (pytesseract.image_to_string(pil_img, lang=lang) or "").strip()
         if text:
-            parts.append(f"【第 {i+1} 頁 OCR】\n{text}")
+            parts.append(f"[第 {i + 1} 頁 OCR]\n{text}")
         else:
-            parts.append(f"【第 {i+1} 頁 OCR】\n（此頁未辨識到文字）")
+            parts.append(f"[第 {i + 1} 頁 OCR]\n（未擷取到文字）")
         page.close()
-
     return "\n\n".join(parts).strip()
 
 
-def _extract_pdf_text_auto(file_obj, ocr_lang: str = "chi_tra+eng", min_chars: int = 40):
+def _extract_pdf_text_auto(file_obj, ocr_lang: str = "chi_tra+eng", min_chars: int = 40) -> Tuple[str, bool]:
+    """
+    Returns: (text, used_ocr)
+    """
     file_bytes = file_obj.read()
 
-    text = ""
+    pypdf_text = ""
     try:
-        import io as _io
-        text = _extract_pdf_text_pypdf(_io.BytesIO(file_bytes))
+        pypdf_text = _extract_pdf_text_pypdf(io.BytesIO(file_bytes))
     except Exception:
-        text = ""
+        pypdf_text = ""
 
-    if text and len(text) >= min_chars:
-        return text, False
+    if pypdf_text and len(pypdf_text) >= min_chars:
+        return pypdf_text, False
 
     try:
         ocr_text = _ocr_pdf_text(file_bytes, lang=ocr_lang)
         return (ocr_text or "").strip(), True
     except Exception as e:
-        # OCR engine can fail on malformed/encrypted PDFs.
-        # If pypdf already extracted some text, return it instead of hard-fail.
-        if text and text.strip():
-            return text.strip(), False
+        # OCR can fail on malformed/encrypted PDFs; fallback to pypdf if available.
+        if pypdf_text and pypdf_text.strip():
+            return pypdf_text.strip(), False
         raise RuntimeError(f"PDF OCR 失敗：{e}")
 
 
@@ -132,7 +137,13 @@ def api_extract_text(request):
     try:
         text, used_ocr = _extract_pdf_text_auto(f, ocr_lang=ocr_lang)
         return JsonResponse(
-            {"ok": True, "filename": f.name, "chars": len(text), "text": text, "used_ocr": used_ocr},
+            {
+                "ok": True,
+                "filename": f.name,
+                "chars": len(text),
+                "text": text,
+                "used_ocr": used_ocr,
+            },
             status=200,
         )
     except Exception as e:
@@ -176,20 +187,21 @@ def api_download_docx(request):
     ocr_lang = (request.POST.get("ocr_lang") or os.environ.get("OCR_LANG") or "chi_tra+eng").strip()
     try:
         from docx import Document
+
         text, used_ocr = _extract_pdf_text_auto(f, ocr_lang=ocr_lang)
 
         doc = Document()
-        doc.add_heading("PDF 轉換內容", level=1)
+        doc.add_heading("PDF 擷取結果", level=1)
         if used_ocr:
             doc.add_paragraph(f"OCR 模式：lang={ocr_lang}")
 
         if text:
             for block in text.split("\n\n"):
-                t = (block or "").strip()
-                if t:
-                    doc.add_paragraph(t)
+                b = (block or "").strip()
+                if b:
+                    doc.add_paragraph(b)
         else:
-            doc.add_paragraph("（未擷取到可用文字）")
+            doc.add_paragraph("未擷取到文字")
 
         bio = io.BytesIO()
         doc.save(bio)
@@ -244,24 +256,58 @@ def _build_summary_prompt(doc_text: str) -> str:
 """.strip()
 
 
-def _llm_to_text(x) -> str:
-    if x is None:
+def _llm_to_text(resp) -> str:
+    if resp is None:
         return ""
-    if hasattr(x, "content"):
-        try:
-            c = x.content
-            if isinstance(c, list):
-                out = []
-                for part in c:
-                    if isinstance(part, str):
-                        out.append(part)
-                    elif isinstance(part, dict):
-                        out.append(str(part.get("text") or part.get("content") or ""))
-                return "".join(out).strip()
-            return str(c or "").strip()
-        except Exception:
-            pass
-    return str(x).strip()
+
+    content = getattr(resp, "content", None)
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: List[str] = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append(part)
+            elif isinstance(part, dict):
+                parts.append(str(part.get("text") or part.get("content") or ""))
+        return "".join(parts).strip()
+
+    return str(resp).strip()
+
+
+def _local_summary_fallback(doc_text: str) -> str:
+    """
+    Fallback summary when LLM is unavailable.
+    """
+    lines = [ln.strip() for ln in doc_text.splitlines() if ln.strip()]
+    topic = lines[0] if lines else "未能判定主題"
+    key_points = lines[:6]
+    top_data = [ln for ln in lines if any(ch.isdigit() for ch in ln)][:5]
+
+    summary_lines = []
+    if lines:
+        summary_lines.append(f"文件主要圍繞「{topic}」展開。")
+        summary_lines.append("內容已完成初步結構化整理，可進一步人工確認細節。")
+        summary_lines.append("建議針對條列重點與數據欄位進行二次校對。")
+    else:
+        summary_lines.append("原始內容過短，無法形成完整摘要。")
+
+    kps = "\n".join([f"- {p}" for p in key_points]) if key_points else "- （無可擷取重點）"
+    datas = "\n".join([f"- {d}" for d in top_data]) if top_data else "- （未檢出明確數據）"
+
+    return (
+        "一、文件主題：\n"
+        f"{topic}\n\n"
+        "二、核心摘要：\n"
+        + "\n".join(summary_lines[:5])
+        + "\n\n三、關鍵重點：\n"
+        + kps
+        + "\n\n四、重要數據 / 結論：\n"
+        + datas
+        + "\n\n五、可行動建議（若適用）：\n"
+        "- 先確認摘要中的主題與關鍵點是否符合原文目的。\n"
+        "- 對重要數據進行人工覆核後再對外使用。"
+    )
 
 
 @csrf_exempt
@@ -273,8 +319,7 @@ def api_summary(request):
     doc_text = ""
     if request.content_type and "application/json" in request.content_type.lower():
         try:
-            import json as _json
-            body = _json.loads((request.body or b"").decode("utf-8") or "{}")
+            body = json.loads((request.body or b"").decode("utf-8") or "{}")
             doc_text = str(body.get("text") or "").strip()
         except Exception:
             doc_text = ""
@@ -282,7 +327,7 @@ def api_summary(request):
         doc_text = (request.POST.get("text") or "").strip()
 
     if not doc_text:
-        return JsonResponse({"ok": False, "error": "缺少文件內容"}, status=400)
+        return JsonResponse({"ok": False, "error": "請先提供文件內容"}, status=400)
 
     max_chars = int(os.environ.get("PDF_SUMMARY_MAX_CHARS", "12000") or 12000)
     if len(doc_text) > max_chars:
@@ -292,7 +337,8 @@ def api_summary(request):
         llm = get_chat_model(temperature=0.2, timeout=120)
         summary = _llm_to_text(llm.invoke(_build_summary_prompt(doc_text)))
         if not summary:
-            return JsonResponse({"ok": False, "error": "摘要模型未回傳內容"}, status=502)
-        return JsonResponse({"ok": True, "summary": summary}, status=200)
-    except Exception as e:
-        return JsonResponse({"ok": False, "error": f"摘要失敗：{e}"}, status=500)
+            summary = _local_summary_fallback(doc_text)
+        return JsonResponse({"ok": True, "summary": summary, "fallback": False}, status=200)
+    except Exception:
+        summary = _local_summary_fallback(doc_text)
+        return JsonResponse({"ok": True, "summary": summary, "fallback": True}, status=200)

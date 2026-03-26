@@ -7,11 +7,10 @@
   <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
   <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
   <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-  <title>PDF → TXT / DOCX（OCR）</title>
+  <title>PDF → TXT / DOCX（OCR 版）</title>
   <link rel="stylesheet" href="{% static 'pdf/css/index.css' %}">
   <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
 </head>
-
 <body data-base-url="{{ app_base_url }}">
   <div class="wrap">
     <h1>PDF → TXT/DOCX（OCR 版）</h1>
@@ -31,6 +30,7 @@
 
     <div id="status"></div>
     <textarea id="out" placeholder="擷取結果會顯示在這裡..."></textarea>
+
     <div id="summaryStatus"></div>
     <textarea id="summaryOut" placeholder="文件摘要結果會顯示在這裡..."></textarea>
   </div>
