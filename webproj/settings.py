@@ -353,6 +353,7 @@ PORTAL_ACL = {
     "pdf": ["ALL_AUTHENTICATED"],
     "pptx": ["ALL_AUTHENTICATED"],
     "tts": ["ALL_AUTHENTICATED"],
+    "todo": ["ALL_AUTHENTICATED"],
     "rag": ["ALL_AUTHENTICATED"],
     "vanna": [
         "DB",
@@ -471,6 +472,7 @@ PORTAL_USAGE_CODE_MAP = [
     ("/text2pptx/", "TEXT2PPTX"),
     ("/tts/", "TTS"),
     ("/pdf/", "PDF"),
+    ("/todo/", "TODO"),
     ("/rag/", "RAG"),
     ("/excelproc/", "EXCELPROC"),
 ]
@@ -503,6 +505,7 @@ INSTALLED_APPS = [
     "webapps.comment.apps.CommentConfig",
     "webapps.student.apps.StudentConfig",
     "webapps.pdf.apps.PdfConfig",
+    "webapps.todo.apps.TodoConfig",
     "webapps.excelproc.apps.ExcelprocConfig",
     "webapps.rag_oracle.apps.RagOracleConfig",
 ]

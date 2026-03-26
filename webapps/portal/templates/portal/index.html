@@ -44,6 +44,7 @@
       {% allow "pdf" as can_pdf %}
       {% allow "pptx" as can_pptx %}
       {% allow "tts" as can_tts %}
+      {% allow "todo" as can_todo %}
       {% allow "portal" as can_portal %}
       {% allow "vanna" as can_vanna %}
 
@@ -87,6 +88,11 @@
         {% include "portal/_svg_card.html" with href=tts_href title="語音 / 文字" subtitle="TTS / STT" tone="cyan" icon="tts" variant=card_variant %}
       {% endif %}
 
+      {% if can_todo %}
+        {% url 'todo_page' as todo_href %}
+        {% include "portal/_svg_card.html" with href=todo_href title="待辦事項管理" subtitle="URL GET / 智慧提醒" tone="green" icon="todo" variant=card_variant %}
+      {% endif %}
+
       {% if can_portal %}
         {% url 'portal:usage_page' as usage_href %}
         {% include "portal/_svg_card.html" with href=usage_href title="Portal 使用紀錄" subtitle="使用紀錄查詢" tone="gray" icon="usage" variant=card_variant %}
@@ -107,3 +113,4 @@
 {% endwith %}
 </body>
 </html>
+

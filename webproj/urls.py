@@ -33,6 +33,7 @@ urlpatterns = [
     path("tts/", include("webapps.tts.urls")),
     path("api/", include("webapps.llm.urls")),
     path("pdf/", include("webapps.pdf.urls")),
+    path("todo/", include("webapps.todo.urls")),
     path("rag/", include("webapps.rag_oracle.urls")),
     path("excelproc/", include("webapps.excelproc.urls")),
 

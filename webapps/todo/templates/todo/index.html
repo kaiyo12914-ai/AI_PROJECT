@@ -1,0 +1,62 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <title>待辦事項管理</title>
+  <link rel="stylesheet" href="{% static 'todo/css/index.css' %}">
+  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+</head>
+<body data-base-url="{{ app_base_url }}">
+  <div class="wrap">
+    <h1>待辦事項管理</h1>
+    <div class="muted">支援 URL GET 取得個人待辦，並產生智慧排程與提醒建議。</div>
+
+    <div class="card">
+      <label>待辦來源 URL（GET）</label>
+      <input id="sourceUrl" type="text" value="{{ default_todo_source_url }}" placeholder="https://example/api/todos?user_id={login_user}">
+      <div class="row">
+        <button id="btnFetch">取得我的待辦</button>
+        <span id="fetchStatus" class="muted"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <label>待辦事項</label>
+      <textarea id="todos" placeholder="待辦事項會顯示在此..."></textarea>
+    </div>
+
+    <div class="card">
+      <label>可用時間</label>
+      <textarea id="availableSlots" placeholder="例如：2026-03-26 09:00-12:00, 14:00-18:00"></textarea>
+    </div>
+
+    <div class="card">
+      <label>使用者偏好</label>
+      <textarea id="userPreferences" placeholder="例如：上午高專注、任務切換成本高、會議集中午後"></textarea>
+    </div>
+
+    <div class="card">
+      <label>目前日期</label>
+      <input id="currentDate" type="date" value="{{ today }}">
+      <div class="row">
+        <button id="btnPlan">產生智慧排程</button>
+        <button id="btnCopy" type="button">複製結果</button>
+        <button id="btnDownload" type="button">下載 TXT</button>
+        <span id="planStatus" class="muted"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <label>排程建議與提醒</label>
+      <textarea id="planOut" class="out" placeholder="分析結果會顯示在這裡..."></textarea>
+    </div>
+  </div>
+  <script defer src="{% static 'todo/js/index.js' %}"></script>
+</body>
+</html>
+
