@@ -71,11 +71,10 @@ def _resolve_tessdata_dir(tesseract_cmd: str) -> str:
     return ""
 
 
-def _ocr_config(psm: int, tessdata_dir: str) -> str:
-    base = f"--oem 3 --psm {psm}"
-    if tessdata_dir:
-        return f'{base} --tessdata-dir "{tessdata_dir}"'
-    return base
+def _ocr_config(psm: int) -> str:
+    # Avoid passing --tessdata-dir on Windows because quoted path parsing can fail
+    # under some process hosts (e.g., IIS/Waitress). Rely on TESSDATA_PREFIX instead.
+    return f"--oem 3 --psm {psm}"
 
 
 @require_node("graph")
@@ -105,7 +104,7 @@ def _ocr_image_text(image_path: str, lang: str = "chi_tra+eng") -> str:
             pytesseract.image_to_string(
                 enhanced,
                 lang=lang,
-                config=_ocr_config(6, tessdata_dir),
+                config=_ocr_config(6),
             )
             or ""
         ).strip()
@@ -117,7 +116,7 @@ def _ocr_image_text(image_path: str, lang: str = "chi_tra+eng") -> str:
             pytesseract.image_to_string(
                 enhanced,
                 lang=lang,
-                config=_ocr_config(11, tessdata_dir),
+                config=_ocr_config(11),
             )
             or ""
         ).strip()
