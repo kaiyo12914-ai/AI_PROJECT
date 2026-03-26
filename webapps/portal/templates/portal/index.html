@@ -60,7 +60,7 @@
 
       {% if can_todo %}
         {% url 'todo_page' as todo_href %}
-        {% include "portal/_svg_card.html" with href=todo_href title="待辦事項管理" subtitle="URL GET / 智慧提醒" tone="green" icon="todo" variant=card_variant %}
+        {% include "portal/_svg_card.html" with href=todo_href title="待辦重點提醒" subtitle="URL GET / 智慧提醒" tone="green" icon="todo" variant=card_variant %}
       {% endif %}
 
       {% if can_meetingreply %}
