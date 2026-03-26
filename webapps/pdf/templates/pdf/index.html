@@ -24,12 +24,15 @@
     <div class="row">
       <input type="file" id="pdf" accept=".pdf" />
       <button id="btnExtract">擷取</button>
+      <button id="btnSummary" class="secondary">文件摘要</button>
       <button id="btnTxt" class="secondary">下載 TXT</button>
       <button id="btnDocx" class="secondary">下載 DOCX</button>
     </div>
 
     <div id="status"></div>
     <textarea id="out" placeholder="擷取結果會顯示在這裡..."></textarea>
+    <div id="summaryStatus"></div>
+    <textarea id="summaryOut" placeholder="文件摘要結果會顯示在這裡..."></textarea>
   </div>
   <script defer src="{% static 'pdf/js/index.js' %}"></script>
 </body>

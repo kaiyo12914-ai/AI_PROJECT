@@ -1,4 +1,5 @@
 const API_EXTRACT = apiurl("extract/");
+const API_SUMMARY = apiurl("summary/");
 const API_TXT = apiurl("download/txt/");
 const API_DOCX = apiurl("download/docx/");
 
@@ -6,9 +7,15 @@ const API_DOCX = apiurl("download/docx/");
     const pdf = $("pdf");
     const out = $("out");
     const status = $("status");
+    const summaryStatus = $("summaryStatus");
+    const summaryOut = $("summaryOut");
 
     function setStatus(html) {
       status.innerHTML = html;
+    }
+
+    function setSummaryStatus(html) {
+      summaryStatus.innerHTML = html;
     }
 
     function getFile() {
@@ -63,6 +70,45 @@ const API_DOCX = apiurl("download/docx/");
       }
     }
 
+    async function summarize() {
+      const text = (out.value || "").trim();
+      if (!text) {
+        alert("請先完成文件擷取後再進行摘要");
+        return;
+      }
+
+      setSummaryStatus("⏳ 摘要生成中...");
+      summaryOut.value = "⏳ 摘要生成中...";
+
+      try {
+        const r = await fetch(API_SUMMARY, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        const ct = (r.headers.get("content-type") || "").toLowerCase();
+        let j = null;
+        if (ct.includes("application/json")) {
+          j = await r.json();
+        } else {
+          const raw = await r.text();
+          throw new Error("摘要 API 回傳非 JSON: " + raw.slice(0, 80));
+        }
+
+        if (!r.ok || !j || !j.ok) {
+          setSummaryStatus("<span class='err'>❌ " + ((j && j.error) || ("HTTP " + r.status)) + "</span>");
+          summaryOut.value = "";
+          return;
+        }
+
+        summaryOut.value = j.summary || "";
+        setSummaryStatus("<span class='ok'>✅ 摘要完成</span>");
+      } catch (e) {
+        summaryOut.value = "";
+        setSummaryStatus("<span class='err'>❌ 摘要失敗：" + ((e && e.message) || "未知錯誤") + "</span>");
+      }
+    }
+
     async function dl(ep, fallback) {
       const f = getFile();
       if (!f) return;
@@ -94,5 +140,6 @@ const API_DOCX = apiurl("download/docx/");
     }
 
     $("btnExtract").addEventListener("click", extract);
+    $("btnSummary").addEventListener("click", summarize);
     $("btnTxt").addEventListener("click", () => dl(API_TXT, "output.txt"));
     $("btnDocx").addEventListener("click", () => dl(API_DOCX, "output.docx"));

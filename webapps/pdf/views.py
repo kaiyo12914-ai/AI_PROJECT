@@ -13,6 +13,7 @@ from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 
 from webapps.portal.decorators import require_node
+from webapps.llm.llm_factory import get_chat_model
 
 
 def _norm_base(p: str) -> str:
@@ -205,3 +206,93 @@ def api_download_docx(request):
         return resp
     except Exception as e:
         return JsonResponse({"ok": False, "error": str(e)}, status=500)
+
+
+def _build_summary_prompt(doc_text: str) -> str:
+    return f"""你是一位專業的文件分析與摘要專家，請根據以下文件內容，產出結構化重點摘要。
+
+【任務要求】
+1. 提取文件的核心主題與目的
+2. 梳理關鍵重點（條列式）
+3. 保留重要數據、結論與專有名詞
+4. 避免冗長敘述，不要逐句改寫
+5. 使用清晰、簡潔、專業的語言
+
+【輸出格式】
+請嚴格依照以下結構輸出：
+
+一、文件主題：
+（用一句話說明）
+
+二、核心摘要：
+（3～5句重點總結）
+
+三、關鍵重點：
+- 重點1
+- 重點2
+- 重點3
+（視內容增加）
+
+四、重要數據 / 結論：
+- （列出關鍵數據或結論）
+
+五、可行動建議（若適用）：
+- （可執行的建議）
+
+【文件內容】
+{doc_text}
+""".strip()
+
+
+def _llm_to_text(x) -> str:
+    if x is None:
+        return ""
+    if hasattr(x, "content"):
+        try:
+            c = x.content
+            if isinstance(c, list):
+                out = []
+                for part in c:
+                    if isinstance(part, str):
+                        out.append(part)
+                    elif isinstance(part, dict):
+                        out.append(str(part.get("text") or part.get("content") or ""))
+                return "".join(out).strip()
+            return str(c or "").strip()
+        except Exception:
+            pass
+    return str(x).strip()
+
+
+@csrf_exempt
+@require_node("pdf", api=True)
+def api_summary(request):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    doc_text = ""
+    if request.content_type and "application/json" in request.content_type.lower():
+        try:
+            import json as _json
+            body = _json.loads((request.body or b"").decode("utf-8") or "{}")
+            doc_text = str(body.get("text") or "").strip()
+        except Exception:
+            doc_text = ""
+    else:
+        doc_text = (request.POST.get("text") or "").strip()
+
+    if not doc_text:
+        return JsonResponse({"ok": False, "error": "缺少文件內容"}, status=400)
+
+    max_chars = int(os.environ.get("PDF_SUMMARY_MAX_CHARS", "12000") or 12000)
+    if len(doc_text) > max_chars:
+        doc_text = doc_text[:max_chars]
+
+    try:
+        llm = get_chat_model(temperature=0.2, timeout=120)
+        summary = _llm_to_text(llm.invoke(_build_summary_prompt(doc_text)))
+        if not summary:
+            return JsonResponse({"ok": False, "error": "摘要模型未回傳內容"}, status=502)
+        return JsonResponse({"ok": True, "summary": summary}, status=200)
+    except Exception as e:
+        return JsonResponse({"ok": False, "error": f"摘要失敗：{e}"}, status=500)

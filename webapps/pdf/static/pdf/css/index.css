@@ -70,6 +70,17 @@ body {
       color: #6b7280;
     }
 
+    #summaryStatus {
+      margin-top: 10px;
+      text-align: center;
+      font-size: 13px;
+      color: #6b7280;
+    }
+
+    #summaryOut {
+      min-height: 260px;
+    }
+
     .ok {
       color: #16a34a;
       font-weight: 700;
