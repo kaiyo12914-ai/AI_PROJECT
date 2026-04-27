@@ -1239,23 +1239,39 @@ class PostgreSQLDB(BaseDB):
             raise RuntimeError("PostgreSQLDB requires psycopg2. Run pip install psycopg2-binary") from e
         
         c = self.cfg
-        if not (c.pg_host and c.pg_db and c.pg_user):
-            raise RuntimeError("PostgreSQL config incomplete. Set PG_HOST, PG_DB, PG_USER.")
+        host, port, dbname, user, password = c.pg_host, c.pg_port, c.pg_db, c.pg_user, c.pg_pass
+
+        # 支援從 DATABASE_URL 中解析
+        db_url = _env("DATABASE_URL", "").strip()
+        if db_url.startswith("postgres://") or db_url.startswith("postgresql://"):
+            try:
+                import urllib.parse
+                parsed = urllib.parse.urlparse(db_url)
+                host = parsed.hostname or host
+                port = parsed.port or port
+                dbname = (parsed.path or "").lstrip("/") or dbname
+                user = parsed.username or user
+                password = parsed.password or password
+            except Exception:
+                pass
+
+        if not (host and dbname and user):
+            raise RuntimeError("PostgreSQL config incomplete. Set DATABASE_URL or PG_HOST, PG_DB, PG_USER.")
             
         try:
             conn = psycopg2.connect(
-                host=c.pg_host,
-                port=c.pg_port,
-                dbname=c.pg_db,
-                user=c.pg_user,
-                password=c.pg_pass,
+                host=host,
+                port=port,
+                dbname=dbname,
+                user=user,
+                password=password,
                 connect_timeout=_env_int("PG_CONNECT_TIMEOUT", 10)
             )
             # Typically psycopg2 needs autocommit=True for seamless DB_FACTORY behavior
             conn.autocommit = True
             return conn
         except Exception as e:
-            raise RuntimeError(f"PostgreSQL connect failed. host={c.pg_host}, db={c.pg_db}, err={e}") from e
+            raise RuntimeError(f"PostgreSQL connect failed. host={host}, db={dbname}, err={e}") from e
 
 
 
