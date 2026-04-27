@@ -15,6 +15,7 @@ from django.views.decorators.csrf import csrf_exempt
 from webapps.llm.llm_factory import get_chat_model
 from webapps.portal.decorators import require_node
 from webapps.doc.utils_login import get_login_user_idno
+from webapps.database.db_factory import db_connect
 
 # ✅ 直接呼叫 rag_search（不走 HTTP）
 try:
@@ -284,18 +285,68 @@ def todo_list(request: HttpRequest):
 # ============================================================
 def _rag_ask_direct(q: str, *, k: int) -> Dict[str, Any]:
     """
-    依 webapps/rag_oracle/retrieve.py 的 rag_search 簽名：
-      rag_search(q, k=None, where=None, include_documents=True)
+    改用 PostgreSQL keyword search 替代原 chroma_search
     """
-    if rag_search is None:
-        raise RuntimeError(f"rag_search 無法載入：{_RAG_IMPORT_ERROR}")
-
     q = (q or "").strip()
     if not q:
         return {"ok": True, "sources": [], "top_k": 0}
 
     k = _as_int(k, RAG_TOP_K, min_v=1, max_v=50)
-    return rag_search(q=q, k=k, where=None, include_documents=True)
+
+    try:
+        conn = db_connect("postgresql")
+        cur = conn.cursor()
+        
+        words = [w.strip() for w in q.split() if w.strip()]
+        if not words:
+            words = [q]
+
+        conditions = []
+        params = []
+        # 只取前五個詞
+        for w in words[:5]:
+            conditions.append("(directive ILIKE %s OR title ILIKE %s OR case_name ILIKE %s)")
+            params.extend([f"%{w}%", f"%{w}%", f"%{w}%"])
+
+        where_clause = " OR ".join(conditions)
+        sql = f"SELECT doc_id, case_id, item_no, case_name, title, directive, status, dept_name, updated_at FROM public.meeting_records WHERE {where_clause} ORDER BY updated_at DESC NULLS LAST LIMIT %s"
+        params.append(k)
+
+        cur.execute(sql, tuple(params))
+        rows = cur.fetchall()
+
+        sources = []
+        for index, r in enumerate(rows):
+            doc_id, case_id, item_no, case_name, title, directive, status, dept_name, updated_at = r
+            
+            # 假造一個假距離分數(dist) 以利原有的 RAG pick 邏輯順利勾選（預設第一名0.1，循序增加）
+            dist = 0.1 + (index * 0.01)
+
+            sources.append({
+                "id": doc_id,
+                "doc_id": doc_id,
+                "title": title,
+                "text": f"會議名稱：{case_name}\n指裁示內容：{directive}\n辦理情形/擬答：{status}\n主辦單位：{dept_name}",
+                "dist": dist,
+                "meta": {
+                    "case_id": case_id,
+                    "item_no": item_no,
+                    "dept": dept_name,
+                }
+            })
+
+        cur.close()
+        conn.close()
+
+        return {
+            "ok": True,
+            "sources": sources,
+            "top_k": k,
+            "collection": "public.meeting_records",
+            "count": len(sources),
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 # =========================

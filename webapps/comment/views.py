@@ -25,8 +25,8 @@ def index(request: HttpRequest) -> HttpResponse:
     - Template 請使用「靜態資源分離」版本：CSS/JS 外掛 static
     - body 請使用 data-base-url="{{ request.script_name }}"
     """
-    factory = request.session["login_user_org"]
-    dep = request.session["dep"]
+    factory = request.session.get("login_user_org", "")
+    dep = request.session.get("dep", "")
     return render(request, "comment/performance.html",{"factory":factory,"dep":dep})
 
 # ============================================================
@@ -204,7 +204,7 @@ def api_generate_comment(request: HttpRequest) -> JsonResponse:
                     traits=traits,
                     performance_grade=performance_grade or None,
                     comment_text=reply,
-                    creator_account=request.session["login_user"] or None,
+                    creator_account=request.session.get("login_user") or None,
                     llm_provider=model_type,
                     model_name=llm.__repr__(),
                     idno=body.get("idno"),  # 新增被評價人員的帳號
@@ -249,7 +249,7 @@ def api_generate_comment(request: HttpRequest) -> JsonResponse:
 # ============================================================
 @csrf_exempt  # 目前保留；若要啟用 CSRF，前端需帶 X-CSRFToken
 def api_get_evaluations(request: HttpRequest) -> JsonResponse:
-    creator_account = request.session["login_user"]
+    creator_account = request.session.get("login_user")
     if not creator_account:
         return JsonResponse({"ok": False, "error": "user_not_login"}, status=401)
 
@@ -292,7 +292,7 @@ def api_delete_evaluation(request: HttpRequest, evaluation_id: int) -> JsonRespo
         evaluation = Evaluation.objects.get(id=evaluation_id)
 
         # 檢查創建者是否一致（權限驗證）
-        if not request.session["login_user"] or (request.session["login_user"] != evaluation.creator_account):
+        if not request.session.get("login_user") or (request.session.get("login_user") != evaluation.creator_account):
             return JsonResponse({"ok": False, "error": "unauthorized"}, status=403)
 
         # 刪除資料並回傳結果
