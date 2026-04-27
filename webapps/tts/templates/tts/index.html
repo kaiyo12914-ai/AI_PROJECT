@@ -1,18 +1,18 @@
 {% load static %}
+{% load custom_tags %}
 <!doctype html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
-  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% custom_static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
   <title>TTS / STT 語音工具</title>
-  <link rel="stylesheet" href="{% static 'tts/css/index.css' %}">
-  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+  <link rel="stylesheet" href="{% custom_static 'tts/css/index.css' %}">
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
 </head>
 
-<!-- ✅ 專案規範：每頁掛 base-url（Django FORCE_SCRIPT_NAME / 反代前綴會反映在此） -->
 <body data-base-url="{{ request.script_name }}">
 <div class="wrap">
   <header>
@@ -90,6 +90,6 @@
     </section>
   </div>
 </div>
-  <script defer src="{% static 'tts/js/index.js' %}"></script>
+  <script defer src="{% custom_static 'tts/js/index.js' %}"></script>
 </body>
 </html>

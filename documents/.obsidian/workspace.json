@@ -1,0 +1,172 @@
+{
+  "main": {
+    "id": "b0616bff07af3010",
+    "type": "split",
+    "children": [
+      {
+        "id": "3761fa158fd13444",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "f9eb07586aca7bf3",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "反向代理問題解決與正式環境設置.md",
+                "mode": "source",
+                "source": false
+              }
+            }
+          },
+          {
+            "id": "541ce665e3d08aa2",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "考核評量系統擴充.md",
+                "mode": "source",
+                "source": false
+              }
+            }
+          }
+        ],
+        "currentTab": 1
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "711db91b39baa1c7",
+    "type": "split",
+    "children": [
+      {
+        "id": "86598f98a87f54f7",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "3e2c55be594e604c",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical"
+              }
+            }
+          },
+          {
+            "id": "88f0b1617784babf",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              }
+            }
+          },
+          {
+            "id": "08742fa74a120d26",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {}
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "bba59f9795f27082",
+    "type": "split",
+    "children": [
+      {
+        "id": "a78fe0cf437ae52e",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "826557e9cbb210e5",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "考核評量系統擴充.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              }
+            }
+          },
+          {
+            "id": "2b51f9c200570aee",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "考核評量系統擴充.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              }
+            }
+          },
+          {
+            "id": "792712e2519fb0f3",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true
+              }
+            }
+          },
+          {
+            "id": "aa582f17b59c6259",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "考核評量系統擴充.md"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:開啟快速切換": false,
+      "graph:查看關聯圖": false,
+      "canvas:建立新畫布": false,
+      "daily-notes:開啟今天的每日筆記": false,
+      "templates:插入模板": false,
+      "command-palette:開啟命令面板": false
+    }
+  },
+  "active": "541ce665e3d08aa2",
+  "lastOpenFiles": [
+    "評量流程.md",
+    "考核評量系統擴充.md",
+    "Pasted image 20260410093814.png",
+    "反向代理問題解決與正式環境設置.md",
+    "Django使用ORM進行migrate的方式.md",
+    "考核評量系統架構分析.md",
+    "權限設置方式.md"
+  ]
+}

@@ -383,7 +383,7 @@ def langchain_ollama_embed(
 # ============================================================
 class ChromaIndex:
     def __init__(self) -> None:
-        self.chroma_dir = env("RAG_CHROMA_DIR", r"D:\AI\Django\chroma\rag")
+        self.chroma_dir = env("RAG_CHROMA_DIR", r"d:\AI\AI_TOOLS\chroma\rag")
         self.collection_name = env("RAG_CHROMA_COLLECTION", "cm_qna")
         os.makedirs(self.chroma_dir, exist_ok=True)
 
@@ -576,7 +576,7 @@ def main() -> None:
     print(f"[sync] force_direct_internal_llm={args.force_direct_ollama} disable_proxy={args.disable_proxy}")
     print(f"[sync] NO_PROXY={os.getenv('NO_PROXY','')}")
 
-    chroma_dir = env("RAG_CHROMA_DIR", r"D:\AI\Django\chroma\rag")
+    chroma_dir = env("RAG_CHROMA_DIR", r"d:\AI\AI_TOOLS\chroma\rag")
     last_sync_file = os.path.join(chroma_dir, "last_sync.txt")
     bad_log_file = os.path.join(chroma_dir, "bad_rows.jsonl")
 

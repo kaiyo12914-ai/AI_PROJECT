@@ -4,11 +4,7 @@ const API_PLAN = apiurl("plan/");
 const $ = (id) => document.getElementById(id);
 
 const refs = {
-  sourceUrl: $("sourceUrl"),
   todos: $("todos"),
-  availableSlots: $("availableSlots"),
-  userPreferences: $("userPreferences"),
-  currentDate: $("currentDate"),
   planOut: $("planOut"),
   fetchStatus: $("fetchStatus"),
   planStatus: $("planStatus"),
@@ -30,24 +26,30 @@ function setPlanStatus(msg, level = "") {
   refs.planStatus.textContent = msg || "";
 }
 
-async function fetchTodos() {
-  const sourceUrl = (refs.sourceUrl.value || "").trim();
-  if (!sourceUrl) {
-    alert("請先輸入待辦來源 URL");
-    return;
+function normalizeTodosText(data) {
+  if (typeof data.todos_text === "string" && data.todos_text.trim()) {
+    return data.todos_text;
   }
+  if (Array.isArray(data.todos_raw)) {
+    return JSON.stringify(data.todos_raw, null, 2);
+  }
+  return "[]";
+}
 
+async function fetchTodos() {
   refs.btnFetch.disabled = true;
   setFetchStatus("讀取中...");
   try {
-    const qs = new URLSearchParams({ source_url: sourceUrl });
-    const resp = await fetch(`${API_FETCH}?${qs.toString()}`, { method: "GET" });
+    const resp = await fetch(API_FETCH, { method: "GET" });
     const data = await resp.json();
     if (!resp.ok || !data.ok) {
       throw new Error(data.error || `HTTP ${resp.status}`);
     }
-    refs.todos.value = data.todos_text || "";
-    setFetchStatus(`取得完成，共 ${data.count || 0} 筆`, "ok");
+
+    refs.todos.value = normalizeTodosText(data);
+    refs.planOut.value = data.warning_text || "";
+    setFetchStatus(`讀取完成，共 ${data.count || 0} 筆（已排除宣教宣導）`, "ok");
+    setPlanStatus(`已產生 ${data.warning_count || 0} 筆到期警示`, "ok");
   } catch (err) {
     setFetchStatus(`讀取失敗：${err.message || "未知錯誤"}`, "err");
   } finally {
@@ -58,33 +60,31 @@ async function fetchTodos() {
 async function planTasks() {
   const todos = (refs.todos.value || "").trim();
   if (!todos) {
-    alert("請先取得或填入待辦事項");
+    alert("請先取得待辦 JSON。");
     return;
   }
 
   refs.btnPlan.disabled = true;
-  setPlanStatus("分析中...");
+  setPlanStatus("產生中...");
   refs.planOut.value = "";
   try {
-    const payload = {
-      todos,
-      available_slots: (refs.availableSlots.value || "").trim(),
-      user_preferences: (refs.userPreferences.value || "").trim(),
-      current_date: (refs.currentDate.value || "").trim(),
-    };
+    // Validate JSON in client side first for quick feedback.
+    JSON.parse(todos);
+
     const resp = await fetch(API_PLAN, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ todos_json: todos }),
     });
     const data = await resp.json();
     if (!resp.ok || !data.ok) {
       throw new Error(data.error || `HTTP ${resp.status}`);
     }
+
     refs.planOut.value = data.plan_text || "";
-    setPlanStatus(data.fallback ? "分析完成（備援模式）" : "分析完成", "ok");
+    setPlanStatus(`完成，共 ${data.warning_count || 0} 筆到期警示`, "ok");
   } catch (err) {
-    setPlanStatus(`分析失敗：${err.message || "未知錯誤"}`, "err");
+    setPlanStatus(`產生失敗：${err.message || "未知錯誤"}`, "err");
   } finally {
     refs.btnPlan.disabled = false;
   }
@@ -93,7 +93,7 @@ async function planTasks() {
 async function copyOut() {
   const text = refs.planOut.value || "";
   if (!text.trim()) {
-    alert("目前沒有可複製的內容");
+    alert("目前沒有可複製內容。");
     return;
   }
   try {
@@ -110,7 +110,7 @@ async function copyOut() {
 function downloadOut() {
   const text = refs.planOut.value || "";
   if (!text.trim()) {
-    alert("目前沒有可下載的內容");
+    alert("目前沒有可下載內容。");
     return;
   }
 
@@ -118,7 +118,7 @@ function downloadOut() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `todo_plan_${Date.now()}.txt`;
+  a.download = `todo_warning_${Date.now()}.txt`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -129,4 +129,3 @@ refs.btnFetch?.addEventListener("click", fetchTodos);
 refs.btnPlan?.addEventListener("click", planTasks);
 refs.btnCopy?.addEventListener("click", copyOut);
 refs.btnDownload?.addEventListener("click", downloadOut);
-

@@ -1,16 +1,18 @@
 {% load static %}
+{% load custom_tags %}
 {% load portal_extras %}
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
   <title>PPTX 文字範例抽取 | TEXT 轉 PPTX</title>
-  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
-  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="stylesheet" href="{% static 'text2pptx/css/index.css' %}">
-  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
-  <script defer src="{% static 'text2pptx/js/sample_extractor.js' %}"></script>
+  <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% custom_static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="stylesheet" href="{% custom_static 'text2pptx/css/index.css' %}">
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% custom_static 'text2pptx/js/sample_extractor.js' %}"></script>
+  <script defer src="{% custom_static 'text2pptx/js/sample_extractor_batch.js' %}"></script>
 </head>
 <body data-base-url="{{ request.script_name }}">
   <div class="wrap">
@@ -35,34 +37,33 @@
     </div>
 
     <div class="obj-guide">
-      <div class="obj-guide-title">模板套用規則（版面名稱優先，slide_type 備援）</div>
+      <div class="obj-guide-title">模板套用規則（版型名稱優先，slide_type 備援）</div>
       <div class="obj-grid">
         <div class="obj-card">
-          <div class="obj-card-title">版面名稱（優先）</div>
+          <div class="obj-card-title">版型名稱（優先）</div>
           <ul>
-            <li>來源：PPTX 實際套用的版面配置名稱（例如：感謝您、市場比較）。</li>
-            <li>用途：優先用來匹配模板中的同名版型，命中率最高。</li>
-            <li>抽取格式：每頁標頭為 <b>[版面名稱]投影片標題</b>。</li>
+            <li>來源：依檢視母片時的順序，統一命名為版型1、版型2、版型3...</li>
+            <li>用途：優先用來匹配模板中的同序版型，命中率最高。</li>
+            <li>抽取格式：每頁標頭為 <b>[版型N]投影片標題</b>。</li>
           </ul>
         </div>
         <div class="obj-card">
           <div class="obj-card-title">slide_type（備援）</div>
           <ul>
             <li>來源：系統判斷的結構類型（content / section / two_content / comparison）。</li>
-            <li>用途：當版面名稱無法匹配時，改用結構類型挑選相近版型。</li>
-            <li>特性：跨模板通用，但精準度低於版面名稱。</li>
+            <li>用途：當版型名稱無法匹配時，改用結構類型挑選相近版型。</li>
+            <li>特性：跨模板通用，但精準度低於版型名稱。</li>
           </ul>
         </div>
       </div>
       <div class="small">
-        套用順序：先嘗試 <b>版面名稱</b> 對應模板版型，若找不到再回退到 <b>slide_type</b>。
+        套用順序：先嘗試 <b>版型名稱</b> 對應模板版型，若找不到再回退到 <b>slide_type</b>。
       </div>
     </div>
 
     <div class="import-box">
       <div class="import-title">上傳 PPTX</div>
-      <form method="post" enctype="multipart/form-data" class="import-form">
-        {% csrf_token %}
+      <form method="post" enctype="multipart/form-data" class="import-form">        
         <input type="file" name="pptx_file" accept=".pptx" required>
         <button type="submit">抽取範例</button>
         <button
@@ -82,7 +83,38 @@
       </form>
       <div class="small">僅支援 .pptx。若內容過長會依系統上限自動截斷。</div>
     </div>
-
+    <div class="import-box">
+      <div class="import-title">全目錄範例及母片抽取</div>
+      <div class="small">循序逐檔處理來源資料夾內的 .pptx，並將抽取結果自動存到輸出資料夾。</div>
+            <div style="margin-top:8px;">
+        <label for="batch-source-picker-input">來源資料夾</label>
+        <div class="form-actions" style="margin-top:4px;">
+          <button type="button" id="batch-source-picker-btn" class="btn-secondary">選擇來源資料夾</button>
+          <span id="batch-source-picked-label" class="small"></span>
+        </div>
+        <input id="batch-source-picker-input" type="file" webkitdirectory directory multiple hidden>
+      </div>
+            <div style="margin-top:8px;">
+        <label for="batch-output-picker-btn">輸出資料夾</label>
+        <div class="form-actions" style="margin-top:4px;">
+          <button type="button" id="batch-output-picker-btn" class="btn-secondary">選擇輸出資料夾</button>
+          <span id="batch-output-picked-label" class="small"></span>
+        </div>
+      </div>
+      <div class="form-actions" style="margin-top:8px;">
+        <button
+          type="button"
+          id="extract-batch-sample-and-master-btn"
+          class="btn-secondary"
+          data-api-sample-url="{% url 'pptx_extract_sample_api' %}"
+          data-api-template-url="{% url 'pptx_extract_template' %}"
+        >
+          執行全目錄抽取
+        </button>
+      </div>
+      <label for="batch-extract-result-text" style="margin-top:8px;display:block;">批次處理結果</label>
+      <textarea id="batch-extract-result-text" class="prompt-preview-textarea" readonly></textarea>
+    </div>
     {% if extract_meta %}
       <div class="small">
         檔案：<b>{{ uploaded_filename }}</b><br>

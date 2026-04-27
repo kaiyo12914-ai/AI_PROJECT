@@ -1,13 +1,14 @@
 {% load static %}
+{% load custom_tags %}
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
     <title>生製中心人員績效考核系統(雛型系統)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-    <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
-    <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+    <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+    <link rel="icon" type="image/svg+xml" href="{% custom_static 'portal/img/favicon-ai.svg' %}?v=3">
+    <link rel="shortcut icon" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
    <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", sans-serif;
@@ -252,7 +253,7 @@
             }
         }
     </style>
-  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
 </head>
 <body data-base-url="{{ request.script_name }}">
 <div class="container">

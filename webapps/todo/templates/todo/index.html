@@ -1,24 +1,23 @@
 {% load static %}
+{% load custom_tags %}
 <!doctype html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
-  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% custom_static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
   <title>待辦重點提醒</title>
-  <link rel="stylesheet" href="{% static 'todo/css/index.css' %}">
-  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+  <link rel="stylesheet" href="{% custom_static 'todo/css/index.css' %}">
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
 </head>
 <body data-base-url="{{ app_base_url }}">
   <div class="wrap">
     <h1>待辦重點提醒</h1>
-    <div class="muted">支援 URL GET 取得個人待辦，並產生智慧排程與提醒建議。</div>
+    <div class="muted">取得個人待辦 JSON，排除「宣教宣導」，並提供 DeadlineDate 即將到期警示建議。</div>
 
     <div class="card">
-      <label>待辦來源 URL（GET）</label>
-      <input id="sourceUrl" type="text" value="{{ default_todo_source_url }}" placeholder="https://example/api/todos?user_id={login_user}">
       <div class="row">
         <button id="btnFetch">取得我的待辦</button>
         <span id="fetchStatus" class="muted"></span>
@@ -26,37 +25,24 @@
     </div>
 
     <div class="card">
-      <label>待辦事項</label>
-      <textarea id="todos" placeholder="待辦事項會顯示在此..."></textarea>
+      <label>待辦事項（JSON）</label>
+      <textarea id="todos" placeholder="待辦事項 JSON 會顯示在此..."></textarea>
     </div>
 
     <div class="card">
-      <label>可用時間</label>
-      <textarea id="availableSlots" placeholder="例如：2026-03-26 09:00-12:00, 14:00-18:00"></textarea>
-    </div>
-
-    <div class="card">
-      <label>使用者偏好</label>
-      <textarea id="userPreferences" placeholder="例如：上午高專注、任務切換成本高、會議集中午後"></textarea>
-    </div>
-
-    <div class="card">
-      <label>目前日期</label>
-      <input id="currentDate" type="date" value="{{ today }}">
       <div class="row">
-        <button id="btnPlan">產生智慧排程</button>
-        <button id="btnCopy" type="button">複製結果</button>
+        <button id="btnPlan">產生到期警示建議</button>
+        <button id="btnCopy" type="button">複製建議</button>
         <button id="btnDownload" type="button">下載 TXT</button>
         <span id="planStatus" class="muted"></span>
       </div>
     </div>
 
     <div class="card">
-      <label>排程建議與提醒</label>
-      <textarea id="planOut" class="out" placeholder="分析結果會顯示在這裡..."></textarea>
+      <label>到期警示建議</label>
+      <textarea id="planOut" class="out" placeholder="到期警示建議會顯示在此..."></textarea>
     </div>
   </div>
-  <script defer src="{% static 'todo/js/index.js' %}"></script>
+  <script defer src="{% custom_static 'todo/js/index.js' %}"></script>
 </body>
 </html>
-

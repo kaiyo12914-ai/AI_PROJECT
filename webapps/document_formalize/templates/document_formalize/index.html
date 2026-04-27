@@ -1,0 +1,77 @@
+{% load custom_tags %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>文件公文化</title>
+  <link rel="stylesheet" href="{% custom_static 'document_formalize/css/index.css' %}">
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% custom_static 'document_formalize/js/index.js' %}"></script>
+</head>
+<body data-base-url="{{ request.script_name }}">
+  <main class="wrap">
+    <header class="head">
+      <h1>文件公文化</h1>
+      <p>將口語化、紀錄式內容改寫為正式公文風格（保留原意、不新增事實）。</p>
+    </header>
+
+    <section class="panel">
+      <h2>輸入區</h2>
+      <textarea id="srcText" rows="14" placeholder="請貼上原始內容"></textarea>
+    </section>
+
+    <section class="panel grid2">
+      <div>
+        <h2>模式</h2>
+        <select id="mode">
+          {% for m in mode_options %}
+            <option value="{{ m.value }}" {% if m.value == "meeting" %}selected{% endif %}>{{ m.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <h2>參數</h2>
+        <div class="opts">
+          <label><input type="checkbox" id="optFixTypos" checked> 修正錯字</label>
+          <label><input type="checkbox" id="optConcise"> 精簡語句</label>
+          <label><input type="checkbox" id="optEnhanceStructure" checked> 強化條理</label>
+          <label><input type="checkbox" id="optPoliteTone"> 調整為更委婉語氣</label>
+          <label><input type="checkbox" id="optKeepParagraphs"> 保留原段落</label>
+        </div>
+      </div>
+    </section>
+
+    <section class="actions">
+      <button id="btnRun" class="primary">開始轉換</button>
+      <button id="btnRefill">回填再改寫</button>
+      <button id="btnCopy">一鍵複製</button>
+      <button id="btnExportTxt">匯出 TXT</button>
+      <button id="btnExportDocx">匯出 DOCX</button>
+      <button id="btnClear">清除重來</button>
+      <span id="statusText" class="status"></span>
+    </section>
+
+    <section class="panel grid2">
+      <div>
+        <h2>原文</h2>
+        <textarea id="srcPreview" rows="16" readonly></textarea>
+      </div>
+      <div>
+        <h2>公文化結果</h2>
+        <textarea id="dstText" rows="16" readonly></textarea>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>修改重點摘要</h2>
+      <ul id="summaryList"></ul>
+    </section>
+
+    <section class="panel">
+      <h2>最近操作</h2>
+      <div id="historyBox" class="history"></div>
+    </section>
+  </main>
+</body>
+</html>

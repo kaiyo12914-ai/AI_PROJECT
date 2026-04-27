@@ -1,0 +1,63 @@
+{% load custom_tags %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>專案與來源維護</title>
+  <link rel="stylesheet" href="{% custom_static 'projectnotes/css/index.css' %}">
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% custom_static 'projectnotes/js/index.js' %}"></script>
+</head>
+<body data-base-url="{{ request.script_name }}" data-page="manage">
+  <main class="wrap">
+    <header class="top">
+      <h1>專案與來源維護</h1>
+      <p>僅供網頁系統管理員新增專案、上傳來源與刪除來源。</p>
+      <p><a class="button-link secondary" href="{% url 'projectnotes:page' %}">返回專案內容查詢</a></p>
+    </header>
+
+    <section class="panel grid2">
+      <section class="left">
+        <div class="card">
+          <h2>新增專案</h2>
+          <div class="line">
+            <input id="projectName" type="text" placeholder="專案名稱">
+            <button id="createProjectBtn" type="button">新增</button>
+          </div>
+          <div class="line">
+            <select id="projectSelect"></select>
+            <button id="refreshBtn" type="button">刷新</button>
+          </div>
+          <span id="chatStatus" class="status"></span>
+          <p id="overviewText" class="overview"></p>
+          <div id="overviewMeta" class="meta-list"></div>
+        </div>
+
+        <div class="card">
+          <h2>來源上傳</h2>
+          <div class="line">
+            <input id="sourceTitle" type="text" placeholder="來源標題（例如：PRD_v1）">
+          </div>
+          <div class="line">
+            <input id="sourceFile" type="file" accept=".txt,.md,.csv,.json,.pdf,.docx,.html,.xlsx,.xls">
+            <button id="uploadSourceBtn" type="button">上傳</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>來源清單</h2>
+          <div id="sourceList" class="source-list"></div>
+        </div>
+      </section>
+
+      <section class="right">
+        <div class="card">
+          <h2>來源內容預覽</h2>
+          <div id="citationPanel" class="citation-panel">請點選來源查看內容。</div>
+        </div>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

@@ -22,7 +22,7 @@ except Exception:
     load_dotenv = None  # type: ignore
 
 
-DBType = Literal["sqlserver", "oracle", "sybase"]
+DBType = Literal["sqlserver", "oracle", "sybase", "postgresql"]
 Params = Optional[Union[Dict[str, Any], Sequence[Any]]]
 
 
@@ -41,49 +41,26 @@ def load_env() -> None:
 
 load_env()
 
-_ENV_ALIASES = {
-    "DEV": "DEV_EXT",
-    "EXT": "DEV_EXT",
-    "INT": "DEV_INT",
-    "PROD": "PROD_EXT",
-}
-
-
-def _normalize_env_name(raw: str) -> str:
-    return _ENV_ALIASES.get((raw or "").strip().upper(), (raw or "").strip().upper())
-
-
-def _env_scoped_get(name: str) -> str:
-    env_name = _normalize_env_name(os.getenv("ENV") or "DEV_EXT")
-    candidates = [f"{name}__{env_name}"]
-    candidates.append(name)
-    for key in candidates:
-        v = os.getenv(key)
-        if v is not None:
-            return v
-    return ""
-
 
 def _env(k: str, d: str = "") -> str:
     md_overrides = _load_db_factory_md_overrides()
     md_val = (md_overrides.get((k or "").strip().upper()) or "").strip()
     if md_val:
         return md_val
-    return (_env_scoped_get(k) or d).strip()
+    return (os.getenv(k) or d).strip()
 
 
 def _external_db_disabled() -> bool:
     """
     ENV mode hard rules:
-    - DEV_EXT / PROD_EXT: always use mock JSON, never connect external DB.
-    - DEV_INT / PROD_INT: always use external DB, never use mock JSON.
-    - Legacy aliases: EXT/DEV->DEV_EXT, INT->DEV_INT, PROD->PROD_EXT.
+    - EXT: always use mock JSON, never connect external DB.
+    - INT: always use external DB, never use mock JSON.
     - Others: default to external DB.
     """
-    env_mode = _normalize_env_name(os.getenv("ENV") or "DEV_EXT")
-    if env_mode in ("DEV_EXT", "PROD_EXT"):
+    env_mode = (os.getenv("ENV") or "").strip().upper()
+    if env_mode == "EXT":
         return True
-    if env_mode in ("DEV_INT", "PROD_INT"):
+    if env_mode == "INT":
         return False
     return False
 
@@ -99,11 +76,11 @@ _ORA_THICK_INIT_DONE = False
 
 def _mock_json_path() -> str:
     return (
-        _env_scoped_get("MOCK_DB_JSON")
-        or _env_scoped_get("SQLDOC_JSON")
-        or _env_scoped_get("SQLDOC_JSON_PATH")
-        or _env_scoped_get("SQLTEST_JSON")
-        or _env_scoped_get("SQLTEST_JSON_PATH")
+        os.getenv("MOCK_DB_JSON")
+        or os.getenv("SQLDOC_JSON")
+        or os.getenv("SQLDOC_JSON_PATH")
+        or os.getenv("SQLTEST_JSON")
+        or os.getenv("SQLTEST_JSON_PATH")
         or "SQLTEST_output.json"
     )
 
@@ -785,6 +762,13 @@ class DBConfig:
     syb_charset: str = ""
     syb_tds_version: str = ""
 
+    # PostgreSQL (psycopg2)
+    pg_host: str = ""
+    pg_port: int = 5432
+    pg_db: str = ""
+    pg_user: str = ""
+    pg_pass: str = ""
+
 
 def _normalize_profile(profile: str) -> str:
     p = (profile or "").strip().upper()
@@ -859,6 +843,16 @@ def load_db_config(db_type: DBType, profile: str = "") -> DBConfig:
             ora_service=_env_profile(profile, "ORA_SERVICE_NAME", ""),
             ora_user=_env_profile(profile, "ORA_USER", ""),
             ora_pass=_env_profile(profile, "ORA_PASS", ""),
+        )
+
+    if db_type == "postgresql":
+        return DBConfig(
+            db_type="postgresql",
+            pg_host=_env_profile(profile, "PG_HOST", "127.0.0.1"),
+            pg_port=_env_int_profile(profile, "PG_PORT", 5432),
+            pg_db=_env_profile(profile, "PG_DB", ""),
+            pg_user=_env_profile(profile, "PG_USER", "postgres"),
+            pg_pass=_env_profile(profile, "PG_PASS", ""),
         )
 
     return DBConfig(
@@ -1234,6 +1228,36 @@ class OracleDB(BaseDB):
         return conn
 
 
+class PostgreSQLDB(BaseDB):
+    def __init__(self, config: Optional[DBConfig] = None, profile: str = "") -> None:
+        self.cfg = config or load_db_config("postgresql", profile=profile)
+
+    def connect(self) -> Any:
+        try:
+            import psycopg2  # type: ignore
+        except Exception as e:
+            raise RuntimeError("PostgreSQLDB requires psycopg2. Run pip install psycopg2-binary") from e
+        
+        c = self.cfg
+        if not (c.pg_host and c.pg_db and c.pg_user):
+            raise RuntimeError("PostgreSQL config incomplete. Set PG_HOST, PG_DB, PG_USER.")
+            
+        try:
+            conn = psycopg2.connect(
+                host=c.pg_host,
+                port=c.pg_port,
+                dbname=c.pg_db,
+                user=c.pg_user,
+                password=c.pg_pass,
+                connect_timeout=_env_int("PG_CONNECT_TIMEOUT", 10)
+            )
+            # Typically psycopg2 needs autocommit=True for seamless DB_FACTORY behavior
+            conn.autocommit = True
+            return conn
+        except Exception as e:
+            raise RuntimeError(f"PostgreSQL connect failed. host={c.pg_host}, db={c.pg_db}, err={e}") from e
+
+
 
 # ============================================================
 # Factory helpers
@@ -1245,6 +1269,8 @@ def get_db(db_type: DBType = "sqlserver", profile: str = "") -> BaseDB:
         return OracleDB(profile=profile)
     if db_type == "sybase":
         return SybaseDB(profile=profile)
+    if db_type == "postgresql":
+        return PostgreSQLDB(profile=profile)
     raise ValueError(f"Unsupported db_type={db_type!r}")
 
 

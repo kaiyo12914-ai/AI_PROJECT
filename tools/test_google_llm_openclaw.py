@@ -29,7 +29,7 @@ try:
 
     llm = ChatGoogleGenerativeAI(
         model=model,
-        google_api_key=api_key,
+        GEMINI_API_KEY=api_key,
         safety_settings=safety_settings,
         timeout=30
     )

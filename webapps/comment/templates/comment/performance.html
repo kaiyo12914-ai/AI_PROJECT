@@ -1,115 +1,259 @@
 {% load static %}
+{% load custom_tags %}
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
   <meta charset="UTF-8">
   <title>人員績效考核系統(雛形)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
-  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% custom_static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
 
   <!-- ✅ 專案規範：CSS 必須外掛 static -->
-  <link rel="stylesheet" href="{% static 'comment/css/performance.css' %}">
-  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+  <link rel="stylesheet" href="{% custom_static 'comment/css/performance.css' %}">
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
+
+  <script src="https://www.mpc.mil.tw/CDN/vue-3.3.4/package/dist/vue.global.js"></script>
+
+  <link rel="stylesheet" href="https://www.mpc.mil.tw/CDN/element-plus-2.8.2/package/dist/index.css">
+  <script src="https://www.mpc.mil.tw/CDN/element-plus-2.8.2/package/dist/index.full.min.js"></script>
+  <script src="https://www.mpc.mil.tw/CDN/element-plus-2.8.2/package/dist/locale/zh-tw.min.js"></script>
+  <script src="https://www.mpc.mil.tw/CDN/icons-vue-2.3.1/package/dist/index.iife.min.js"></script>
 </head>
 
 <!-- ✅ 專案規範：request.script_name = 反代 prefix 唯一真相 -->
+
 <body data-base-url="{{ request.script_name|default:'' }}">
-  <div class="container">
-    <h1>人員績效考核系統(雛形)</h1>
+
+  <input type="hidden" id="h_factory" value="{{ factory }}">
+  <input type="hidden" id="h_dep" value="{{ dep }}">
+  <div id="app" class="container">
+    <h1>人員績效考核系統</h1>
 
     <div class="toolbar">
-      <button id="btnResetAll" class="danger">重置所有</button>
+      <button id="btnResetAll" class="danger" style="display: none;">重置所有</button>
     </div>
 
-    <h3>人員列表</h3>
-    <textarea id="studentList" placeholder="例：&#10;1.王小明&#10;2.林小華&#10;3.陳小美"></textarea>
-    <div class="import-row">
-      <input type="file" id="importFileInput" accept=".txt,.csv" style="display: none;">
-      <button id="btnImportFile" class="secondary">匯入人員名單</button>
-      <button id="btnGenerateStudents">生成人員按鈕</button>
-    </div>
-    <div id="studentButtons" class="student-buttons"></div>
-
-    <div class="grid-2">
+    <div>
       <div>
-        <h3 class="section-header">
-          <span>評量維度選擇</span>
-          <button id="btnResetTraits" class="secondary">重置選擇</button>
-        </h3>
-
-        <div id="tabs" class="pill-list tabs">
-          <button class="tab-btn active" data-tab="all">所有維度</button>
-          <button class="tab-btn" data-tab="thought">思想</button>
-          <button class="tab-btn" data-tab="character">品德</button>
-          <button class="tab-btn" data-tab="performance">績效</button>
-          <button class="tab-btn" data-tab="ability">才能</button>
-          <button class="tab-btn" data-tab="knowledge">學識</button>
-          <button class="tab-btn" data-tab="special">其他</button>
+        <h3>考核人員</h3>
+        <div id="studentButtons" class="student-buttons"></div>
+      </div>
+      <div style="display: none;">
+        <h3>人員列表</h3>
+        <textarea id="studentList" placeholder="例：&#10;1.王小明&#10;2.林小華&#10;3.陳小美"
+          title="需要增減人員時，可於修改後點選「生成人員按鈕」更新"></textarea>
+        <div class="import-row">
+          <input type="file" id="importFileInput" accept=".txt,.csv" style="display: none;">
+          <button id="btnImportFile" class="secondary">匯入人員名單</button>
+          <button id="btnGenerateStudents">生成人員按鈕</button>
         </div>
+      </div>
+    </div>
 
-        <div id="traitList" class="card pill-list"></div>
+    <el-divider></el-divider>
+    <div>
+      <div>
+        <el-tabs>
+          <el-tab-pane label="評量維度選擇">
+            <div>
+              <h3 class="section-header" style="display: none;">
+                <span>評量維度選擇</span>                
+              </h3>
+              <div class="section-header">
+                <div class="inline-input">
+                 
+                </div>
+                
+              </div>
 
-        <h3 class="section-header">
-          <span>績效評等選擇</span>
-          <button id="btnResetPerformance" class="secondary">重置選擇</button>
-        </h3>
-        <div id="performanceGradeList" class="card pill-list"></div>
+              <div id="tabs" class="pill-list tabs">
+                <button class="tab-btn active" data-tab="all">所有維度</button>
+                <button class="tab-btn" data-tab="thought">思想</button>
+                <button class="tab-btn" data-tab="character">品德</button>
+                <button class="tab-btn" data-tab="performance">績效</button>
+                <button class="tab-btn" data-tab="ability">才能</button>
+                <button class="tab-btn" data-tab="knowledge">學識</button>
+                <button class="tab-btn" data-tab="special">其他</button>
 
-        <h3 class="section-header">
-          <span>自訂評量指標（最多10項）</span>
-          <button id="btnClearCustomTraits" class="secondary">清除自訂</button>
-        </h3>
-        <div class="card">
-          <div class="inline-input">
-            <input type="text" id="customTraitInput" placeholder="輸入自訂指標，例如：團隊合作">
-            <button id="btnAddCustomTrait">新增</button>
-          </div>
-          <div id="customTraitList" class="pill-list"></div>
-          <div class="hint">
-            已新增：<span id="customTraitCount">0</span>/10
-          </div>
-        </div>
+                <input type="text" id="traitSearchInput" placeholder="輸入關鍵字以搜尋維度..." class="search-input">
+                <button id="btnResetTraits" class="secondary">重置選擇</button>
+              </div>
+            </div>
 
-        <h3 class="section-header">
-          <span>已選擇指標：</span>
-          <button id="btnClearSelectedTraits" class="secondary">清空選擇</button>
-        </h3>
-        <div id="selectedTraits" class="card pill-list"></div>
+            <div id="traitList" class="card pill-list"></div>
+          </el-tab-pane>
+
+          <el-tab-pane label="績效評等選擇">
+            <div>
+              <h3 class="section-header">
+                <span>績效評等選擇</span>
+                <button id="btnResetPerformance" class="secondary">重置選擇</button>
+              </h3>
+              <div id="performanceGradeList" class="card pill-list"></div>
+            </div>
+          </el-tab-pane>
+
+          <el-tab-pane label="績效項目評定">
+            <div class="card" id="performanceSubGradeList">
+
+              <div class="performance-sub-grade-row grade-item-card">
+                <span class="item-name">思想</span>
+                <div class="grade-options" id="thoughtGradeOptions">
+                </div>
+              </div>
+
+              <!-- 品德 -->
+              <div class="performance-sub-grade-row grade-item-card">
+                <span class="item-name">品德</span>
+                <div class="grade-options" id="moralityOptions"></div>
+              </div>
+
+              <!-- 才能 -->
+              <div class="performance-sub-grade-row grade-item-card">
+                <span class="item-name">才能</span>
+                <div class="grade-options" id="abilityOptions"></div>
+              </div>
+
+              <!-- 學識 -->
+              <div class="performance-sub-grade-row grade-item-card">
+                <span class="item-name">學識</span>
+                <div class="grade-options" id="knowledgeOptions"></div>
+              </div>
+
+              <!-- 績效 -->
+              <div class="performance-sub-grade-row grade-item-card">
+                <span class="item-name">績效</span>
+                <div class="grade-options" id="performanceOptions"></div>
+              </div>
+
+              <div class="performance-sub-grade-row grade-item-card">
+                <span class="item-name">儀態</span>
+                <div class="grade-options" id="postureOptions"></div>
+              </div>
+
+              <div class="performance-sub-grade-row grade-item-card">
+                <span class="item-name">體能</span>
+                <div class="grade-options" id="physicalOptions"></div>
+              </div>
+
+              <div class="performance-sub-grade-row grade-item-card">
+                <span class="item-name">人事建議</span>
+                <div class="grade-options" id="hrSuggestionOptions"></div>
+              </div>
+            </div>
+          </el-tab-pane>
+
+          <el-tab-pane label="自訂評量指標">
+            <div>
+              <h3 class="section-header">
+                <span>自訂評量指標（最多10項）</span>
+                <button id="btnClearCustomTraits" class="secondary">清除自訂</button>
+              </h3>
+              <div class="card" title="可用自訂的方式增加既有項目中，未出現的評量指標">
+                <div class="inline-input">
+                  <input type="text" id="customTraitInput" placeholder="輸入自訂指標，例如：團隊合作">
+                  <button id="btnAddCustomTrait">新增</button>
+                </div>
+                <div id="customTraitList" class="pill-list"></div>
+                <div class="hint">
+                  已新增：<span id="customTraitCount">0</span>/10
+                </div>
+              </div>
+
+              <h3 class="section-header">
+                <span>已選擇指標：</span>
+                <button id="btnClearSelectedTraits" class="secondary">清空選擇</button>
+              </h3>
+              <div id="selectedTraits" class="card pill-list"></div>
+            </div>
+          </el-tab-pane>
+
+          <el-tab-pane label="歷史評語">
+            <!-- 歷史評語列表容器 -->
+            <div>
+              <h3 class="mt-20" style="display: none;">歷史評語</h3>
+              <div id="evaluationsList" class="card preview-list"></div>
+            </div>
+          </el-tab-pane>
+
+          <el-tab-pane label="注意事項">
+            <h3 class="mt-20">使用注意事項</h3>
+            <div class="card note">
+              <ul>
+                <li>評語為自動生成範本，需人工校核後使用</li>
+                <li>請依實際考核情況選擇合適指標</li>
+                <li>保持專業用語，避免主觀說法</li>
+              </ul>
+            </div>
+          </el-tab-pane>
+        </el-tabs>
 
         <div class="center-actions">
-          <button id="btnGenerateComment" class="primary-wide">生成評語</button>
+          <button id="btnGenerateComment" class="primary-wide" disabled>生成評語</button>
         </div>
       </div>
 
       <div>
-        <h3 class="section-header">
-          <span>評語預覽：</span>
-          <button id="btnClearComments" class="secondary">清除記錄</button>
-        </h3>
-        <div id="commentPreview" class="card preview-list"></div>
-
-        <h3 class="mt-20">匯出選項</h3>
-        <div class="download-area">
-          <button id="btnDownloadTxt" class="secondary">匯出 TXT</button>
-          <button id="btnDownloadCsv" class="secondary">匯出 CSV</button>
-          <span class="badge">💾 匯出考績表（待擴充）</span>
+        <div style="display: none;">
+          <h3 class="section-header">
+            <span>評語預覽：</span>
+            <button id="btnClearComments" class="secondary" style="display: none;">清除記錄</button>
+          </h3>
+          <div id="commentPreview" class="card preview-list"></div>
         </div>
 
-        <h3 class="mt-20">使用注意事項</h3>
-        <div class="card note">
-          <ul>
-            <li>評語為自動生成範本，需人工校核後使用</li>
-            <li>請依實際考核情況選擇合適指標</li>
-            <li>保持專業用語，避免主觀說法</li>
-          </ul>
+        <!-- 匯出 -->
+        <div style="display: none;">
+          <h3 class="mt-20">匯出選項</h3>
+          <div class="download-area">
+            <button id="btnDownloadTxt" class="secondary">匯出 TXT</button>
+            <button id="btnDownloadCsv" class="secondary">匯出 CSV</button>
+            <button id="btnGetEvaluations" class="secondary" style="display: none;">查看歷史評語</button>
+            <span class="badge">💾 匯出考績表（待擴充）</span>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
   <!-- ✅ 專案規範：JS 必須外掛 static -->
-  <script defer src="{% static 'comment/js/performance.js' %}"></script>
+  <script defer src="{% custom_static 'comment/js/performance.js' %}"></script>
+  <script>
+    // 在現有的 JavaScript 模組中增加搜尋邏輯，確保與原有程式碼整合。
+    // 這將會在後續步驟中由我們編寫新增到 JS 檔案內。
+  </script>
+
+  <script>
+    const App = {
+      data() {
+        return {
+
+        }
+      },
+
+      methods: {
+
+      }
+
+    };
+
+    const app = Vue.createApp(App);
+
+    //註冊所有icon
+    for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
+      app.component(key, component);
+    }
+
+    app.use(ElementPlus);
+    //本地化
+    app.use(ElementPlus, {
+      locale: ElementPlusLocaleZhTw
+    });
+    app.mount("#app");
+  </script>
 </body>
+
 </html>

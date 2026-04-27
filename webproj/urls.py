@@ -5,7 +5,7 @@ from django.contrib import admin
 from django.urls import path, include, re_path
 from django.conf import settings
 from django.conf.urls.static import static
-from django.views.static import serve as static_serve
+from django.views.static import serve
 from django.views.generic import RedirectView
 
 urlpatterns = [
@@ -29,13 +29,16 @@ urlpatterns = [
     path("meetingreply/", include("webapps.meetingreply.urls")),
     path("doc/", include("webapps.doc.urls")),
     path("graph/", include("webapps.graph2doc.urls")),
+    path("todo/", include("webapps.todo.urls")),
     path("text2pptx/", include("webapps.text2pptx.urls")),
     path("tts/", include("webapps.tts.urls")),
     path("api/", include("webapps.llm.urls")),
     path("pdf/", include("webapps.pdf.urls")),
-    path("todo/", include("webapps.todo.urls")),
     path("rag/", include("webapps.rag_oracle.urls")),
     path("excelproc/", include("webapps.excelproc.urls")),
+    path("englishchat/", include("webapps.englishchat.urls")),
+    path("projectnotes/", include("webapps.projectnotes.urls")),
+    path("formalize/", include("webapps.document_formalize.urls")),
 
     # ============================================================
     # Portal (single canonical entry)
@@ -49,16 +52,17 @@ urlpatterns = [
 # - 反代環境：由反代負責把 /djangoai/media/ 對應到實體目錄
 # - Django 內部：只提供 /media/（不要在這裡加 /djangoai）
 # ============================================================
-if settings.DEBUG:
+if settings.DEBUG or getattr(settings, "IS_RUNSERVER", False):
     # 支援 DEBUG 模式下由 Django 服務靜態檔案 (即使是用 Waitress)
     # 注意：STATIC_URL 已經包含 PROXY_PREFIX (例如 /djangoai/static/)
-    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+    if settings.DEBUG:
+        urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+    else:
+        urlpatterns += [
+            re_path(
+                r"^static/(?P<path>.*)$",
+                serve,
+                {"document_root": settings.STATIC_ROOT},
+            )
+        ]
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-elif getattr(settings, "SERVE_STATIC_WITH_DJANGO", False):
-    # Django 6 在 DEBUG=False 時 static(...) 不會產生路由，這裡補顯式路由供內網直連測試。
-    static_prefix = (settings.STATIC_URL or "/static/").strip("/")
-    media_prefix = (settings.MEDIA_URL or "/media/").strip("/")
-    urlpatterns += [
-        re_path(rf"^{static_prefix}/(?P<path>.*)$", static_serve, {"document_root": settings.STATIC_ROOT}),
-        re_path(rf"^{media_prefix}/(?P<path>.*)$", static_serve, {"document_root": settings.MEDIA_ROOT}),
-    ]

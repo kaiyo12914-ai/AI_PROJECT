@@ -1,13 +1,14 @@
 {% load static %}
+{% load custom_tags %}
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
   <title>公文撰擬輔助生成系統（雛型）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
-  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% custom_static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
 
   <!-- =========================================================
     Mandatory
@@ -18,18 +19,18 @@
     5) incoming_sybase partial 由 template data-* 注入
   ========================================================== -->
 
-  <link rel="stylesheet" href="{% static 'doc/css/doc_index.css' %}?v=20260225c">
+  <link rel="stylesheet" href="{% custom_static 'doc/css/doc_index.css' %}?v=20260225c">
   <style>
     /* 防止舊快取造成全頁遮罩殘留 */
     #saveTplModalOverlay[aria-hidden="true"] { display: none !important; }
     #saveTplModalOverlay[aria-hidden="false"] { display: flex !important; }
   </style>
 
-  <script defer src="{% static 'portal/js/apiurl_factory.js' %}?v=20260302a"></script>
-  <script defer src="{% static 'doc/js/incoming_sybase.js' %}?v=20260302a"></script>
-  <script defer src="{% static 'doc/js/doc_index_templates.js' %}?v=20260302a"></script>
-  <script defer src="{% static 'doc/js/doc_index_editor.js' %}?v=20260312c"></script>
-  <script defer src="{% static 'doc/js/doc_index_bootstrap.js' %}?v=20260312c"></script>
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}?v=20260302a"></script>
+  <script defer src="{% custom_static 'doc/js/incoming_sybase.js' %}?v=20260302a"></script>
+  <script defer src="{% custom_static 'doc/js/doc_index_templates.js' %}?v=20260302a"></script>
+  <script defer src="{% custom_static 'doc/js/doc_index_editor.js' %}?v=20260312c"></script>
+  <script defer src="{% custom_static 'doc/js/doc_index_bootstrap.js' %}?v=20260312c"></script>
   <script>
     document.addEventListener("DOMContentLoaded", function () {
       var overlay = document.getElementById("saveTplModalOverlay");

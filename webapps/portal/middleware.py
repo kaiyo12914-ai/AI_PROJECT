@@ -14,6 +14,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from webapps.portal.models import PortalUsageLog
+from webapps.portal.oracle_emp import get_emp_full_info
 
 logger = logging.getLogger(__name__)
 
@@ -296,6 +297,8 @@ class IISRemoteUserBridgeMiddleware:
             if (not emp_name) and _env_bool("EMP_NAME_LOOKUP", default=True):
                 emp_name = _cache_get_emp_name(emp_id)
 
+            employ = get_emp_full_info(emp_id)
+
             try:
                 request.session["login_user"] = emp_id
                 if emp_name:
@@ -312,7 +315,7 @@ class IISRemoteUserBridgeMiddleware:
             emp_name = sess_emp_name
 
         org_code = _resolve_login_user_org(emp_id, emp_name) or _normalize_org_code(sess_org)
-        org_label = _org_label(org_code)
+        org_label = _org_label(org_code)        
         request.login_user_name = emp_name or ""
         request.login_user_org = org_code or ""
         request.login_user_org_label = org_label or ""
@@ -324,6 +327,7 @@ class IISRemoteUserBridgeMiddleware:
             if org_code:
                 request.session["login_user_org"] = org_code
                 request.session["login_user_factory_plant"] = org_code
+                request.session["dep"] = employ['DEPTNO'] 
         except Exception:
             pass
         return self.get_response(request)

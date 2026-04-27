@@ -1,0 +1,168 @@
+body {
+  margin: 0;
+  font-family: "Segoe UI", "Microsoft JhengHei", sans-serif;
+  background: linear-gradient(180deg, #eff3fb 0%, #e6f6f2 100%);
+  color: #1f2937;
+}
+
+.wrap {
+  max-width: 860px;
+  margin: 16px auto;
+  padding: 0 14px 20px;
+}
+
+.top h1 {
+  margin: 0;
+  font-size: 30px;
+}
+
+.top p {
+  margin: 8px 0 0;
+  color: #4b5563;
+}
+
+.panel {
+  margin-top: 12px;
+  background: #fff;
+  border: 1px solid #dbe4f2;
+  border-radius: 14px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  padding: 12px;
+}
+
+.setup {
+  display: grid;
+  gap: 8px;
+  max-width: 860px;
+}
+
+.setup-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr 1fr;
+  gap: 10px;
+  align-items: end;
+}
+
+.row {
+  display: grid;
+  gap: 6px;
+}
+
+label {
+  font-size: 13px;
+  color: #334155;
+}
+
+select,
+input,
+textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 14px;
+  padding: 8px 10px;
+  box-sizing: border-box;
+}
+
+button {
+  border: 0;
+  border-radius: 10px;
+  font-size: 14px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+#startBtn,
+#sendBtn {
+  background: #2563eb;
+  color: #fff;
+}
+
+#stuckBtn {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.chat-log {
+  min-height: 373px;
+  max-height: 613px;
+  overflow-y: auto;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.msg {
+  max-width: 88%;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+.msg.user {
+  margin-left: auto;
+  background: #dbeafe;
+  border: 1px solid #bfdbfe;
+}
+
+.msg.ai {
+  margin-right: auto;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+}
+
+.starter-box,
+.hint-box,
+.correction-box {
+  margin-top: 10px;
+  font-size: 14px;
+  color: #334155;
+}
+
+.starter-item {
+  display: inline-block;
+  margin: 4px 6px 0 0;
+  padding: 6px 10px;
+  border-radius: 20px;
+  background: #ecfeff;
+  border: 1px solid #a5f3fc;
+  cursor: pointer;
+}
+
+.composer {
+  margin-top: 12px;
+}
+
+.actions {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .wrap {
+    margin-top: 10px;
+  }
+
+  .top h1 {
+    font-size: 23px;
+  }
+
+  .setup {
+    max-width: 100%;
+  }
+
+  .setup-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .chat-log {
+    min-height: 240px;
+    max-height: 373px;
+  }
+}

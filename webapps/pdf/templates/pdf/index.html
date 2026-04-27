@@ -1,15 +1,16 @@
 {% load static %}
+{% load custom_tags %}
 <!doctype html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
-  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% custom_static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
   <title>PDF → TXT / DOCX（OCR 版）</title>
-  <link rel="stylesheet" href="{% static 'pdf/css/index.css' %}">
-  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+  <link rel="stylesheet" href="{% custom_static 'pdf/css/index.css' %}">
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
 </head>
 <body data-base-url="{{ app_base_url }}">
   <div class="wrap">
@@ -34,6 +35,6 @@
     <div id="summaryStatus"></div>
     <textarea id="summaryOut" placeholder="文件摘要結果會顯示在這裡..."></textarea>
   </div>
-  <script defer src="{% static 'pdf/js/index.js' %}"></script>
+  <script defer src="{% custom_static 'pdf/js/index.js' %}"></script>
 </body>
 </html>

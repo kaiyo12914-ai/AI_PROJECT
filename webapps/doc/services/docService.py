@@ -79,7 +79,7 @@ class docService:
         )
 
     @staticmethod
-    def _safe_limit(limit: int, default: int = 200, max_limit: int = 1000) -> int:
+    def _safe_limit(limit: int, default: int = 200, max_limit: int = 20000) -> int:
         try:
             n = int(limit)
         except Exception:
@@ -288,8 +288,43 @@ class docService:
             sql = f"SELECT TRIM(DF.DF_NAME) AS EF_NAME, DF.DF_DATA FROM {df} DF WHERE TRIM(DF.DF_PATH) = :p"
             return self._query_one(sql, {"p": path_s})
 
-        sql = f"SELECT CONVERT(VARBINARY(4000), DF.DF_NAME) AS EF_NAME, DF.DF_DATA FROM {df} DF WHERE DF.DF_PATH = ?"
-        return self._query_one(sql, [df_path])
+        # Sybase datasets may contain padded/variant DF_PATH strings.
+        # Keep exact-match first, then fallback to trimmed/normalized matching.
+        path_raw = str(df_path or "")
+        path_s = path_raw.strip()
+
+        sql_exact = (
+            f"SELECT CONVERT(VARBINARY(4000), DF.DF_NAME) AS EF_NAME, DF.DF_DATA "
+            f"FROM {df} DF WHERE DF.DF_PATH = ?"
+        )
+        row = self._query_one(sql_exact, [path_raw])
+        if row:
+            return row
+
+        if not path_s:
+            return row
+
+        sql_trim = (
+            f"SELECT TOP 1 CONVERT(VARBINARY(4000), DF.DF_NAME) AS EF_NAME, DF.DF_DATA "
+            f"FROM {df} DF "
+            f"WHERE LTRIM(RTRIM(CONVERT(VARCHAR(1024), DF.DF_PATH))) = ?"
+        )
+        row = self._query_one(sql_trim, [path_s])
+        if row:
+            return row
+
+        path_norm = path_s.replace("\\", "/")
+        if path_norm != path_s:
+            sql_norm = (
+                f"SELECT TOP 1 CONVERT(VARBINARY(4000), DF.DF_NAME) AS EF_NAME, DF.DF_DATA "
+                f"FROM {df} DF "
+                f"WHERE REPLACE(LTRIM(RTRIM(CONVERT(VARCHAR(1024), DF.DF_PATH))), '\\\\', '/') = ?"
+            )
+            row = self._query_one(sql_norm, [path_norm])
+            if row:
+                return row
+
+        return row
 
     def check_ownership(self, login_user: str, key_type: str, key_val: str) -> bool:
         tm, td = self._tbl("DCS3_TRST_MST"), self._tbl("DCS3_TRST_DAT")
@@ -438,7 +473,16 @@ class docService:
             """
             return self._query_all(sql_fallback, params)
 
-    def search_incoming_advanced(self, *, grsno="", subject="", psids=None, limit=200, days_ago=None):
+    def search_incoming_advanced(
+        self,
+        *,
+        grsno="",
+        subject="",
+        psids=None,
+        limit=200,
+        start_date: str = "",
+        end_date: str = "",
+    ):
         n = self._safe_limit(limit)
         em, im, ef = self._tbl("DCS1_EMAL_TMP"), self._tbl("DCS1_IN_MAST"), self._tbl("DCS1_EMAL_FILE")
         if self.is_oracle:
@@ -449,9 +493,12 @@ class docService:
             if subject:
                 clauses.append("AND TRIM(COALESCE(EM.EM_SUBJ, IM.IM_SUBJ)) LIKE :s ESCAPE '\\'")
                 params["s"] = self._like_value(subject)
-            if days_ago:
-                clauses.append("AND COALESCE(IM.IM_DATE, EM.EM_DATE) >= SYSDATE - :d")
-                params["d"] = days_ago
+            if start_date:
+                clauses.append("AND COALESCE(IM.IM_DATE, EM.EM_DATE) >= TO_DATE(:start_date, 'YYYY-MM-DD')")
+                params["start_date"] = start_date
+            if end_date:
+                clauses.append("AND COALESCE(IM.IM_DATE, EM.EM_DATE) < TO_DATE(:end_date, 'YYYY-MM-DD') + 1")
+                params["end_date"] = end_date
             if psids:
                 binds, bparams = self._oracle_in_clause_params("p", psids)
                 clauses.append(f"AND TRIM(COALESCE(IM.IM_PSID, EM.EM_PSID)) IN ({binds})")
@@ -468,9 +515,12 @@ class docService:
         if subject:
             clauses.append("AND CONVERT(VARCHAR(4000), COALESCE(EM.EM_SUBJ, IM.IM_SUBJ)) LIKE ? ESCAPE '\\'")
             params.append(self._like_value(subject))
-        if days_ago:
-            clauses.append("AND COALESCE(IM.IM_DATE, EM.EM_DATE) >= DATEADD(day, -?, GETDATE())")
-            params.append(int(days_ago))
+        if start_date:
+            clauses.append("AND COALESCE(IM.IM_DATE, EM.EM_DATE) >= ?")
+            params.append(start_date)
+        if end_date:
+            clauses.append("AND COALESCE(IM.IM_DATE, EM.EM_DATE) < DATEADD(day, 1, ?)")
+            params.append(end_date)
         normalized_psids = self._normalize_psids(psids)
         if normalized_psids:
             placeholders = ",".join(["?"] * len(normalized_psids))
@@ -492,7 +542,16 @@ class docService:
         )
         return self._query_all(sql, params)
 
-    def search_trst_advanced(self, *, grsno="", subject="", psids=None, limit=200, days_ago=None):
+    def search_trst_advanced(
+        self,
+        *,
+        grsno="",
+        subject="",
+        psids=None,
+        limit=200,
+        start_date: str = "",
+        end_date: str = "",
+    ):
         n = self._safe_limit(limit)
         tm, td, df = self._tbl("DCS3_TRST_MST"), self._tbl("DCS3_TRST_DAT"), self._tbl("DCS0_DOC_FILE")
         if self.is_oracle:
@@ -503,9 +562,12 @@ class docService:
             if subject:
                 clauses.append("AND TRIM(TD.TD_SUBJ) LIKE :s ESCAPE '\\'")
                 params["s"] = self._like_value(subject)
-            if days_ago:
-                clauses.append("AND TM.TM_DATE >= SYSDATE - :d")
-                params["d"] = days_ago
+            if start_date:
+                clauses.append("AND TM.TM_DATE >= TO_DATE(:start_date, 'YYYY-MM-DD')")
+                params["start_date"] = start_date
+            if end_date:
+                clauses.append("AND TM.TM_DATE < TO_DATE(:end_date, 'YYYY-MM-DD') + 1")
+                params["end_date"] = end_date
             if psids:
                 binds, bparams = self._oracle_in_clause_params("p", psids)
                 clauses.append(f"AND TRIM(TM.TM_PSID) IN ({binds})")
@@ -522,9 +584,12 @@ class docService:
         if subject:
             clauses.append("AND CONVERT(VARCHAR(4000), TD.TD_SUBJ) LIKE ? ESCAPE '\\'")
             params.append(self._like_value(subject))
-        if days_ago:
-            clauses.append("AND TM.TM_DATE >= DATEADD(day, -?, GETDATE())")
-            params.append(int(days_ago))
+        if start_date:
+            clauses.append("AND TM.TM_DATE >= ?")
+            params.append(start_date)
+        if end_date:
+            clauses.append("AND TM.TM_DATE < DATEADD(day, 1, ?)")
+            params.append(end_date)
         normalized_psids = self._normalize_psids(psids)
         if normalized_psids:
             placeholders = ",".join(["?"] * len(normalized_psids))

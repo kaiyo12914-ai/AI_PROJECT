@@ -1,0 +1,34 @@
+{
+  "version": "1.0",
+  "owner_org": ["生產製造中心", "本中心", "生製中心"],
+  "rules": {
+    "match_mode": "contains_normalized"
+  },
+  "mapping": [
+    { "pattern": "國防部", "level": "FROM_SUPERIOR" },
+    { "pattern": "軍備局", "level": "FROM_SUPERIOR" },
+
+    { "pattern": "各部會", "level": "FROM_PEER" },
+    { "pattern": "各縣市政府", "level": "FROM_PEER" },
+    { "pattern": "陸軍", "level": "FROM_PEER" },
+    { "pattern": "海軍", "level": "FROM_PEER" },
+    { "pattern": "空軍", "level": "FROM_PEER" },
+    { "pattern": "憲兵", "level": "FROM_PEER" },
+    { "pattern": "後備", "level": "FROM_PEER" },
+    { "pattern": "規格鑑測中心", "level": "FROM_PEER" },
+
+    { "pattern": "本廠", "level": "FROM_SUBORDINATE" },
+    { "pattern": "202廠", "level": "FROM_SUBORDINATE" },
+    { "pattern": "205廠", "level": "FROM_SUBORDINATE" },
+    { "pattern": "209廠", "level": "FROM_SUBORDINATE" },
+    { "pattern": "401廠", "level": "FROM_SUBORDINATE" },
+    { "pattern": "第202廠", "level": "FROM_SUBORDINATE" },
+    { "pattern": "第205廠", "level": "FROM_SUBORDINATE" },
+    { "pattern": "第209廠", "level": "FROM_SUBORDINATE" },
+    { "pattern": "第401廠", "level": "FROM_SUBORDINATE" },
+    { "pattern": "第二○二廠", "level": "FROM_SUBORDINATE" },
+    { "pattern": "第二○五廠", "level": "FROM_SUBORDINATE" },
+    { "pattern": "第二○九廠", "level": "FROM_SUBORDINATE" },
+    { "pattern": "第四○一廠", "level": "FROM_SUBORDINATE" }
+  ]
+}

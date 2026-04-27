@@ -16,7 +16,7 @@ def test_full_pipeline():
 
         # 2. 初始化ChromaDB客戶端和集合
         client = chromadb.PersistentClient(
-            path=r"D:\AI\Django\chroma\rag",  # 使用您的路徑
+            path=r"d:\AI\AI_TOOLS\chroma\rag",  # 使用您的路徑
             settings=Settings(anonymized_telemetry=False)
         )
 

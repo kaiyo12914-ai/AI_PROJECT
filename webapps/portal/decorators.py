@@ -5,6 +5,7 @@ import os
 from functools import wraps
 from typing import Callable, Iterable, Any, TypeVar, cast
 
+from django.conf import settings
 from django.http import HttpResponseForbidden, JsonResponse, HttpRequest, HttpResponse
 
 from webapps.portal.acl import can_access
@@ -98,6 +99,45 @@ def _json_denied(
     )
 
 
+def _is_authenticated_user(user: Any) -> bool:
+    return bool(user and getattr(user, "is_authenticated", False))
+
+
+def _as_node_set(raw: Any) -> set[str]:
+    if raw is None:
+        return set()
+    if isinstance(raw, str):
+        return {x.strip().lower() for x in raw.split(",") if x.strip()}
+    if isinstance(raw, (list, tuple, set)):
+        out: set[str] = set()
+        for item in raw:
+            s = str(item or "").strip().lower()
+            if s:
+                out.add(s)
+        return out
+    return set()
+
+
+def _is_external_env() -> bool:
+    env_name = str(
+        getattr(settings, "ENV_NAME", "") or os.getenv("ENV", "")
+    ).strip().upper()
+    return env_name == "EXT"
+
+
+def _should_bypass_acl_group(node: str, user: Any) -> bool:
+    # In external environment, skip ACL group check for selected nodes.
+    if not _is_external_env():
+        return False
+    bypass_nodes = _as_node_set(getattr(settings, "PORTAL_ACL_BYPASS_NODES_EXT", None))
+    if not bypass_nodes:
+        bypass_nodes = {"doc"}
+    if (node or "").strip().lower() not in bypass_nodes:
+        return False
+    # Bypass only the group check; keep authentication requirement.
+    return _is_authenticated_user(user)
+
+
 def require_node(node: str, api: bool = False) -> Callable[[T], T]:
     """
     ACL gate
@@ -109,6 +149,10 @@ def require_node(node: str, api: bool = False) -> Callable[[T], T]:
         def _wrapped(request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
             user = getattr(request, "user", None)
             wants_json = bool(api or _wants_json(request))
+            is_auth = _is_authenticated_user(user)
+
+            if _should_bypass_acl_group(node, user):
+                return view_func(request, *args, **kwargs)
 
             # ✅ 關鍵：不要先擋未登入
             #   - ACL 關閉時 can_access() 會回 True（全部放行，含未登入）
@@ -124,8 +168,6 @@ def require_node(node: str, api: bool = False) -> Callable[[T], T]:
                 return view_func(request, *args, **kwargs)
 
             # ✅ 拒絕：依登入狀態決定 401/403（API 必須 JSON）
-            is_auth = bool(user and getattr(user, "is_authenticated", False))
-
             if wants_json:
                 return _json_denied(
                     request,

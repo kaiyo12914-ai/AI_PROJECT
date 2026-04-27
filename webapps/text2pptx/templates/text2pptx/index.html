@@ -1,4 +1,5 @@
 {% load static %}
+{% load custom_tags %}
 {% load portal_extras %}
 {# templates/pptx/index.html (或你實際路徑) #}
 <!DOCTYPE html>
@@ -6,12 +7,12 @@
 <head>
   <meta charset="UTF-8" />
   <title>TEXT → PPTX</title>
-  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
-  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="stylesheet" href="{% static 'text2pptx/css/index.css' %}">
-  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
-  <script defer src="{% static 'text2pptx/js/index.js' %}"></script>
+  <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% custom_static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="stylesheet" href="{% custom_static 'text2pptx/css/index.css' %}">
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% custom_static 'text2pptx/js/index.js' %}"></script>
 </head>
 
 

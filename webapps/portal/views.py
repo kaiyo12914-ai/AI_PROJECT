@@ -52,12 +52,7 @@ def index(request: HttpRequest) -> HttpResponse:
     }
 
     try:
-        resp = render(request, "portal/index.html", ctx)
-        # Avoid stale cached portal shell by query-string variants (e.g., ?aaa=...).
-        resp["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-        resp["Pragma"] = "no-cache"
-        resp["Expires"] = "0"
-        return resp
+        return render(request, "portal/index.html", ctx)
     except Exception as e:
         if getattr(settings, "DEBUG", False):
             return HttpResponse(

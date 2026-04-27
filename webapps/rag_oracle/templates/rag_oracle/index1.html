@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RAG（文件/知識庫）＋ 會議指裁事項擬答</title>
+  <style>
+    :root{
+      --bg:#f4f6fb; --card:#fff; --line:#e5e7eb; --muted:#6b7280;
+      --ok:#16a34a; --err:#dc2626; --dark:#111827; --blue:#2563eb;
+      --shadow:0 8px 28px rgba(0,0,0,.08); --r:16px;
+    }
+    *{box-sizing:border-box}
+    body{font-family:system-ui,"Microsoft JhengHei",sans-serif;background:var(--bg);margin:0}
+    .wrap{max-width:980px;margin:22px auto;padding:0 14px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:18px}
+    h1{margin:0 0 6px;font-size:18px}
+    h2{margin:0 0 8px;font-size:15px}
+    .muted{color:var(--muted);font-size:12px;line-height:1.6}
+    .sec{margin-top:14px;padding-top:14px;border-top:1px dashed var(--line)}
+    textarea,input{width:100%;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:14px}
+    textarea{min-height:140px;white-space:pre-wrap;line-height:1.6;resize:vertical}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
+    .k{width:120px}
+    button{border:0;border-radius:999px;padding:9px 16px;cursor:pointer;font-weight:800}
+    button.primary{background:#343a40;color:#fff}
+    button.secondary{background:#f8fafc;color:var(--blue);border:1px solid var(--blue)}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .status{margin-top:8px;font-size:12px;color:var(--muted)}
+    .ok{color:var(--ok);font-weight:900}
+    .err{color:var(--err);white-space:pre-wrap;font-weight:700}
+    .box{margin-top:10px;border:1px solid var(--line);border-radius:12px;padding:12px;background:#f9fafb;min-height:140px;white-space:pre-wrap;line-height:1.7}
+    details{margin-top:10px}
+    summary{cursor:pointer;color:var(--muted);font-size:13px}
+    pre{background:#0b1020;color:#e5e7eb;border-radius:12px;padding:12px;overflow:auto;margin:8px 0 0}
+    .tabs{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap}
+    .tab{padding:8px 10px;border-radius:999px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:13px}
+    .tab.active{background:var(--dark);color:#fff;border-color:var(--dark)}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>會議指裁事項擬答（RAG 查詢）</h1>
+    <div class="muted">
+      流程：1) 輸入「指裁示事項」→ 2) 輸入「參謀想法」→ 3) 以指裁示事項做 RAG → 4) 產生簡要 / 詳答擬答。<br>
+      API：/rag/、/rag/health/、/rag/ask/（請先完成 rag_sync）
+    </div>
+
+    <!-- 1. 指裁示事項 -->
+    <div class="sec">
+      <h2>1) 指裁示事項（同時作為 RAG Query）</h2>
+      <textarea id="directive" placeholder="請貼上裁示內容、會議結論、指示事項（必填）"></textarea>
+    </div>
+
+    <!-- 2. 參謀想法 -->
+    <div class="sec">
+      <h2>2) 參謀想法（可留空）</h2>
+      <textarea id="staff" placeholder="請貼上參謀建議、分析想法、方案評估"></textarea>
+    </div>
+
+    <!-- 3. RAG -->
+    <div class="sec">
+      <h2>3) RAG 檢索結果</h2>
+      <div class="row">
+        <input id="k" class="k" type="number" min="1" max="50" value="10" />
+        <button id="btnRag" class="secondary">執行 RAG 檢索</button>
+      </div>
+      <div id="ragStatus" class="status"></div>
+      <div id="ragAns" class="box">（尚未查詢）</div>
+
+      <details>
+        <summary>sources（檢索結果 JSON）</summary>
+        <pre id="ragSrc">（尚無）</pre>
+      </details>
+    </div>
+
+    <!-- 4. AI 擬答 -->
+    <div class="sec">
+      <h2>4) AI 擬答（使用 RAG sources）</h2>
+      <div class="row">
+        <button id="btnGen" class="primary" style="flex:1;min-width:220px">
+          產生 AI 擬答
+        </button>
+      </div>
+
+      <div id="genStatus" class="status"></div>
+
+      <div class="tabs">
+        <div class="tab active" data-mode="long">詳答版（≤400字）</div>
+        <div class="tab" data-mode="short">簡要版（≤120字）</div>
+      </div>
+
+      <div id="genOut" class="box">（尚未生成）</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+let lastRag = { answer:"", sources:[] };
+let mode = "long";
+window.__lastMeetingShort = "";
+window.__lastMeetingLong = "";
+
+function mustDirective(){
+  const d = ($("directive").value || "").trim();
+  if(!d){
+    alert("請先輸入「指裁示事項」");
+    return "";
+  }
+  return d;
+}
+
+document.querySelectorAll(".tab").forEach(t=>{
+  t.onclick = ()=>{
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+    t.classList.add("active");
+    mode = t.dataset.mode;
+    $("genOut").textContent =
+      mode==="long" ? (window.__lastMeetingLong||"") : (window.__lastMeetingShort||"");
+  };
+});
+
+async function ragOnly(){
+  const q = mustDirective();
+  if(!q) return;
+
+  $("btnRag").disabled = true;
+  $("ragStatus").textContent = "⏳ RAG 查詢中…";
+  $("ragAns").textContent = "⏳ 檢索中…";
+  $("ragSrc").textContent = "";
+
+  const fd = new FormData();
+  fd.append("q", q);
+  fd.append("k", $("k").value || "10");
+
+  try{
+    const r = await fetch("ask/", { method:"POST", body: fd });
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error || "RAG 失敗");
+
+    lastRag = { answer:j.answer||"", sources:j.sources||[] };
+    $("ragStatus").innerHTML = "<span class='ok'>✅ 完成</span>";
+    $("ragAns").textContent = lastRag.answer || "（無）";
+    $("ragSrc").textContent = JSON.stringify(lastRag.sources, null, 2);
+  }catch(e){
+    $("ragStatus").innerHTML = "<span class='err'>❌ "+e.message+"</span>";
+  }finally{
+    $("btnRag").disabled = false;
+  }
+}
+
+async function genWithRag(){
+  const d = mustDirective();
+  if(!d) return;
+
+  if(!lastRag.sources.length) await ragOnly();
+
+  $("btnGen").disabled = true;
+  $("genStatus").textContent = "⏳ 生成中…";
+  $("genOut").textContent = "";
+
+  try{
+    const payload = {
+      directive: d,
+      staff: ($("staff").value||"") +
+        "\n\n【RAG 檢索參考】\n" + JSON.stringify(lastRag.sources, null, 2)
+    };
+
+    const r = await fetch("../meeting/build/", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify(payload)
+    });
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error || "生成失敗");
+
+    window.__lastMeetingShort = j.short || "";
+    window.__lastMeetingLong  = j.long || "";
+    $("genStatus").innerHTML = "<span class='ok'>✅ 完成</span>";
+    $("genOut").textContent =
+      mode==="long" ? window.__lastMeetingLong : window.__lastMeetingShort;
+  }catch(e){
+    $("genStatus").innerHTML = "<span class='err'>❌ "+e.message+"</span>";
+  }finally{
+    $("btnGen").disabled = false;
+  }
+}
+
+$("btnRag").onclick = ragOnly;
+$("btnGen").onclick = genWithRag;
+</script>
+</body>
+</html>

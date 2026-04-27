@@ -1,17 +1,18 @@
 {% load static %}
+{% load custom_tags %}
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
   <title>翻譯工具（免安裝版）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
-  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="stylesheet" href="{% static 'translator/css/index.css' %}">
-  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+  <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% custom_static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="stylesheet" href="{% custom_static 'translator/css/index.css' %}">
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
 </head>
-<body data-base-url="{{ request.script_name }}" data-pdfjs-src="{% static 'vendor/pdfjs/pdf.mjs' %}" data-pdfjs-worker="{% static 'vendor/pdfjs/pdf.worker.mjs' %}">
+<body data-base-url="{{ request.script_name }}" data-pdfjs-src="{% custom_static 'vendor/pdfjs/pdf.mjs' %}" data-pdfjs-worker="{% custom_static 'vendor/pdfjs/pdf.worker.mjs' %}">
   <div class="container">
     <h1>翻譯工具（免安裝版）</h1>
 
@@ -70,10 +71,10 @@
   </div>
 
   <!-- ✅ DOCX：mammoth -->
-  <script src="{% static 'vendor/mammoth/mammoth.browser.min.js' %}"></script>
+  <script src="{% custom_static 'vendor/mammoth/mammoth.browser.min.js' %}"></script>
 
   <!-- ✅ PDF：pdf.js（你現在資料夾內是 pdf.mjs / pdf.worker.mjs） -->
 
-  <script type="module" src="{% static 'translator/js/index.js' %}"></script>
+  <script type="module" src="{% custom_static 'translator/js/index.js' %}"></script>
 </body>
 </html>

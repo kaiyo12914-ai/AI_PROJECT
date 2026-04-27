@@ -1,0 +1,69 @@
+{% load custom_tags %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ProjectNotes 審計查核</title>
+  <link rel="stylesheet" href="{% custom_static 'projectnotes/css/index.css' %}">
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
+</head>
+<body data-base-url="{{ request.script_name }}">
+  <main class="wrap">
+    <h1>ProjectNotes 審計查核</h1>
+    <div class="card">
+      <div class="line">
+        <input id="projectId" type="text" placeholder="project_id（可空）">
+        <input id="userId" type="text" placeholder="user_id（可空）">
+        <button id="loadBtn" type="button">查詢</button>
+      </div>
+      <div id="status" class="status"></div>
+      <div id="rows" class="source-list"></div>
+    </div>
+  </main>
+  <script>
+    (function () {
+      function u(path) { return typeof window.apiurl === "function" ? window.apiurl(path) : path; }
+      const projectId = document.getElementById("projectId");
+      const userId = document.getElementById("userId");
+      const loadBtn = document.getElementById("loadBtn");
+      const status = document.getElementById("status");
+      const rows = document.getElementById("rows");
+
+      async function load() {
+        const q = new URLSearchParams();
+        if (projectId.value.trim()) q.set("project_id", projectId.value.trim());
+        if (userId.value.trim()) q.set("user_id", userId.value.trim());
+        q.set("limit", "200");
+        const resp = await fetch(u("/projectnotes/audit_logs/?" + q.toString()));
+        const data = await resp.json();
+        if (!data.ok) {
+          status.textContent = data.error || "查詢失敗";
+          status.style.color = "#b91c1c";
+          return;
+        }
+        status.textContent = `共 ${data.rows.length} 筆`;
+        status.style.color = "#0f766e";
+        rows.innerHTML = "";
+        data.rows.forEach((r) => {
+          const d = document.createElement("div");
+          d.className = "source-item";
+          d.innerHTML = `
+            <div>
+              <div class="source-title">#${r.id} [${r.action}] ${r.status}</div>
+              <div class="source-meta">project=${r.project_id || ""} ${r.project_name || ""} / conv=${r.conversation_id || ""} / user=${r.user_id || ""}</div>
+              <div class="source-meta">${r.created_at}</div>
+              <pre class="source-meta" style="white-space:pre-wrap;margin:4px 0 0 0;">${JSON.stringify(r.detail || {}, null, 2)}</pre>
+            </div>
+          `;
+          rows.appendChild(d);
+        });
+      }
+
+      loadBtn.addEventListener("click", () => load().catch(() => {}));
+      load().catch(() => {});
+    })();
+  </script>
+</body>
+</html>
+

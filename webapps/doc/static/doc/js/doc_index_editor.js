@@ -34,21 +34,19 @@
     try {
       if (!window.initIncomingSybase) return;
 
-      // ✅ 一次性鎖：避免同頁重複載入 / 重複綁定事件
-      if (window.__DOC_INCOMING_SYBASE_INITED__) return;
-      window.__DOC_INCOMING_SYBASE_INITED__ = true;
-
-      const { dom, api } = _ctx();
+      const { dom } = _ctx();
+      const root = dom && dom.incomingSybaseRoot;
+      if (!root) return;
 
       window.initIncomingSybase({
-        dom,
+        dom: { root },
         api: {
-          lookupUrl: api.incoming_lookup,
-          filesUrl: api.incoming_files,
-          fileUrlPrefix: api.incoming_file_prefix,
-
-          blobStashUrl: api.syb_blob_stash,
-          blobDownloadPrefix: api.syb_blob_download_prefix,
+          lookupUrl: root.dataset.lookupUrl || "",
+          filesUrl: root.dataset.filesUrl || "",
+          fileUrlTemplate: root.dataset.fileUrlTemplate || "",
+          blobStashUrl: root.dataset.blobStashUrl || "",
+          blobDownloadTemplate: root.dataset.blobDownloadTemplate || "",
+          todoUrl: root.dataset.todoUrl || "",
         },
       });
     } catch (e) {

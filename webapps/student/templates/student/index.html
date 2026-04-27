@@ -1,15 +1,16 @@
 {% load static %}
+{% load custom_tags %}
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>學生評語生成</title>
-    <link rel="stylesheet" href="{% static 'student/css/index.css' %}">
-    <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
-    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-    <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
-    <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+    <link rel="stylesheet" href="{% custom_static 'student/css/index.css' %}">
+    <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
+    <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+    <link rel="icon" type="image/svg+xml" href="{% custom_static 'portal/img/favicon-ai.svg' %}?v=3">
+    <link rel="shortcut icon" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
 </head>
 <body data-base-url="{{ request.script_name }}">
 <div class="container">
@@ -102,6 +103,6 @@
         </div>
     </div>
 </div>
-<script defer src="{% static 'student/js/index.js' %}"></script>
+<script defer src="{% custom_static 'student/js/index.js' %}"></script>
 </body>
 </html>

@@ -134,13 +134,19 @@ if (pdfjsSrc) {
         try { data = JSON.parse(raw); } catch (e) {}
 
         if (!resp.ok) {
-          const msg = data.error ? data.error : raw;
+          const msg = data.detail || data.llmError || data.error || raw;
           throw new Error(`伺服器錯誤 ${resp.status}: ${msg}`);
         }
 
         const translated = (data.translated ?? data.reply ?? "").toString();
         outputTextEl.textContent = translated || "";
-        setStatus("翻譯完成");
+        if (data.fallback) {
+          const err = (data.llmError || "").trim();
+          const errShort = err.length > 180 ? err.slice(0, 180) + "..." : err;
+          setStatus(`翻譯完成（規則備援）${errShort ? "｜llmError: " + errShort : ""}`);
+        } else {
+          setStatus("翻譯完成");
+        }
       } catch (err) {
         console.error(err);
         outputTextEl.textContent = `❌ 翻譯失敗：${err.message}`;

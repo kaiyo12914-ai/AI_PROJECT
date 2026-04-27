@@ -1,0 +1,227 @@
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", sans-serif;
+            background: #f4f6fb;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 24px auto;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+            padding: 24px 28px 32px;
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 24px;
+            text-align: center;
+            letter-spacing: 0.08em;
+            color: #1e3a8a; /* 萬用青色調 */
+        }
+
+        .military-badge {
+            display: inline-block;
+            background: linear-gradient(90deg, #1e3a8a 0%, #2563eb 100%);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-left: 8px;
+        }
+
+        h3 {
+            margin-top: 24px;
+            font-size: 18px;
+            border-left: 4px solid #2563eb; /* 較深的藍色 */
+            padding-left: 8px;
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+
+        button {
+            border: none;
+            border-radius: 999px;
+            padding: 6px 14px;
+            font-size: 14px;
+            cursor: pointer;
+            background: #2563eb; /* 萬用青色 */
+            color: white;
+            transition: transform 0.05s ease, box-shadow 0.1s ease;
+            box-shadow: 0 2px 4px rgba(37,99,235,0.3);
+        }
+
+        button.secondary {
+            background: #f8fafc;
+            color: #6b7280;
+            border: 1px solid #2563eb;
+            box-shadow: none;
+        }
+
+        button.danger {
+            background: #ef4444;
+            box-shadow: 0 2px 4px rgba(239,68,68,0.3);
+        }
+
+        button:active {
+            transform: translateY(1px);
+            box-shadow: none;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 120px;
+            border-radius: 6px;
+            border: 1px solid #e5e7eb;
+            padding: 10px 12px;
+            font-size: 14px;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+            gap: 20px;
+        }
+
+        .card {
+            background: #f8fafc; /* 較淡的藍灰色 */
+            border-radius: 6px;
+            padding: 12px 14px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .pill-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .pill {
+            padding: 6px 12px;
+            border-radius: 999px;
+            border: 1px solid #e5e7eb;
+            background: white;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: black;
+        }
+
+        .pill:hover {
+            transform: translateY(-1px);
+        }
+
+        .pill.selected {
+            background: #2563eb;
+            border-color: white;
+            color: white;
+        }
+
+        .negative-trait {
+            background-color: #fef9c3 !important;
+            border-color: #f5d71c !important;
+            color: #8a4a0f !important;
+        }
+
+        .special-trait {
+            background-color: #fffaf0 !important;
+            border-color: #fde68a !important;
+            color: #92400e !important;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .inline-input {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            border-radius: 999px;
+            border: 1px solid #e5e7eb;
+            padding: 6px 10px;
+            font-size: 14px;
+        }
+
+        .student-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .student-btn {
+            background: white;
+            color: #2563eb;
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 13px;
+            cursor: pointer;
+            border: 1px solid #e5e7eb;
+        }
+
+        .student-btn.active {
+            background: #2563eb;
+            color: white;
+            border-color: #2563eb;
+        }
+
+        .preview-list {
+            max-height: 300px;
+            overflow-y: auto;
+            font-size: 14px;
+        }
+
+        .preview-item {
+            padding: 8px 10px;
+            border-radius: 4px;
+            background: white;
+            margin-bottom: 6px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .download-area {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: 12px;
+            background: rgba(37,99,235,0.1);
+            color: #2563eb;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 12px;
+                padding: 16px;
+            }
+            .grid-2 {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }

@@ -1678,7 +1678,7 @@ def translate_core(
       color: #888;
     }
   </style>
-  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
 </head>
 
 <body data-base-url="{{ request.script_name }}">
@@ -9828,15 +9828,15 @@ class Migration(migrations.Migration):
   ========================================================== -->
 
   <!-- ✅ CSS 拆分 -->
-  <link rel="stylesheet" href="{% static 'doc/css/doc_index.css' %}">
+  <link rel="stylesheet" href="{% custom_static 'doc/css/doc_index.css' %}">
 
   <!-- ✅ 全專案共用：apiurl_factory（只載一次，defer） -->
-  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
     <!-- ✅ doc：Sybase 子模組（只載一次，defer） -->
-  <script defer src="{% static 'doc/js/incoming_sybase.js' %}"></script>
-  <script defer src="{% static 'doc/js/doc_index_templates.js' %}"></script>
-  <script defer src="{% static 'doc/js/doc_index_editor.js' %}"></script>
-  <script defer src="{% static 'doc/js/doc_index_bootstrap.js' %}"></script>
+  <script defer src="{% custom_static 'doc/js/incoming_sybase.js' %}"></script>
+  <script defer src="{% custom_static 'doc/js/doc_index_templates.js' %}"></script>
+  <script defer src="{% custom_static 'doc/js/doc_index_editor.js' %}"></script>
+  <script defer src="{% custom_static 'doc/js/doc_index_bootstrap.js' %}"></script>
 
 
 

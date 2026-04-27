@@ -6,7 +6,7 @@ def test_chromadb_crud():
     try:
         # 1. 首先初始化ChromaDB客戶端
         client = chromadb.PersistentClient(
-            path=r"D:\AI\Django\chroma\rag",  # 使用與您系統相同的路徑
+            path=r"d:\AI\AI_TOOLS\chroma\rag",  # 使用與您系統相同的路徑
             settings=Settings(
                 anonymized_telemetry=False,
                 is_persistent=True  # 保持數據持久化

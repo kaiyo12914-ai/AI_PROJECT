@@ -1,11 +1,9 @@
 # webapps/portal/oracle_emp.py
 from __future__ import annotations
 
-import json
 import logging
 import os
 import time
-from pathlib import Path
 from typing import Any, Dict, TypedDict
 
 from django.conf import settings
@@ -94,6 +92,14 @@ WHERE TRIM(IDNO) = :emp_id
 """,
 )
 
+DEPTNO_BY_ID_SQLS = (
+    """
+SELECT TRIM(DEPTNO) AS DEPTNO
+FROM CT_EMPLOY
+WHERE TRIM(IDNO) = :emp_id
+""",
+)
+
 # ✅ 修正：根據使用者提供之關聯性 (CT_EMPLOY E JOIN CT_DEPARTMENT D) 提取資訊
 # 欄位說明：E.IDNO=身分證, E.DEPNO=單位代碼(CIN2000), D.DEPT_NAME=單位名稱, E.EMP_TITLE=職稱
 EMP_FULL_INFO_SQL = """
@@ -101,9 +107,10 @@ SELECT
     TRIM(E.NAME) AS EMP_NAME,
     TRIM(E.FACTORY_PLANT) AS PLANT,
     TRIM(D.DEPT_NAME) AS DEPT,
-    TRIM(E.EMP_TITLE) AS TITLE
+    TRIM(E.TITLECODE) AS TITLE,
+    TRIM(E.DEPTNO) AS DEPTNO
 FROM CT_EMPLOY E
-LEFT JOIN CT_DEPARTMENT D ON E.DEPNO = D.CIN2000_CODE AND E.FACTORY_PLANT = D.FACTORY_PLANT
+LEFT JOIN CT_DEPARTMENT D ON E.DEPNO = D.CODE AND E.FACTORY_PLANT = D.FACTORY_PLANT
 WHERE TRIM(E.IDNO) = :emp_id
 """
 
@@ -121,7 +128,6 @@ class _EmpCacheEntry(TypedDict):
 _EMP_CACHE: Dict[str, _EmpCacheEntry] = {}
 _ORA_DOWN_UNTIL_TS: float = 0.0
 _LAST_ERR: str = ""
-_MOCK_EMP_CACHE: Dict[str, Any] = {"path": "", "mtime": 0.0, "data": {}}
 
 
 def _oracle_emp_profile() -> str:
@@ -130,115 +136,6 @@ def _oracle_emp_profile() -> str:
     Can be overridden by ORACLE_EMP_DB_PROFILE, default is MPC.
     """
     return (os.getenv("ORACLE_EMP_DB_PROFILE") or "MPC").strip()
-
-
-def _mock_db_json_path() -> str:
-    p = str(getattr(settings, "MOCK_DB_JSON", "") or "").strip()
-    if p:
-        return p
-    p = (os.getenv("MOCK_DB_JSON") or "").strip()
-    if p:
-        return p
-    return "SQLTEST_output.json"
-
-
-def _load_mock_db_json() -> Dict[str, Any]:
-    p = Path(_mock_db_json_path())
-    try:
-        mtime = p.stat().st_mtime
-    except Exception:
-        return {}
-
-    if _MOCK_EMP_CACHE.get("path") == str(p) and _MOCK_EMP_CACHE.get("mtime") == mtime:
-        return _MOCK_EMP_CACHE.get("data") or {}
-
-    try:
-        data = json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
-        data = {}
-
-    _MOCK_EMP_CACHE.update({"path": str(p), "mtime": mtime, "data": data})
-    return data or {}
-
-
-def _iter_oracle_emp_sections(data: Dict[str, Any]):
-    if not isinstance(data, dict):
-        return
-    sec = data.get("oracle_emp")
-    if sec is not None:
-        yield sec
-
-    records = data.get("records")
-    if isinstance(records, list):
-        for r in records:
-            if isinstance(r, dict) and ("oracle_emp" in r):
-                yield r.get("oracle_emp")
-
-
-def _match_mock_emp_from_section(section: Any, emp_id: str) -> Dict[str, str]:
-    uid = (emp_id or "").strip().upper()
-    if not uid:
-        return {}
-
-    def _norm(v: Any) -> str:
-        return str(v or "").strip()
-
-    # Case A: {"login_user":"F...","login_user_name":"姚承佑","login_user_org":"401"}
-    if isinstance(section, dict):
-        lu = _norm(section.get("login_user")).upper()
-        if lu and lu == uid:
-            return {
-                "name": _norm(section.get("login_user_name") or section.get("name")),
-                "plant": _norm(section.get("login_user_org") or section.get("factory_plant") or section.get("plant")),
-            }
-
-        # Case B: {"F129...":"姚承佑"} or {"F129...":{"login_user_name":"姚承佑","plant":"401"}}
-        direct = section.get(emp_id) or section.get(uid) or section.get(uid.lower())
-        if isinstance(direct, str):
-            return {"name": _norm(direct), "plant": ""}
-        if isinstance(direct, dict):
-            return {
-                "name": _norm(direct.get("login_user_name") or direct.get("name")),
-                "plant": _norm(direct.get("login_user_org") or direct.get("factory_plant") or direct.get("plant")),
-            }
-
-        # Case C: {"users":[{"login_user":"F...","login_user_name":"姚承佑"}]}
-        users = section.get("users")
-        if isinstance(users, list):
-            for item in users:
-                if not isinstance(item, dict):
-                    continue
-                if _norm(item.get("login_user")).upper() == uid:
-                    return {
-                        "name": _norm(item.get("login_user_name") or item.get("name")),
-                        "plant": _norm(item.get("login_user_org") or item.get("factory_plant") or item.get("plant")),
-                    }
-
-    # Case D: [{"login_user":"F...","login_user_name":"姚承佑"}, ...]
-    if isinstance(section, list):
-        for item in section:
-            if not isinstance(item, dict):
-                continue
-            if _norm(item.get("login_user")).upper() == uid:
-                return {
-                    "name": _norm(item.get("login_user_name") or item.get("name")),
-                    "plant": _norm(item.get("login_user_org") or item.get("factory_plant") or item.get("plant")),
-                }
-    return {}
-
-
-def _mock_emp_info(emp_id: str) -> Dict[str, str]:
-    data = _load_mock_db_json()
-    if not data:
-        return {}
-
-    hit: Dict[str, str] = {}
-    for sec in _iter_oracle_emp_sections(data):
-        matched = _match_mock_emp_from_section(sec, emp_id)
-        # Use last matched record (newest in records tail).
-        if matched and (matched.get("name") or matched.get("plant")):
-            hit = matched
-    return hit
 
 
 # ============================================================
@@ -251,15 +148,9 @@ def _is_oracle_emp_enabled() -> bool:
     - ORACLE_ENABLED=0 或 ORACLE_EMP_ENABLED=0 => 一律停用（外網/DMZ）
     """
     env_name = (os.getenv("ENV") or "").strip().upper()
-    env_name = {
-        "DEV": "DEV_EXT",
-        "EXT": "DEV_EXT",
-        "INT": "DEV_INT",
-        "PROD": "PROD_EXT",
-    }.get(env_name, env_name)
-    if env_name in ("DEV_EXT", "PROD_EXT"):
+    if env_name == "EXT":
         return False
-    if env_name in ("DEV_INT", "PROD_INT"):
+    if env_name == "INT":
         return True
     return bool(getattr(settings, "ORACLE_ENABLED", False) and getattr(settings, "ORACLE_EMP_ENABLED", False))
 
@@ -406,7 +297,7 @@ def get_emp_name(emp_id: str, *, refresh: bool = False) -> str:
         return ""
 
     if not _is_oracle_emp_enabled():
-        return str(_mock_emp_info(emp_id).get("name") or "").strip()
+        return ""
 
     if not refresh:
         hit = _cache_get_if_valid(emp_id)
@@ -445,18 +336,8 @@ def get_emp_full_info(emp_id: str, *, refresh: bool = False) -> Dict[str, str]:
     """
     global _LAST_ERR, _ORA_DOWN_UNTIL_TS
     emp_id = (emp_id or "").strip()
-    if not emp_id:
+    if not emp_id or not _is_oracle_emp_enabled():
         return {}
-    if not _is_oracle_emp_enabled():
-        hit = _mock_emp_info(emp_id)
-        if not hit:
-            return {}
-        return {
-            "EMP_NAME": str(hit.get("name") or "").strip(),
-            "PLANT": str(hit.get("plant") or "").strip(),
-            "DEPT": "",
-            "TITLE": "",
-        }
 
     if not refresh:
         hit = _cache_get_full_if_valid(emp_id)
@@ -607,7 +488,7 @@ def get_factory_plant_by_id(emp_id: str) -> str:
     if not uid:
         return ""
     if not _is_oracle_emp_enabled():
-        return str(_mock_emp_info(uid).get("plant") or "").strip()
+        return ""
 
     now = time.time()
     if _ORA_DOWN_UNTIL_TS and now < _ORA_DOWN_UNTIL_TS:

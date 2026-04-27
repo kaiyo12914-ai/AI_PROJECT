@@ -1,13 +1,14 @@
 {% load static %}
+{% load custom_tags %}
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <title>公文查詢子程式</title>
+  <title>文件查詢子程式</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
-  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% custom_static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
 
   <style>
     :root {
@@ -45,7 +46,7 @@
       margin-bottom: 12px;
     }
     .title {
-      font-size: 24px;
+      font-size: 20px;
       font-weight: 700;
       color: var(--title);
       margin: 0 0 10px;
@@ -58,7 +59,7 @@
     }
     .form-row {
       display: grid;
-      grid-template-columns: 100px 1fr 100px 1fr 100px;
+      grid-template-columns: 100px 1fr 100px 1fr 100px 1fr;
       gap: 12px;
       align-items: center;
       margin-bottom: 12px;
@@ -172,18 +173,18 @@
         padding: 14px;
       }
       .title {
-        font-size: 20px;
+        font-size: 18px;
       }
     }
   </style>
 
-  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
-  <script defer src="{% static 'doc/js/sybase_query.js' %}?v=20260304b"></script>
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% custom_static 'doc/js/sybase_query.js' %}?v=20260304b"></script>
 </head>
 <body data-base-url="{{ app_base_url }}" data-default-plant="{{ default_plant|default:'MPC' }}">
   <div class="wrap">
     <div class="card">
-      <h1 class="title">公文查詢子程式</h1>
+      <h1 class="title">文件查詢子程式</h1>
       <div class="sub">目前來源 IP：{{ client_ip }}</div>
       {% if ip_debug_meta %}
       <div class="sub" style="font-family:Consolas,monospace;white-space:pre-wrap;">
@@ -209,16 +210,11 @@
 
       <div class="form-row">
         <label for="qLimit">筆數上限</label>
-        <input id="qLimit" class="input-limit" type="number" min="1" max="2000" value="300" />
-        <label for="qDaysAgo">迄今天數</label>
-        <select id="qDaysAgo" class="input-limit">
-          <option value="30" selected>30天</option>
-          <option value="60">60天</option>
-          <option value="90">90天</option>
-          <option value="180">180天</option>
-          <option value="">不限</option>
-        </select>
-        <span></span>
+        <input id="qLimit" class="input-limit" type="number" min="100" step="1000" max="{{ query_limit_max|default:5000 }}" value="{{ query_limit_default|default:3000 }}" />
+        <label for="qDateStart">起始日期</label>
+        <input id="qDateStart" class="input-limit" type="date" value="{{ query_start_default }}" />
+        <label for="qDateEnd">結束日期</label>
+        <input id="qDateEnd" class="input-limit" type="date" value="{{ query_end_default }}" />
       </div>
 
       <div class="form-row">

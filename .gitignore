@@ -53,3 +53,5 @@ export_out/
 
 webapps/text2pptx/pptx_templates/~$*
 
+.git_backup_20260330
+.pytest_cache

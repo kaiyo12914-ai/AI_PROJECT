@@ -13,7 +13,7 @@ from django.views.decorators.http import require_POST
 
 from webapps.portal.decorators import require_node
 from webapps.llm.llm_factory import get_chat_model
-
+from .domain.entities.evaluation import Evaluation
 
 # ============================================================
 # Pages
@@ -25,15 +25,16 @@ def index(request: HttpRequest) -> HttpResponse:
     - Template 請使用「靜態資源分離」版本：CSS/JS 外掛 static
     - body 請使用 data-base-url="{{ request.script_name }}"
     """
-    return render(request, "comment/performance.html")
-
+    factory = request.session["login_user_org"]
+    dep = request.session["dep"]
+    return render(request, "comment/performance.html",{"factory":factory,"dep":dep})
 
 # ============================================================
 # Helpers
 # ============================================================
+
 def _safe_str(x: Any) -> str:
     return "" if x is None else str(x)
-
 
 def _as_text(x: Any) -> str:
     if x is None:
@@ -44,7 +45,6 @@ def _as_text(x: Any) -> str:
         except Exception:
             return ""
     return str(x)
-
 
 def _llm_provider_tag(llm_obj: object) -> str:
     """
@@ -59,13 +59,11 @@ def _llm_provider_tag(llm_obj: object) -> str:
         return "openai"
     return (os.getenv("MODEL_TYPE") or "auto").strip().lower()
 
-
 def _truncate_chars(s: str, n: int) -> str:
     s = (s or "").strip()
     if n and n > 0 and len(s) > n:
         return s[:n].rstrip()
     return s
-
 
 def _read_json(request: HttpRequest) -> Optional[dict]:
     """
@@ -81,7 +79,6 @@ def _read_json(request: HttpRequest) -> Optional[dict]:
     except Exception:
         return None
 
-
 def _clamp_int(v: Any, default: int, lo: int, hi: int) -> int:
     try:
         x = int(v)
@@ -93,13 +90,11 @@ def _clamp_int(v: Any, default: int, lo: int, hi: int) -> int:
         return hi
     return x
 
-
 def _to_float(v: Any) -> Optional[float]:
     try:
         return float(v)
     except Exception:
         return None
-
 
 def _norm_traits(traits: Any, *, limit: int = 10) -> List[str]:
     """
@@ -126,7 +121,6 @@ def _norm_traits(traits: Any, *, limit: int = 10) -> List[str]:
             break
     return cleaned
 
-
 def _build_prompt(student_name: str, performance_grade: str, traits: List[str], max_chars: int) -> str:
     performance_info = f"績效評等: {performance_grade}" if performance_grade else "未指定績效評等"
     trait_lines = "\n".join([f"- {x}" for x in traits]) if traits else "(未提供其他特質)"
@@ -142,7 +136,6 @@ def _build_prompt(student_name: str, performance_grade: str, traits: List[str], 
         "- 以下為…\n"
         "請直接輸出評語內容，勿加標題。"
     ).strip()
-
 
 # ============================================================
 # API: 生成評語
@@ -185,18 +178,44 @@ def api_generate_comment(request: HttpRequest) -> JsonResponse:
         timeout = None
 
     try:
-        llm = get_chat_model(temperature=temperature, timeout=timeout)
+        model_type="LM_STUDIO"
+        llm = get_chat_model(temperature=temperature, timeout=timeout,model_type=model_type)
         out = llm.invoke(prompt)
 
-        reply = _truncate_chars(_as_text(out).strip(), max_chars)
+        reply = _as_text(out).strip()
         if not reply:
             reply = "(模型未回傳內容)"
 
+        # 檢查是否需要儲存評語至資料庫
+        store_comment = body.get("store", False)
+
+        llm_provider = _llm_provider_tag(llm)
         resp = {
             "ok": True,
             "reply": reply,
-            "provider": _llm_provider_tag(llm),
+            "provider": llm_provider,
         }
+
+        if store_comment:
+            try:
+                sub_performance_grades = body.get("subPerformanceGrades") or []
+                Evaluation.create_from_api_request(
+                    student_name=student_name,
+                    traits=traits,
+                    performance_grade=performance_grade or None,
+                    comment_text=reply,
+                    creator_account=request.session["login_user"] or None,
+                    llm_provider=model_type,
+                    model_name=llm.__repr__(),
+                    idno=body.get("idno"),  # 新增被評價人員的帳號
+                    sub_performance_grades=sub_performance_grades
+                ).save()
+                resp["saved"] = True  # 傳回成功儲存評語的標誌
+            except Exception as e:
+                if getattr(settings, "DEBUG", False):
+                    resp["error_db"] = str(e)
+                else:
+                    resp["error_db"] = "儲存失敗"
 
         # ✅ 僅 DEBUG 纔回傳 debug 資訊（避免上線洩漏 prompt）
         if getattr(settings, "DEBUG", False):
@@ -218,4 +237,73 @@ def api_generate_comment(request: HttpRequest) -> JsonResponse:
         }
         if getattr(settings, "DEBUG", False):
             resp["debug"] = {"prompt": prompt}
+
+        # 即使儲存失敗，仍回傳原始錯誤訊息
+        return JsonResponse(resp, status=500)
+
+# ============================================================
+# API: 取得當前使用者評語
+# GET /comment/api/get_evaluations/
+# 回傳:
+#   { ok?, evaluations? [] }
+# ============================================================
+@csrf_exempt  # 目前保留；若要啟用 CSRF，前端需帶 X-CSRFToken
+def api_get_evaluations(request: HttpRequest) -> JsonResponse:
+    creator_account = request.session["login_user"]
+    if not creator_account:
+        return JsonResponse({"ok": False, "error": "user_not_login"}, status=401)
+
+    try:
+        evaluations_list = Evaluation.objects.filter(creator_account=creator_account).order_by('-created_at')
+
+        evaluation_data = [{
+            'id': eval.id,
+            'student_name': eval.student_name,
+            'performance_grade': eval.performance_grade or '',
+            'comment_text': eval.comment_text,
+            'llm_provider': eval.llm_provider or '',
+            'created_at': str(eval.created_at)
+        } for eval in evaluations_list]
+
+        return JsonResponse({
+            "ok": True,
+            "evaluations": evaluation_data
+        }, status=200)
+
+    except Exception as e:
+        if getattr(settings, "DEBUG", False):
+            resp = {"ok": False, "error": str(e)}
+        else:
+            resp = {"ok": False, "error": "評語查詢失敗"}
+        return JsonResponse(resp, status=500)
+
+# ============================================================
+# API: 刪除評語
+# POST /comment/api/delete_evaluation/<int:evaluation_id>/
+# 檢查：僅允許創建人員刪除
+# 回傳:
+#   { ok, error? }
+# ============================================================
+@csrf_exempt  # 目前保留；若要啟用 CSRF，前端需帶 X-CSRFToken
+@require_POST
+@require_node("comment", api=True)
+def api_delete_evaluation(request: HttpRequest, evaluation_id: int) -> JsonResponse:
+    try:
+        evaluation = Evaluation.objects.get(id=evaluation_id)
+
+        # 檢查創建者是否一致（權限驗證）
+        if not request.session["login_user"] or (request.session["login_user"] != evaluation.creator_account):
+            return JsonResponse({"ok": False, "error": "unauthorized"}, status=403)
+
+        # 刪除資料並回傳結果
+        evaluation.delete()
+        return JsonResponse({"ok": True}, status=200)
+    except Evaluation.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "evaluation_not_found"}, status=404)
+    except Exception as e:
+        resp = {"ok": False}
+        if getattr(settings, "DEBUG", False):
+            resp["error"] = str(e)
+        else:
+            resp["error"] = "刪除失敗"
         return JsonResponse(resp, status=500)

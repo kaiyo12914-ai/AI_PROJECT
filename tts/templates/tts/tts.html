@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TTS / STT 語音工具</title>
+  <style>
+    :root{
+      --bg:#f6f7fb;
+      --card:#fff;
+      --text:#1f2937;
+      --muted:#6b7280;
+      --primary:#2563eb;
+      --danger:#dc2626;
+      --border:#e5e7eb;
+      --shadow: 0 6px 20px rgba(0,0,0,.08);
+      --radius:16px;
+    }
+    body{ margin:0; font-family: system-ui, -apple-system, "Segoe UI", Arial, "Noto Sans TC", sans-serif; background:var(--bg); color:var(--text); }
+    .wrap{ max-width: 1080px; margin: 28px auto; padding: 0 16px 40px; }
+    header{ display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:16px; }
+    h1{ margin:0; font-size: 28px; letter-spacing:.5px; }
+    .sub{ color:var(--muted); font-size: 14px; }
+    .grid{ display:grid; grid-template-columns: 1fr; gap:16px; }
+    @media (min-width: 960px){
+      .grid{ grid-template-columns: 1fr 1fr; }
+    }
+    .card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+    .card h2{ margin:0 0 10px; font-size: 18px; }
+    .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    textarea{
+      width:100%;
+      min-height: 140px;
+      resize: vertical;
+      padding: 12px;
+      border:1px solid var(--border);
+      border-radius: 12px;
+      font-size: 15px;
+      outline:none;
+      background:#fff;
+      box-sizing: border-box;
+    }
+    textarea:focus{ border-color: rgba(37,99,235,.5); box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+    input[type="text"], select{
+      padding: 10px 12px;
+      border:1px solid var(--border);
+      border-radius: 12px;
+      font-size: 14px;
+      outline:none;
+      background:#fff;
+      box-sizing: border-box;
+    }
+    button{
+      border:0;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 14px;
+      cursor:pointer;
+      background: var(--primary);
+      color:#fff;
+    }
+    button.secondary{ background:#111827; }
+    button.ghost{ background:#fff; color:#111827; border:1px solid var(--border); }
+    button.danger{ background: var(--danger); }
+    button:disabled{ opacity:.6; cursor:not-allowed; }
+    .hint{ font-size: 13px; color: var(--muted); }
+    .status{ margin-top:10px; font-size: 13px; }
+    .status.ok{ color: #16a34a; }
+    .status.err{ color: var(--danger); white-space: pre-wrap; }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--muted); }
+    .divider{ height:1px; background: var(--border); margin: 14px 0; }
+    .audioBox{ display:flex; flex-direction:column; gap:8px; }
+    a{ color: var(--primary); text-decoration: none; }
+    a:hover{ text-decoration: underline; }
+    .small{ font-size:12px; color:var(--muted); }
+    .pill{
+      display:inline-flex; align-items:center; gap:6px;
+      padding: 6px 10px; border-radius: 999px;
+      border:1px solid var(--border); background:#fff;
+      font-size: 12px; color: var(--muted);
+    }
+  </style>
+</head>
+
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>語音工具（TTS / STT）</h1>
+      <div class="sub">文字轉語音（Piper）與音檔轉文字（Whisper/其他 STT）— 內網可用</div>
+    </div>
+    <div class="row">
+      <span class="pill">TTS: <span class="mono">/tts/generate/</span></span>
+      <span class="pill">TTS檔案: <span class="mono">/tts/generate_from_file/</span></span>
+      <span class="pill">STT: <span class="mono">/tts/transcribe/</span></span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <!-- =========================
+         左：Text -> Speech
+         ========================= -->
+    <section class="card">
+      <h2>文字 → 語音（Text to Speech）</h2>
+
+      <div class="hint">輸入文字後點「產生語音」，系統會回傳 wav_url，並可直接播放。也可匯入 TXT/DOCX/PDF（後端抽字）。</div>
+      <div class="divider"></div>
+
+      <textarea id="ttsText" placeholder="請輸入要朗讀的文字（建議 1200 字以內）"></textarea>
+
+      <!-- ✅ 新增：匯入檔案 -->
+      <div class="row" style="margin-top:10px;">
+        <input id="ttsFile" type="file" accept=".txt,.docx,.pdf" style="display:none;" />
+        <button id="btnTtsImport" class="ghost">匯入檔案（TXT/DOCX/PDF）</button>
+        <span id="ttsFileName" class="small"></span>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <input id="ttsModel" type="text" placeholder="模型檔名（可空白，例：zh_CN-huayan-medium.onnx）" style="flex:1; min-width:260px;">
+        <button id="btnTts">產生語音</button>
+        <button id="btnTtsClear" class="ghost">清除</button>
+      </div>
+
+      <div class="row" style="margin-top:8px;">
+        <span class="small">字數：<span id="ttsCount">0</span></span>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="audioBox">
+        <audio id="audioPlayer" controls style="width:100%; display:none;"></audio>
+        <div id="ttsResult" class="mono"></div>
+      </div>
+
+      <div id="ttsStatus" class="status"></div>
+    </section>
+
+    <!-- =========================
+         右：Speech -> Text
+         ========================= -->
+    <section class="card">
+      <h2>音檔 → 文字（Speech to Text）</h2>
+
+      <div class="hint">
+        上傳音檔（wav/mp3/m4a 皆可，依你的 STT 引擎支援為準），轉出文字後可匯出 TXT/DOCX。
+      </div>
+      <div class="divider"></div>
+
+      <div class="row">
+        <input id="sttFile" type="file" accept="audio/*" />
+        <button id="btnStt">開始轉文字</button>
+        <button id="btnSttClear" class="ghost">清除</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <textarea id="sttText" placeholder="轉出來的文字會顯示在這裡…"></textarea>
+
+      <div class="row" style="margin-top:10px;">
+        <button id="btnCopy" class="secondary">複製文字</button>
+        <button id="btnExportTxt" class="ghost">匯出 TXT</button>
+        <button id="btnExportDocx" class="ghost">匯出 DOCX</button>
+      </div>
+
+      <div id="sttStatus" class="status"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+  // ---------------------------
+  // Helpers
+  // ---------------------------
+  const $ = (id) => document.getElementById(id);
+
+  function setStatus(el, msg, ok=true) {
+    el.className = "status " + (ok ? "ok" : "err");
+    el.textContent = msg || "";
+  }
+
+  function safeJson(text) {
+    try { return JSON.parse(text); } catch(e) { return null; }
+  }
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  // ---------------------------
+  // TTS
+  // ---------------------------
+  const ttsText = $("ttsText");
+  const ttsCount = $("ttsCount");
+  const ttsModel = $("ttsModel");
+  const btnTts = $("btnTts");
+  const btnTtsClear = $("btnTtsClear");
+  const ttsStatus = $("ttsStatus");
+  const ttsResult = $("ttsResult");
+  const audioPlayer = $("audioPlayer");
+
+  // ✅ 新增：TTS 匯入
+  const ttsFile = $("ttsFile");
+  const btnTtsImport = $("btnTtsImport");
+  const ttsFileName = $("ttsFileName");
+
+  ttsText.addEventListener("input", () => {
+    ttsCount.textContent = String(ttsText.value.length);
+  });
+
+  btnTtsClear.addEventListener("click", () => {
+    ttsText.value = "";
+    ttsCount.textContent = "0";
+    ttsModel.value = "";
+    ttsResult.textContent = "";
+    ttsFile.value = "";
+    ttsFileName.textContent = "";
+    audioPlayer.style.display = "none";
+    audioPlayer.removeAttribute("src");
+    setStatus(ttsStatus, "");
+  });
+
+  // ✅ 匯入檔案 → 後端抽字 + 直接產生 wav
+  btnTtsImport.addEventListener("click", () => ttsFile.click());
+
+  ttsFile.addEventListener("change", async () => {
+    const file = ttsFile.files && ttsFile.files[0];
+    if (!file) return;
+
+    ttsFileName.textContent = file.name;
+
+    setStatus(ttsStatus, "上傳檔案並產生語音中…");
+    ttsResult.textContent = "";
+    audioPlayer.style.display = "none";
+    audioPlayer.removeAttribute("src");
+
+    btnTts.disabled = true;
+    btnTtsImport.disabled = true;
+
+    try {
+      const form = new FormData();
+      form.append("file", file); // ✅ 後端用 request.FILES.get("file")
+      const model = (ttsModel.value || "").trim();
+      if (model) form.append("model", model);
+
+      const resp = await fetch("/tts/generate_from_file/", {
+        method: "POST",
+        body: form,
+      });
+
+      const raw = await resp.text();
+      const data = safeJson(raw);
+
+      if (!data) {
+        setStatus(ttsStatus, "回傳不是 JSON：\n" + raw, false);
+        return;
+      }
+
+      if (!data.ok) {
+        setStatus(ttsStatus, data.error || "匯入產生失敗", false);
+        return;
+      }
+
+      // ✅ 回填抽出的文字
+      if (data.text) {
+        ttsText.value = data.text;
+        ttsCount.textContent = String(ttsText.value.length);
+      }
+
+      const url = data.wav_url;
+      ttsResult.innerHTML = `
+        <div>✅ 產生成功（由檔案匯入）</div>
+        <div class="mono">wav_url: ${url ? `<a href="${url}" target="_blank">${url}</a>` : "(無)"} </div>
+        <div class="mono">bytes: ${data.bytes || ""}</div>
+      `;
+
+      if (url) {
+        audioPlayer.src = url;
+        audioPlayer.style.display = "block";
+        audioPlayer.load();
+        setStatus(ttsStatus, "完成 ✅");
+      } else {
+        setStatus(ttsStatus, "產生成功，但 wav_url 為空（請確認輸出目錄在 MEDIA_ROOT 之下）", false);
+      }
+
+    } catch (e) {
+      setStatus(ttsStatus, "錯誤： " + (e?.message || String(e)), false);
+    } finally {
+      btnTts.disabled = false;
+      btnTtsImport.disabled = false;
+    }
+  });
+
+  // 原本文字直接產生
+  btnTts.addEventListener("click", async () => {
+    setStatus(ttsStatus, "產生中…");
+    ttsResult.textContent = "";
+    audioPlayer.style.display = "none";
+    audioPlayer.removeAttribute("src");
+
+    const text = (ttsText.value || "").trim();
+    const model = (ttsModel.value || "").trim();
+
+    if (!text) {
+      setStatus(ttsStatus, "請先輸入文字", false);
+      return;
+    }
+
+    btnTts.disabled = true;
+
+    try {
+      const resp = await fetch("/tts/generate/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, model }),
+      });
+
+      const raw = await resp.text();
+      const data = safeJson(raw);
+
+      if (!data) {
+        setStatus(ttsStatus, "回傳不是 JSON：\n" + raw, false);
+        return;
+      }
+
+      if (!data.ok) {
+        setStatus(ttsStatus, data.error || "產生失敗", false);
+        return;
+      }
+
+      const url = data.wav_url;
+      ttsResult.innerHTML = `
+        <div>✅ 產生成功</div>
+        <div class="mono">wav_url: ${url ? `<a href="${url}" target="_blank">${url}</a>` : "(無)"} </div>
+        <div class="mono">bytes: ${data.bytes || ""}</div>
+      `;
+
+      if (url) {
+        audioPlayer.src = url;
+        audioPlayer.style.display = "block";
+        audioPlayer.load();
+        setStatus(ttsStatus, "完成 ✅");
+      } else {
+        setStatus(ttsStatus, "產生成功，但 wav_url 為空（請確認輸出目錄在 MEDIA_ROOT 之下）", false);
+      }
+
+    } catch (e) {
+      setStatus(ttsStatus, "錯誤： " + (e?.message || String(e)), false);
+    } finally {
+      btnTts.disabled = false;
+    }
+  });
+
+  // ---------------------------
+  // STT
+  // ---------------------------
+  const sttFile = $("sttFile");
+  const btnStt = $("btnStt");
+  const btnSttClear = $("btnSttClear");
+  const sttText = $("sttText");
+  const sttStatus = $("sttStatus");
+
+  btnSttClear.addEventListener("click", () => {
+    sttFile.value = "";
+    sttText.value = "";
+    setStatus(sttStatus, "");
+  });
+
+  btnStt.addEventListener("click", async () => {
+    setStatus(sttStatus, "轉換中…");
+    const file = sttFile.files && sttFile.files[0];
+    if (!file) {
+      setStatus(sttStatus, "請先選擇音檔", false);
+      return;
+    }
+
+    btnStt.disabled = true;
+
+    try {
+      const form = new FormData();
+      form.append("audio", file);
+
+      const resp = await fetch("/tts/transcribe/", {
+        method: "POST",
+        body: form,
+      });
+
+      const raw = await resp.text();
+      const data = safeJson(raw);
+
+      if (!data) {
+        setStatus(sttStatus, "回傳不是 JSON：\n" + raw, false);
+        return;
+      }
+
+      if (!data.ok) {
+        setStatus(sttStatus, data.error || "轉換失敗", false);
+        return;
+      }
+
+      sttText.value = data.text || "";
+      setStatus(sttStatus, "完成 ✅");
+    } catch (e) {
+      setStatus(sttStatus, "錯誤： " + (e?.message || String(e)), false);
+    } finally {
+      btnStt.disabled = false;
+    }
+  });
+
+  // ---------------------------
+  // Export / Copy
+  // ---------------------------
+  const btnCopy = $("btnCopy");
+  const btnExportTxt = $("btnExportTxt");
+  const btnExportDocx = $("btnExportDocx");
+
+  btnCopy.addEventListener("click", async () => {
+    const text = (sttText.value || "").trim();
+    if (!text) {
+      setStatus(sttStatus, "沒有可複製的文字", false);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatus(sttStatus, "已複製到剪貼簿 ✅");
+    } catch (e) {
+      setStatus(sttStatus, "複製失敗（瀏覽器權限限制）", false);
+    }
+  });
+
+  btnExportTxt.addEventListener("click", async () => {
+    const text = (sttText.value || "").trim();
+    if (!text) {
+      setStatus(sttStatus, "沒有可匯出的文字", false);
+      return;
+    }
+    setStatus(sttStatus, "匯出 TXT…");
+    try {
+      const resp = await fetch("/tts/export_txt/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+
+      const blob = await resp.blob();
+      downloadBlob(blob, "stt.txt");
+      setStatus(sttStatus, "已下載 stt.txt ✅");
+    } catch (e) {
+      setStatus(sttStatus, "匯出失敗：" + (e?.message || String(e)), false);
+    }
+  });
+
+  btnExportDocx.addEventListener("click", async () => {
+    const text = (sttText.value || "").trim();
+    if (!text) {
+      setStatus(sttStatus, "沒有可匯出的文字", false);
+      return;
+    }
+    setStatus(sttStatus, "匯出 DOCX…");
+    try {
+      const resp = await fetch("/tts/export_docx/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+
+      const blob = await resp.blob();
+      downloadBlob(blob, "stt.docx");
+      setStatus(sttStatus, "已下載 stt.docx ✅");
+    } catch (e) {
+      setStatus(sttStatus, "匯出失敗：" + (e?.message || String(e)), false);
+    }
+  });
+</script>
+</body>
+</html>

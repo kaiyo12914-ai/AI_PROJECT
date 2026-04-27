@@ -398,7 +398,7 @@ h1 {
   text-decoration: none;
   border-radius: 14px;
   overflow: hidden;
-  min-height: 148px;
+  min-height: 99px;
   isolation: isolate;
   transform: translateY(0);
   transition: transform 0.18s ease, filter 0.18s ease, box-shadow 0.18s ease;
@@ -465,26 +465,26 @@ h1 {
   z-index: 1;
   display: flex;
   height: 100%;
-  min-height: 148px;
+  min-height: 99px;
   align-items: center;
   justify-content: center;
   flex-direction: column;
   text-align: center;
-  padding: 24px 18px;
+  padding: 14px 14px;
   color: #ffffff;
 }
 
 .svg-card__title {
   display: block;
-  font-size: 26px;
+  font-size: 20px;
   font-weight: 600;
   letter-spacing: 0.3px;
 }
 
 .svg-card__subtitle {
   display: block;
-  font-size: 20px;
-  margin-top: 10px;
+  font-size: 15px;
+  margin-top: 6px;
   color: rgba(255, 255, 255, 0.92);
 }
 

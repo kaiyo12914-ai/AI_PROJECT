@@ -1,63 +1,223 @@
-# DJANGO 銝餃?獢?蝭?Primary Rules嚗?
-??交?嚗?026-03-23
-?拍頝臬?嚗:\AI\AI_TOOLS嚗蒂雿?嗡?撠?銝餉?蝭?皞?
+# AI_TOOLS 專案規範（Primary Rules）
 
-## 閬?撅斤?
-1. ?祆?嚗:\AI\AI_TOOLS\.codex\rules.md嚗鈭?獢?擃?蝭?2. ?嗡?撠? rules.md ?芾鋆?嚗?敺??祆?銵???3. ?潛?銵???隞交瑼皞?
-## 撠??函???
-- 瘥?獢蝡蝵脯蝡???摨蝡?撘Ⅳ????- 蝳迫隞?PYTHONPATH ??亥楝敺釣?交撘楊撠? import ?賣??- 撠?????賡? API???臭????Ⅱ鞈?鈭斗?瘚???
-## ?梁?閮剖?
-- ?梁? workspace嚗:\AI\openclaw-workspace
-- ?梁??啣??芸?嚗:\AI\VENV3.12
-- ??啣?嚗:\AI\venv3.12
+更新日期：2026-04-20  
+適用範圍：`H:\AI\AI_TOOLS`
 
-## 霈蝞∠?
-- 隞颱?撠?閬?隤踵嚗??湔?祆?嚗??郊?湔?嗡?撠? rules.md??- 隢??瑟????輻??郊閮??潘?
+---
+
+## 1) Mandatory Startup Rule（每次新 session 必做）
+1. 進入本專案後，第一步必須讀取：`/.codex/rules.md`。
+2. 不可跳過，不可改讀其他 rules 檔替代。
+3. `/.codex/rules.md` 為唯一規範來源；專案根目錄不得再維護第二份 `rules.md`。
+4. 讀完本檔後，需再讀取：`H:\AI\openclaw-workspace\LONG_TERM_MEMORY.md`。
+5. 每個 session 需在 `H:\AI\openclaw-workspace` 建立工作記錄檔：
+   - 檔名：`AI_TOOLS_工作記錄_YYYY-MM-DD.md`
+
+---
+
+## 2) 不可破壞之核心規則（MUST NOT MERGE）
+
+### 2.1 URL / Proxy Prefix
+1. Django URL 必須支援 proxy prefix（例如 `/djangoai/...`）。
+2. 前端 API 路徑一律使用 `apiurl()` 產生，不可硬寫絕對路徑。
+3. 不可在 middleware 對 HTML/JS 回應內容做字串替換 prefix。
+4. `PROXY_PREFIX`、`FORCE_SCRIPT_NAME`、`PROXY_PREFIX_WRITE_SCRIPT_NAME` 必須一致運作。
+
+### 2.2 前端資源載入
+1. HTML 禁止塞大量 inline `<script>` / `<style>`。
+2. CSS / JS 應放在 `webapps/<node>/static/<node>/`。
+3. Template 需透過 `custom_static`（或專案既有等價 helper）載入靜態資源。
+
+### 2.3 DB / LLM 工廠
+1. DB 連線與查詢統一走 `DB_FACTORY`（`webapps/database/db_factory.py`）。
+2. 禁止在功能模組自行 new DB 連線。
+3. LLM 呼叫統一走 `get_chat_model()`（`webapps/llm/llm_factory.py`）。
+4. 禁止在各模組直接 new OpenAI/Ollama 客戶端。
+
+### 2.4 ACL / require_node
+1. 頁面必須加 `@require_node("<node>")`。
+2. API 必須加 `@require_node("<node>", api=True)`。
+3. 不可繞過 ACL 直接開放端點。
+
+---
+
+## 3) ENV / 執行模式（Mandatory）
+
+### 3.1 EXT / INT DB Mode（強制）
+1. `ENV=EXT`：禁止連實體 DB，必須使用 mock 資料。
+2. `ENV=INT`：必須連實體 DB，禁止 fallback 到本地/mock JSON。
+3. `ENV=INT` 查詢失敗時，必須明確回錯，不可改走 mock。
+4. EXT/INT 不可混用，不可「半 fallback」。
+
+### 3.2 NO_PROXY（強制）
+下列目標需包含在 `NO_PROXY/no_proxy`：
+1. `127.0.0.1`、`localhost`、`::1`
+2. 內網服務主機（DB / Ollama / RAG / 內部 API）
+
+---
+
+## 4) 公文子系統防呆（Mandatory）
+1. Perspective Logic：LLM 前必須經 `_preprocess_incoming_text`，將相對稱謂替換為具體名稱。
+2. Buffer Integrity：前端隱藏欄位清空要同時做：
+   - `.value = ""`
+   - `.setAttribute("value", "")`
+3. case 切換時必須觸發 `resetFocusPick`。
+4. `views_parse.py` 的 `out_files` 生成必須 idempotent 且唯一，避免重複計數。
+
+---
+
+## 5) SQL 與分層
+1. SQL 應集中於 service/repository 層。
+2. View/template 不可直接拼接 SQL。
+3. 若為 legacy 特例，需維持可測、可追蹤，且不得再擴散。
+
+---
+
+## 6) UTF-8 / BOM（Mandatory）
+1. 全專案文字檔必須使用 UTF-8（無 BOM）。
+2. Windows PowerShell 5.1 禁用：`Set-Content -Encoding UTF8`（會寫入 BOM）。
+3. 請使用無 BOM 寫法：
+
+```powershell
+[System.IO.File]::WriteAllText($path, $text, (New-Object System.Text.UTF8Encoding($false)))
+```
+
+4. PowerShell 7 可用 `-Encoding utf8NoBOM`。
+5. VS Code 預設編碼需為 `UTF-8`（非 `UTF-8 with BOM`）。
+6. 禁止使用 Big5/CP950/GB 作為專案檔案儲存編碼。
+
+---
+
+## 7) 測試規範（vibe coding）
+1. 新增或修改功能時，必須同步產出測試。
+2. 測試採金字塔：
+   - Unit 約 70%
+   - Integration 約 20%
+   - E2E 約 10%
+3. 每個測試主題至少含：
+   - happy path
+   - boundary case
+   - error handling
+4. 涉及外部 API / DB / 檔案 / 第三方時，優先使用 mock/stub/fake。
+5. 測試檔集中於：`H:\AI\AI_TOOLS\tests`
+   - `tests\unit\`
+   - `tests\integration\`
+   - `tests\e2e\`
+6. 檔名：`test_<功能名稱>.py`，框架優先 `pytest`。
+
+---
+
+## 8) 變更原則
+1. 變更前先確認是否違反本檔任一 Mandatory 規則。
+2. 若規則衝突，以本檔為準；無規範時採「最小破壞、可回滾、可測試」原則。
+3. 任何會影響 proxy、ACL、DB mode、編碼規則的修改，都需在 PR/commit 說明中明確列出。
+
+---
+
+## 9) Roadmap 管理規範（Mandatory）
+1. 新子系統開發時，必須先做需求分析，並在 `H:\AI\AI_TOOLS\.roadmap\` 建立對應 roadmap 檔。
+2. 檔名規則：
+   - 一般子系統：`<系統名稱>roadmap.md`（例：`XXX系統roadmap.md`）
+   - 檔名包含 `roadmap` 或 `ROADMAP` 的文件，一律放在 `.roadmap` 資料夾，不可留在專案根目錄或其他資料夾。
+3. roadmap 內容最少必須包含：
+   - 需求分析（背景問題、目標使用者、核心需求、非功能需求）
+   - 系統開發規劃（Phase/Sprint/里程碑）
+   - 完成性進度註記（總完成度、階段進度、待辦與阻塞）
+   - 驗收標準（Definition of Done）
+4. 進度維護規則：
+   - 每次有功能完成、需求變更、風險調整時，必須同步更新對應 roadmap。
+   - 更新內容至少要反映完成項目、剩餘風險、下一步計畫。
+5. 若 roadmap 與實作狀態不一致，視同規範違反，該變更不得合併（MUST NOT MERGE）。
+
+---
+
+## 附錄 A）舊版 rules.md 完整原文（保留）
+
+```markdown
+# DJANGO 主專案規範（Primary Rules）
+
+版本日期：2026-03-23
+適用路徑：H:\AI\AI_TOOLS（並作為其他專案主規範來源）
+
+## 規範層級
+1. 本檔（H:\AI\AI_TOOLS\.codex\rules.md）為五專案最高規範。
+2. 其他專案 rules.md 只能補充，不得與本檔衝突。
+3. 發生衝突時，以本檔為準。
+
+## 專案獨立原則
+- 每個專案獨立部署、獨立啟動程序、獨立程式碼邊界。
+- 禁止以 PYTHONPATH 或直接路徑注入方式跨專案 import 函數。
+- 專案間整合僅能透過 API、訊息佇列或明確資料交換流程。
+
+## 共用開發設定
+- 共用開發 workspace：H:\AI\openclaw-workspace
+
+
+## 變更管理
+- 任何專案規範調整，先更新本檔，再同步更新其他專案 rules.md。
+- 請將長期有效政策同步記錄於：
   H:\AI\openclaw-workspace\LONG_TERM_MEMORY.md
 
-# 撠?蝟餌絞?嗆????潸?蝭?蝎曄陛撘瑕??
+# 專案系統架構與開發規範（精簡強制版）
 
-?祆?隞嗥撘瑕閬?嚗andatory Rules嚗?隞颱?????蝔?蝣潔?敺?雿蛛?MUST NOT MERGE嚗?
-## 銝??函???- Django 憭?暺頂蝯梧?portal / doc / comment / meetingreply / ?佗?
-- ?垢 JS / HTML Template / Static 鞈?
-- IIS Reverse Proxy嚗 proxy prefix嚗?- DB_FACTORY / LLM_FACTORY
+本文件為強制規範（Mandatory Rules）。
+任何違反者，程式碼不得合併（MUST NOT MERGE）。
+
+## 一、適用範圍
+- Django 多節點系統（portal / doc / comment / meetingreply / …）
+- 前端 JS / HTML Template / Static 資源
+- IIS Reverse Proxy（含 proxy prefix）
+- DB_FACTORY / LLM_FACTORY
 - ACL / require_node / DEV Login
 
-## 鈭RL ??Proxy 閬?嚗敹??
+## 二、URL 與 Proxy 規範（核心鐵則）
 
-### ?萄? 1嚗jango 瘞賊?銝神 proxy prefix
-- `urls.py` 銝?? `/djangoai` ?遙雿?proxy ?韌
+### 鐵則 1：Django 永遠不寫 proxy prefix
+- `urls.py` 不得包含 `/djangoai` 或任何 proxy 前綴
+- `PROXY_PREFIX` 只用於 render 與反向代理路徑組裝，不得寫死進 app 路由
 
 ```python
-# 甇?Ⅱ
+# 正確
 path("incoming_lookup/", ...)
-# ?航炊
+# 錯誤
 path("djangoai/incoming_lookup/", ...)
 ```
 
-### ?萄? 2嚗?蝡臭?敺′撖思遙雿?prefix / node
-- 蝳迫 `/djangoai/...`
-- 蝳迫 `/doc/...`
-- 蝳迫?芾??潭 base URL
+### 鐵則 2：前端不得硬寫任何 prefix / node
+- 禁止 `/djangoai/...`
+- 禁止 `/doc/...`
+- 禁止自行拼接 base URL
+- 禁止在 middleware 中用字串替換 response 內容來補 prefix
+- 任何 prefix 補齊都必須在 URL / template 生成階段完成，不能事後改 response body
 
-### ?萄? 3嚗???API URL ?芾蝬? `apiurl()`
-- HTML / JS / Template ?臭????亙嚗apiurl(path)`
-- `apiurl()` 敹?靘 `apiurl_factory`
+### 鐵則 3：所有 API URL 只能經過 `apiurl()`
+- HTML / JS / Template 唯一合法入口：`apiurl(path)`
+- `apiurl()` 必須來自 `apiurl_factory`
 
-## 銝piurl_factory 閬?嚗銝?嚗?
-### 撘瑕閬?
-- JS ?芾霈??`document.body.dataset.baseUrl`
-- 蝳迫摮?嚗?  - `window.__FORCE_SCRIPT_NAME__`
+### 鐵則 4：靜態資源 prefix 由模板標籤控制
+- `FORCE_SCRIPT_NAME` 決定 Django 的 `script_name` / 反代基底
+- 靜態資源是否輸出 prefix 由 `PROXY_PREFIX_WRITE_SCRIPT_NAME` 控制
+- `PROXY_PREFIX_WRITE_SCRIPT_NAME=0` 時，靜態資源輸出不得再次加 prefix
+- 靜態資源一律透過自訂模板標籤 `custom_static` 產生，不得直接硬寫 `staticfiles`
+- 禁止直接把 IIS 靜態連結指向 `staticfiles` 來取代 Django static 流程
+
+## 三、apiurl_factory 規範（唯一真相）
+
+### 強制規則
+- JS 只能讀取 `document.body.dataset.baseUrl`
+- 禁止存取：
+  - `window.__FORCE_SCRIPT_NAME__`
   - `window.__PROXY_PREFIX__`
-  - 隞颱? ENV prefix
-  - 隞颱?蝖砍神 `/djangoai`
+  - 任何 ENV prefix
+  - 任何硬寫 `/djangoai`
 
-### Template 敹?瘜典
+### Template 必須注入
 ```html
 <body data-base-url="{{ request.script_name }}">
 ```
 
-### ?臭??迂????頛?```js
+### 唯一允許的組合邏輯
+```js
 function apiurl(path) {
   const base = document.body.dataset.baseUrl || "";
   if (!path.startsWith("/")) path = "/" + path;
@@ -65,87 +225,106 @@ function apiurl(path) {
 }
 ```
 
-## ??蝡?Static 鞈?閬?嚗撥?塚?
-- HTML ?抒?甇?`<style>`
-- HTML ?抒?甇Ｗ之??`<script>`
-- CSS / JS 銝敺 `static/`
-- ?芸?閮勗???inline 閮剖?瘜典嚗10 銵?摩嚗?
-### Static 蝯?嚗撥?塚?
+## 四、前端 Static 資源規範（強制）
+- HTML 內禁止 `<style>`
+- HTML 內禁止大量 `<script>`
+- CSS / JS 一律放 `static/`
+- 只允許少量 inline 設定注入（≤10 行、無邏輯）
+
+### Static 結構（強制）
 ```
 webapps/<node>/static/<node>/
   css/<page>.css
   js/<page>.js
 ```
 
-### HTML 璅?撖急?
+### HTML 標準寫法
 ```django
-{% load static %}
-<link rel="stylesheet" href="{% static '<node>/css/<page>.css' %}">
-<script defer src="{% static '<node>/js/<page>.js' %}"></script>
+{% load custom_tags %}
+<link rel="stylesheet" href="{% custom_static '<node>/css/<page>.css' %}">
+<script defer src="{% custom_static '<node>/js/<page>.js' %}"></script>
 ```
 
-- ???皞??鋡?`collectstatic` ?園?
+- 所有資源必須可被 `collectstatic` 收集
+- 靜態資源的實際 URL 必須與 `PROXY_PREFIX_WRITE_SCRIPT_NAME` 相容，不能因本機 8090 直連而多疊 prefix
 
-## 鈭B_FACTORY 閬?嚗撥?塚?
-- 蝳迫?芾?撱箇? DB ???
-- 蝳迫雿輻?? db_factory
-- 銝敺蝙??`webapps/database/db_factory.py`
-- ??閮梧?`db_query_one` / `db_query_all` / `db_execute`
+## 五、DB_FACTORY 規範（強制）
+- 禁止自行建立 DB 連線
+- 禁止使用舊版 db_factory
+- 一律使用 `webapps/database/db_factory.py`
+- 僅允許：`db_query_one` / `db_query_all` / `db_execute`
 
-## ?准LM_FACTORY 閬?嚗撥?塚?
-- 蝳迫?湔 new OpenAI / Ollama
-- 銝敺蝙??`get_chat_model()`
-- 璅∪????芾??ENV ?批
+## 六、LLM_FACTORY 規範（強制）
+- 禁止直接 new OpenAI / Ollama
+- 一律使用 `get_chat_model()`
+- 模型切換只能由 ENV 控制
 
-## 銝ettings / ENV 閬?
-- ??憓?瑕?賢 `settings.py`
-- ?芋蝯?敺銵??proxy / env / login 銵
+## 七、Settings / ENV 規範
+- 所有環境判斷只能在 `settings.py`
+- 各模組不得自行判斷 proxy / env / login 行為
+- `.env` 必須區分開發與發佈設定，且不得把本機直連 8090 與 IIS 反代部署混用成同一組靜態 prefix 行為
+- `PROXY_PREFIX`、`FORCE_SCRIPT_NAME`、`PROXY_PREFIX_WRITE_SCRIPT_NAME` 必須成對維護，不得分散在其他模組手動補字串
+- IIS rewrite 導向 8090 時，後端不得再把 prefix 疊加第二次；本機直連與正式反代必須使用不同的 ENV 配置
 
-### 敹? ENV嚗內靘?
+### 必備 ENV（示例）
 ```
 NO_PROXY=127.0.0.1,localhost,::1,.mpc.mil.tw
 FORCE_SCRIPT_NAME=
 PROXY_PREFIX=
+PROXY_PREFIX_WRITE_SCRIPT_NAME=0
 DEV_LOGIN_USER=
 DEV_LOGIN_NAME=
 ```
 
-## ?怒O_PROXY 閬?嚗撥?塚?
-敹??嚗?- localhost / 127.0.0.1 / ::1
-- ?抒雯蝬脣?撠曄Ⅳ
+## 八、NO_PROXY 規範（強制）
+必須包含：
+- localhost / 127.0.0.1 / ::1
+- 內網網域尾碼
 - DB / Ollama / RAG host
 
-## 銋CL / require_node 閬?嚗撥?塚?
-- ????ｇ?`@require_node`
-- ???API嚗@require_node(api=True)`
-- ACL ?斗?葉蝞∠?嚗?甇Ｗ???祕雿?
-## ?EV Login 閬?
-- 甇???啣?嚗靽∩遙 IIS RemoteUser
-- DEBUG嚗?閮?`DEV_LOGIN_USER`
-- DEV fallback ?芾摮??middleware / utils_login
+## 九、ACL / require_node 規範（強制）
+- 所有頁面：`@require_node`
+- 所有 API：`@require_node(api=True)`
+- ACL 判斷集中管理，禁止分散實作
 
-## ???楊蝣潸?蝭?撘瑕嚗?- ?典?獢?敺?UTF-8嚗???BOM嚗?- 蝳迫 Big5 / CP950 / GB 蝟餃?
-- 銝???service / view 撅日脰?隞颱?鈭活 encode/decode
+## 十、DEV Login 規範
+- 正式環境：只信任 IIS RemoteUser
+- DEBUG：允許 `DEV_LOGIN_USER`
+- DEV fallback 只能存在於 middleware / utils_login
 
-### Sybase 銝剜???
-- 銝剜?甈? SQL 敹?雿輻 `CONVERT(VARBINARY)`
-- 鈭Ⅳ???芾?滲靽格迤 DB_FACTORY / Driver / DSN
+## 十一、編碼規範（強制）
+- 全專案一律 UTF-8（不含 BOM）
+- 禁止 Big5 / CP950 / GB 系列
+- 不得在 service / view 層進行任何二次 encode/decode
 
-## ???QL ?葉??嚗OC嚗?- ???SELECT SQL ?葉??service
-- View / 摮芋蝯?敺??SQL
-- ?澆蝡臬?澆 service method
+### Sybase 中文處理
+- 中文欄位 SQL 必須使用 `CONVERT(VARBINARY)`
+- 亂碼問題只能回溯修正 DB_FACTORY / Driver / DSN
 
-## ???B / Mock 閬?
-- `ENV=EXT`嚗??典???DB嚗??mock JSON
-- `ENV=INT`嚗?敺蝙?典祕擃?DB
-- 銝??芾??? mock 銵
-- ENV閮剖?隢?憭雯撌桃嚗??潛頂蝯曹葉?脰?ENV??蒂??皛輯雲?批?蝬脤?瘙?
+## 十二、SQL 集中原則（DOC）
+- 所有 SELECT SQL 集中於 service
+- View / 子模組不得散落 SQL
+- 呼叫端只呼叫 service method
+
+## 十三、DB / Mock 規範
+- `ENV=EXT`：停用外部 DB，改用 mock JSON
+- `ENV=INT`：一律使用實體 DB
+- 不得自行切換 mock 行為
+- ENV設定請避免內外網差異，請於系統中進行ENV區隔並同時滿足內外網需求
+
 ## Mandatory Startup Rule
-- 瘥活?脣?砍?獢??啣?閰???session嚗???霈??`/.codex/rules.md`嚗????嗡?撌乩???- 瘥活?脣?砍?獢??啣?閰???session嚗霈摰?`/.codex/rules.md` 敺?敹?????`H:\AI\openclaw-workspace\LONG_TERM_MEMORY.md` ??啣摰對?????嗡?撌乩???- 瘥活?脣?砍?獢??啣?閰???session嚗?????敹?????`H:\AI\openclaw-workspace` 銝剜??唬?蝑漱?亥?????靘?嚗AI_TOOLS_鈭斗?勗?_YYYY-MM-DD.md`嚗?嚗?舀蝥??潦?
+- 每次進入本專案（新對話/新 session）必須先讀取 `/.codex/rules.md`，再開始其他工作。
+- 每次進入本專案（新對話/新 session）在讀完 `/.codex/rules.md` 後，必須再讀取 `H:\AI\openclaw-workspace\LONG_TERM_MEMORY.md` 最新內容，才可開始其他工作。
+- 每次進入本專案（新對話/新 session）在開始開發前，必須再讀取 `H:\AI\openclaw-workspace` 中最新一筆「交接記錄檔」（例如：`AI_TOOLS_交接報告_YYYY-MM-DD.md`）後，方可接續開發。
+
 ## UTF-8 / BOM Rule
-- 撠?????撘Ⅳ瑼?銝敺蝙??UTF-8嚗 BOM嚗?- ??Windows PowerShell 5.1嚗?蝙??`Set-Content -Encoding UTF8`嚗?撖怠 BOM嚗?- 隢?剁?
+- 專案文字與程式碼檔案一律使用 UTF-8（無 BOM）。
+- 在 Windows PowerShell 5.1，避免使用 `Set-Content -Encoding UTF8`（會寫入 BOM）。
+- 請改用：
   `[System.IO.File]::WriteAllText(path, text, (New-Object System.Text.UTF8Encoding($false)))`
-- ??PowerShell 7 ?臭蝙??`-Encoding utf8NoBOM`??- VS Code ?身蝺函Ⅳ隢蝙??`UTF-8`嚗?閬蝙??`UTF-8 with BOM`??
+- 在 PowerShell 7 可使用 `-Encoding utf8NoBOM`。
+- VS Code 預設編碼請使用 `UTF-8`，不要使用 `UTF-8 with BOM`。
+
 ## ENV DB Mode Rule (Mandatory)
 - ENV=EXT: MUST NOT connect to physical DB. MUST always use MOCK DATA.
 - ENV=INT: MUST always connect to physical DB. MUST NOT use MOCK DATA.
@@ -159,10 +338,4 @@ DEV_LOGIN_NAME=
   - `[System.IO.File]::WriteAllText(path, text, (New-Object System.Text.UTF8Encoding($false)))`
   - In PowerShell 7+, prefer `-Encoding utf8NoBOM`.
 - VS Code default encoding must be UTF-8 (without BOM).
-
-## Git Commit Rule (Mandatory)
-- 瘥活摰??靽格迤敺?敹?蝡?瑁?銝甈?`git commit`??- Commit 閮?皜??膩?祆活靽格迤??嚗?蝙?函征瘜??胯?
-## Static Build Rule (Mandatory)
-- Every time .css or .js files are modified, you MUST run:
-  - python manage.py collectstatic --noinput
-- This command is required before finishing the task and before commit.
+```

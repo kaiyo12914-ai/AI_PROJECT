@@ -12,14 +12,13 @@ import sys
 from dotenv import load_dotenv
 
 # Tesseract
-os.environ.setdefault("TESSDATA_PREFIX", r"C:\Program Files\Tesseract-OCR\tessdata")
+os.environ.setdefault("TESSDATA_PREFIX", r"C:\Program Files\Tesseract-OCR")
 
 # ============================================================
 # Base
 # ============================================================
 BASE_DIR_RESOLVED = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR_RESOLVED / ".env")
-
 
 def _load_db_factory_md_into_environ(base_dir: Path) -> None:
     """
@@ -69,35 +68,8 @@ _load_db_factory_md_into_environ(BASE_DIR_RESOLVED)
 # ============================================================
 # ENV helpers
 # ============================================================
-_ENV_ALIASES = {
-    "DEV": "DEV_EXT",
-    "EXT": "DEV_EXT",
-    "INT": "DEV_INT",
-    "PROD": "PROD_EXT",
-}
-
-
-def _normalize_env_name(raw: str) -> str:
-    return _ENV_ALIASES.get((raw or "").strip().upper(), (raw or "").strip().upper())
-
-
-def _env_candidates(name: str) -> list[str]:
-    env_name = _normalize_env_name(os.getenv("ENV") or "DEV_EXT")
-    keys = [f"{name}__{env_name}"]
-    keys.append(name)
-    return keys
-
-
-def _env_lookup(name: str) -> str | None:
-    for key in _env_candidates(name):
-        if key in os.environ:
-            return os.environ.get(key)
-    return None
-
-
 def env_bool(name: str, default: bool = False) -> bool:
-    raw = _env_lookup(name)
-    v = (raw or "").strip().lower()
+    v = (os.getenv(name) or "").strip().lower()
     if v == "":
         return default
     return v in ("1", "true", "yes", "y", "on")
@@ -109,7 +81,7 @@ ORACLE_EMP_ENABLED = env_bool("ORACLE_EMP_ENABLED", False)
 
 def env_int(key: str, default: int) -> int:
     try:
-        return int((_env_lookup(key) or "").strip() or default)
+        return int((os.getenv(key) or "").strip() or default)
     except Exception:
         return default
 
@@ -120,7 +92,7 @@ def env_str(key: str, default: str = "") -> str:
     - 沒設（None） → 用 default
     - 有設但為空字串 → 視為「刻意設空」，不要回退 default
     """
-    v = _env_lookup(key)
+    v = os.getenv(key)
     if v is None:
         v = default
     return (v or "").strip()
@@ -157,32 +129,20 @@ def _norm_prefix(p: str) -> str:
 # ============================================================
 # ✅ NO_PROXY（強制保護：避免 requests/httpx 走公司代理打內網爆炸）
 # ============================================================
+_DEFAULT_NO_PROXY = "127.0.0.1,localhost,::1,.mpc.mil.tw,mpcai.mpc.mil.tw"
+_no_proxy_env = os.getenv("NO_PROXY")
+if _no_proxy_env is None or not _no_proxy_env.strip():
+    os.environ["NO_PROXY"] = _DEFAULT_NO_PROXY
+    os.environ["no_proxy"] = _DEFAULT_NO_PROXY
+else:
+    os.environ["NO_PROXY"] = _no_proxy_env
+    os.environ["no_proxy"] = _no_proxy_env
+
 
 # ============================================================
 # Security / Debug
 # ============================================================
-_raw_env_name = env_str("ENV", "DEV_EXT").strip().upper()
-ENV_NAME = _normalize_env_name(_raw_env_name)
-ENV_IS_DEV = ENV_NAME in ("DEV_INT", "DEV_EXT")
-ENV_IS_INT = ENV_NAME in ("DEV_INT", "PROD_INT")
-ENV_IS_EXT = ENV_NAME in ("DEV_EXT", "PROD_EXT")
-ENV_IS_PROD = ENV_NAME in ("PROD_INT", "PROD_EXT", "STAGE", "UAT")
-
-# NO_PROXY policy:
-# - PROD_INT / DEV_INT: apply NO_PROXY
-# - PROD_EXT / DEV_EXT: do not apply NO_PROXY
-_DEFAULT_NO_PROXY = "127.0.0.1,localhost,::1,.mpc.mil.tw,mpcai.mpc.mil.tw"
-if ENV_IS_INT:
-    _no_proxy_env = _env_lookup("NO_PROXY")
-    if _no_proxy_env is None or not _no_proxy_env.strip():
-        os.environ["NO_PROXY"] = _DEFAULT_NO_PROXY
-        os.environ["no_proxy"] = _DEFAULT_NO_PROXY
-    else:
-        os.environ["NO_PROXY"] = _no_proxy_env
-        os.environ["no_proxy"] = _no_proxy_env
-else:
-    os.environ.pop("NO_PROXY", None)
-    os.environ.pop("no_proxy", None)
+ENV_NAME = env_str("ENV", "EXT").strip().upper()
 
 SECRET_KEY = env_str(
     "DJANGO_SECRET_KEY",
@@ -190,9 +150,8 @@ SECRET_KEY = env_str(
 )
 
 # ✅ 資安加固：正式環境強制關閉 DEBUG
-DEBUG = env_bool("DJANGO_DEBUG", default=ENV_IS_DEV)
+DEBUG = env_bool("DJANGO_DEBUG", default=False) if ENV_NAME in ("INT", "EXT", "PROD") else env_bool("DJANGO_DEBUG", default=True)
 IS_RUNSERVER = any(str(arg).startswith("runserver") for arg in sys.argv[1:])
-SERVE_STATIC_WITH_DJANGO = env_bool("SERVE_STATIC_WITH_DJANGO", default=True)
 
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "mpcai.mpc.mil.tw,10.29.136.17,127.0.0.1,localhost")
 
@@ -203,8 +162,8 @@ X_FRAME_OPTIONS = "DENY"
 SECURE_HSTS_SECONDS = 31536000  # 1 year
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
-SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", default=ENV_IS_PROD)
-CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", default=ENV_IS_PROD)
+SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", True)
+CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", True)
 SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = True
 
@@ -213,8 +172,13 @@ CSRF_COOKIE_HTTPONLY = True
 # ============================================================
 
 # 根據環境決定基礎磁碟 (H:\AI\AI_TOOLS 或 D:\AI\AI_TOOLS)
-_TARGET_DRIVE = "H:" if ENV_IS_EXT else "D:"
-_PROJECT_ROOT_STR = f"{_TARGET_DRIVE}\\AI\\AI_TOOLS"
+_TARGET_DRIVE = "H:" if ENV_NAME == "EXT" else "D:"
+
+# 獲取當前文件的絕對路徑
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# 獲取專案根目錄的絕對路徑
+_PROJECT_ROOT_STR = os.path.abspath(os.path.join(current_dir, '..'))
 # 強制修正 BASE_DIR 以驅動器代號開始，避免 UNC 路徑導致 staticfiles.W004 警告
 BASE_DIR = Path(_PROJECT_ROOT_STR)
 
@@ -223,16 +187,16 @@ BASE_DIR = Path(_PROJECT_ROOT_STR)
 # ============================================================
 # - PROXY_PREFIX：對外入口前綴（例如 /djangoai）
 # - FORCE_SCRIPT_NAME：只影響 reverse() / {% url %}（專案規範：反代模式通常設空字串）
-ENV_IS_PUBLIC = ENV_IS_INT or ENV_IS_EXT or ENV_NAME in ("STAGE", "UAT")
+ENV_IS_PUBLIC = ENV_NAME in ("INT", "EXT", "PROD", "STAGE", "UAT")
 _DEFAULT_PROXY_PREFIX = "/djangoai" if ENV_IS_PUBLIC else ""
 
-_raw_proxy_prefix = _env_lookup("PROXY_PREFIX")
+_raw_proxy_prefix = os.getenv("PROXY_PREFIX")
 if _raw_proxy_prefix is None:
     PROXY_PREFIX = _norm_prefix(_DEFAULT_PROXY_PREFIX)
 else:
     PROXY_PREFIX = _norm_prefix(_raw_proxy_prefix)
 
-_raw_force_script_name = _env_lookup("FORCE_SCRIPT_NAME")
+_raw_force_script_name = os.getenv("FORCE_SCRIPT_NAME")
 if _raw_force_script_name is None:
     FORCE_SCRIPT_NAME = _norm_prefix(PROXY_PREFIX)
 else:
@@ -326,9 +290,11 @@ def _resolve_acl_backend(model_type: str, backend: str) -> str:
 ACL_BACKEND_EFFECTIVE = _resolve_acl_backend(MODEL_TYPE, PORTAL_ACL_BACKEND)
 
 PORTAL_ACL = {
-    "portal": ["PUBLIC"],
+    "portal": ["網頁系統管理員"],
     "student": ["PUBLIC"],
     "translator": ["ALL_AUTHENTICATED"],
+    "englishchat": ["ALL_AUTHENTICATED"],
+    "todo": ["ALL_AUTHENTICATED"],
     "comment": [
         "ALL_AUTHENTICATED",
         "人事資訊管理",
@@ -336,9 +302,7 @@ PORTAL_ACL = {
         "中心雲端網頁通用群組",
     ],
     "doc": [
-        "ALL_AUTHENTICATED",
-        "DOC",
-        "服務中心人員群組",
+        "網頁系統管理員"
     ],
     "meetingreply": [
         "ALL_AUTHENTICATED",
@@ -353,7 +317,6 @@ PORTAL_ACL = {
     "pdf": ["ALL_AUTHENTICATED"],
     "pptx": ["ALL_AUTHENTICATED"],
     "tts": ["ALL_AUTHENTICATED"],
-    "todo": ["ALL_AUTHENTICATED"],
     "rag": ["ALL_AUTHENTICATED"],
     "vanna": [
         "DB",
@@ -362,6 +325,8 @@ PORTAL_ACL = {
     ],
     "excelproc": ["計資組業管資料管理"],
     "usage": ["網頁系統管理員"],
+    "projectnotes": ["ALL_AUTHENTICATED"],
+    "formalize": ["ALL_AUTHENTICATED"],
 }
 
 # ============================================================
@@ -399,8 +364,9 @@ SYBASE_INI_PATH = env_str("SYBASE_INI_PATH", "")
 
 # ✅ 修正：STATIC_URL 與 MEDIA_URL 不需要手動加 PROXY_PREFIX，因為 FORCE_SCRIPT_NAME 會處理
 # 且 Middleware 會剝離 PROXY_PREFIX，Django 內部看到的路徑將不含前綴。
-STATIC_URL = "/static/"
-MEDIA_URL = "/media/"
+# STATIC_URL = f"{FORCE_SCRIPT_NAME}/static/"
+STATIC_URL = f"/static/"
+MEDIA_URL = f"/media/"
 
 # 根據環境決定實體路徑
 _DEFAULT_STATIC_ROOT = f"{_PROJECT_ROOT_STR}\\staticfiles"
@@ -441,21 +407,12 @@ DOC_QUERY_TRUST_X_FORWARDED_FOR = env_bool("DOC_QUERY_TRUST_X_FORWARDED_FOR", de
 
 FILE_CHARSET = env_str("FILE_CHARSET", "cp950")
 TEXT2PPTX_MAX_CHARS = env_int("TEXT2PPTX_MAX_CHARS", 20000)
-TEXT2PPTX_SAMPLE_MAX_MB = env_int("TEXT2PPTX_SAMPLE_MAX_MB", 50)
-TEXT2PPTX_TEMPLATE_MAX_MB = env_int("TEXT2PPTX_TEMPLATE_MAX_MB", 50)
 TEXT2PPTX_IMAGE_MODE = env_str("TEXT2PPTX_IMAGE_MODE", "mock")
 TEXT2PPTX_IMAGE_TIMEOUT_SEC = env_int("TEXT2PPTX_IMAGE_TIMEOUT_SEC", 30)
 TEXT2PPTX_IMAGE_RETRY = env_int("TEXT2PPTX_IMAGE_RETRY", 2)
 TEXT2PPTX_IMAGE_DIR = env_str("TEXT2PPTX_IMAGE_DIR", str(MEDIA_ROOT / "generated_images" / "text2pptx"))
 TEXT2PPTX_IMAGE_PROVIDER_CMD = env_str("TEXT2PPTX_IMAGE_PROVIDER_CMD", "")
 TEXT2PPTX_IMAGE_PROVIDER_FALLBACK_CMD = env_str("TEXT2PPTX_IMAGE_PROVIDER_FALLBACK_CMD", "")
-
-# Upload limits (bytes)
-# Keep Django request/file limits >= text2pptx 50MB to avoid framework-level reject first.
-_TEXT2PPTX_UPLOAD_LIMIT_BYTES = TEXT2PPTX_SAMPLE_MAX_MB * 1024 * 1024
-DATA_UPLOAD_MAX_MEMORY_SIZE = env_int("DATA_UPLOAD_MAX_MEMORY_SIZE", _TEXT2PPTX_UPLOAD_LIMIT_BYTES)
-FILE_UPLOAD_MAX_MEMORY_SIZE = env_int("FILE_UPLOAD_MAX_MEMORY_SIZE", _TEXT2PPTX_UPLOAD_LIMIT_BYTES)
-
 TTS_MAX_CHARS = env_int("TTS_MAX_CHARS", 1200)
 TTS_FILE_MAX_MB = env_int("TTS_FILE_MAX_MB", 15)
 
@@ -465,6 +422,7 @@ TTS_FILE_MAX_MB = env_int("TTS_FILE_MAX_MB", 15)
 PORTAL_USAGE_CODE_MAP = [
     ("/", "PORTAL"),
     ("/translator/", "TRANSLATOR"),
+    ("/englishchat/", "ENGLISHCHAT"),
     ("/comment/", "COMMENT"),
     ("/doc/", "DOC"),
     ("/meetingreply/", "MEETINGREPLY"),
@@ -472,9 +430,10 @@ PORTAL_USAGE_CODE_MAP = [
     ("/text2pptx/", "TEXT2PPTX"),
     ("/tts/", "TTS"),
     ("/pdf/", "PDF"),
-    ("/todo/", "TODO"),
     ("/rag/", "RAG"),
     ("/excelproc/", "EXCELPROC"),
+    ("/projectnotes/", "PROJECTNOTES"),
+    ("/formalize/", "FORMALIZE"),
 ]
 
 # ============================================================
@@ -502,15 +461,21 @@ INSTALLED_APPS = [
     "webapps.meetingreply.apps.MeetingreplyConfig",
     "webapps.portal.apps.PortalConfig",
     "webapps.translator.apps.TranslatorConfig",
+    "webapps.englishchat.apps.EnglishchatConfig",
+    "webapps.todo.apps.TodoConfig",
     "webapps.comment.apps.CommentConfig",
     "webapps.student.apps.StudentConfig",
     "webapps.pdf.apps.PdfConfig",
-    "webapps.todo.apps.TodoConfig",
     "webapps.excelproc.apps.ExcelprocConfig",
     "webapps.rag_oracle.apps.RagOracleConfig",
+    "webapps.projectnotes.apps.ProjectnotesConfig",
+    "webapps.document_formalize.apps.DocumentFormalizeConfig",
+    "pgvector.django",
+    "django.contrib.postgres",
 ]
 
 MIDDLEWARE = [
+    #'webapps.common.middleware.StaticPathMiddleware',
     # ✅ proxy prefix（依規範：script_name = 唯一真相）
     "webapps.portal.middleware_proxy_prefix.ForwardedPrefixMiddleware",
 
@@ -552,7 +517,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
-            ],
+            ],            
         },
     },
 ]
@@ -562,12 +527,30 @@ WSGI_APPLICATION = "webproj.wsgi.application"
 # ============================================================
 # Database（Django 本機 auth/設定）
 # ============================================================
+import os
+from urllib.parse import urlparse
+
+DB_URL = os.getenv("DATABASE_URL")
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
     }
 }
+
+if DB_URL:
+    url = urlparse(DB_URL)
+    DATABASES["projectnotes_db"] = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": url.path[1:],
+        "USER": url.username,
+        "PASSWORD": url.password,
+        "HOST": url.hostname,
+        "PORT": url.port or "5432",
+    }
+
+DATABASE_ROUTERS = ["webapps.projectnotes.router.ProjectNotesRouter"]
 
 # ============================================================
 # Password validation
@@ -597,13 +580,13 @@ DEFAULT_COOKIE_PATH = PROXY_PREFIX if PROXY_PREFIX else "/"
 SESSION_COOKIE_PATH = env_str("SESSION_COOKIE_PATH", DEFAULT_COOKIE_PATH)
 CSRF_COOKIE_PATH = env_str("CSRF_COOKIE_PATH", DEFAULT_COOKIE_PATH)
 
-SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", default=ENV_IS_PROD)
-CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", default=ENV_IS_PROD)
+SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", default=False)
+CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", default=False)
 
-_DEFAULT_CSRF_TRUSTED_ORIGINS = (
-    "https://mpcai.mpc.mil.tw" if ENV_IS_PROD else "https://mpcai.mpc.mil.tw,http://mpcai.mpc.mil.tw"
+CSRF_TRUSTED_ORIGINS = env_list(
+    "CSRF_TRUSTED_ORIGINS",
+    "https://mpcai.mpc.mil.tw,http://mpcai.mpc.mil.tw",
 )
-CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS", _DEFAULT_CSRF_TRUSTED_ORIGINS)
 
 # ============================================================
 # Logging

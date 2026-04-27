@@ -5,7 +5,7 @@ def test_chromadb_connection():
     try:
         # 初始化與您系統中相同的配置
         client = chromadb.PersistentClient(
-            path=r"D:\AI\Django\chroma\rag",
+            path=r"d:\AI\AI_TOOLS\chroma\rag",
             settings=Settings(
                 anonymized_telemetry=False,
                 is_persistent=True  # 保持數據持久化

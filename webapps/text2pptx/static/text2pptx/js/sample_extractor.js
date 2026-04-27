@@ -1,7 +1,11 @@
 (function () {
   const STORAGE_KEY = "text2pptx_sample_from_pptx";
+  const TEMPLATE_TEXT_KEY = "text2pptx_template_text";
+  const TEMPLATE_NAME_KEY = "text2pptx_template_filename";
+  const TEMPLATE_PPTX_KEY = "text2pptx_template_pptx_filename";
   let currentTemplateText = "";
   let currentTemplateFilename = "";
+  let currentTemplatePptxFilename = "";
 
   const textarea = document.getElementById("extracted-sample-text");
   const copyBtn = document.getElementById("copy-extracted-sample-btn");
@@ -28,6 +32,64 @@
     : null;
 
   if (!textarea) return;
+
+  function loadStoredTemplateState() {
+    try {
+      return {
+        templateText: localStorage.getItem(TEMPLATE_TEXT_KEY) || "",
+        templateFilename: localStorage.getItem(TEMPLATE_NAME_KEY) || "",
+        templatePptxFilename: localStorage.getItem(TEMPLATE_PPTX_KEY) || "",
+      };
+    } catch (_error) {
+      return {
+        templateText: "",
+        templateFilename: "",
+        templatePptxFilename: "",
+      };
+    }
+  }
+
+  function persistTemplateState() {
+    try {
+      if (currentTemplateText) {
+        localStorage.setItem(TEMPLATE_TEXT_KEY, currentTemplateText);
+        localStorage.setItem(TEMPLATE_NAME_KEY, currentTemplateFilename || "");
+        localStorage.setItem(TEMPLATE_PPTX_KEY, currentTemplatePptxFilename || "");
+      } else {
+        localStorage.removeItem(TEMPLATE_TEXT_KEY);
+        localStorage.removeItem(TEMPLATE_NAME_KEY);
+        localStorage.removeItem(TEMPLATE_PPTX_KEY);
+      }
+    } catch (_error) {
+      // ignore storage errors
+    }
+  }
+
+  function hydrateTemplateStateFromStorage() {
+    const stored = loadStoredTemplateState();
+    currentTemplateText = String(stored.templateText || "").trim();
+    currentTemplateFilename = String(stored.templateFilename || "").trim();
+    currentTemplatePptxFilename = String(stored.templatePptxFilename || "").trim();
+
+    if (importedTemplateFilenameEl) {
+      importedTemplateFilenameEl.textContent = currentTemplateFilename || "";
+    }
+    if (templateImportInfo) {
+      templateImportInfo.hidden = !currentTemplateText;
+    }
+    if (templatePreviewToggleWrap) {
+      templatePreviewToggleWrap.hidden = !currentTemplateText;
+    }
+    if (templatePreviewTextarea) {
+      templatePreviewTextarea.value = currentTemplateText;
+    }
+    if (templatePreviewToggle) {
+      templatePreviewToggle.checked = !!currentTemplateText;
+    }
+    setTemplatePreviewVisible();
+  }
+
+  hydrateTemplateStateFromStorage();
 
   function getText() {
     return (textarea.value || "").trim();
@@ -165,9 +227,10 @@
     document.body.removeChild(a);
   }
 
-  function applyTemplateText(templateText, templateName, successMessage) {
+  function applyTemplateText(templateText, templateName, successMessage, templatePptxFilename) {
     currentTemplateText = String(templateText || "").trim();
     currentTemplateFilename = String(templateName || "").trim();
+    currentTemplatePptxFilename = String(templatePptxFilename || "").trim();
     if (!currentTemplateText) {
       throw new Error("母片模板內容為空");
     }
@@ -187,6 +250,7 @@
     if (templatePreviewTextarea) {
       templatePreviewTextarea.value = currentTemplateText;
     }
+    persistTemplateState();
     setTemplatePreviewVisible();
     showRestoredFeedback(successMessage, false);
   }
@@ -292,7 +356,12 @@
       try {
         const data = await requestExtractTemplate(file);
         const templateName = String(file.name || "").replace(/\.pptx$/i, "") + "_母片模板.txt";
-        applyTemplateText(data.template_text, templateName, data.message || "母片模板抽取成功");
+        applyTemplateText(
+          data.template_text,
+          templateName,
+          data.message || "母片模板抽取成功",
+          data.template_pptx_filename || data.output_filename || ""
+        );
         await downloadFileByUrl(data.download_url, data.output_filename);
       } catch (error) {
         showRestoredFeedback(
@@ -319,7 +388,12 @@
       try {
         const data = await requestExtractTemplate(file);
         const templateName = String(file.name || "").replace(/\.pptx$/i, "") + "_母片模板.txt";
-        applyTemplateText(data.template_text, templateName, data.message || "母片模板抽取成功");
+        applyTemplateText(
+          data.template_text,
+          templateName,
+          data.message || "母片模板抽取成功",
+          data.template_pptx_filename || data.output_filename || ""
+        );
         await downloadFileByUrl(data.download_url, data.output_filename);
       } catch (error) {
         showRestoredFeedback(
@@ -354,13 +428,15 @@
 
       try {
         const templateText = (await readFileAsText(file)).trim();
-        applyTemplateText(templateText, String(file.name || "").trim(), "母片模板匯入成功");
+        applyTemplateText(templateText, String(file.name || "").trim(), "母片模板匯入成功", "");
       } catch (error) {
         currentTemplateText = "";
         currentTemplateFilename = "";
+        currentTemplatePptxFilename = "";
         if (templatePreviewTextarea) {
           templatePreviewTextarea.value = "";
         }
+        persistTemplateState();
         setTemplatePreviewVisible();
         showRestoredFeedback("母片模板匯入失敗：" + (error && error.message ? error.message : "未知錯誤"), true);
       } finally {
@@ -385,6 +461,7 @@
       const payload = {
         extracted_text: extractedText,
         template_text: currentTemplateText,
+        template_pptx_filename: currentTemplatePptxFilename,
         source_filename: getSourceFilename(),
       };
 

@@ -1,0 +1,94 @@
+{% load custom_tags %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>專案內容查詢</title>
+  <link rel="stylesheet" href="{% custom_static 'projectnotes/css/index.css' %}">
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% custom_static 'projectnotes/js/index.js' %}"></script>
+</head>
+<body data-base-url="{{ request.script_name }}">
+  <main class="wrap">
+    <header class="top">
+      <h1>專案內容查詢</h1>
+      <p>Project-scoped RAG 工作台：可控來源、可追溯引用、來源不足即提醒。</p>
+    </header>
+
+    <section class="panel grid2">
+      <section class="left">
+        <div class="card">
+          <h2>專案</h2>
+          <div class="line">
+            <select id="projectSelect"></select>
+            <button id="refreshBtn" type="button">刷新</button>
+          </div>
+          {% if can_manage_projects %}
+          <div class="line">
+            <a class="button-link" href="{% url 'projectnotes:manage' %}">專案與來源維護</a>
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="card">
+          <h2>來源清單</h2>
+          <div class="line">
+            <strong>來源清單（勾選納入對話）</strong>
+          </div>
+          <div id="sourceList" class="source-list"></div>
+        </div>
+
+        <div class="card">
+          <h2>引用詳情</h2>
+          <div id="citationPanel" class="citation-panel">尚未選擇引用。</div>
+        </div>
+      </section>
+
+      <section class="right">
+        <div class="card">
+          <h2>對話</h2>
+          <div class="line">
+            <span id="chatStatus" class="status"></span>
+          </div>
+          <div id="confidencePanel" class="confidence-panel" hidden></div>
+
+          <div class="composer">
+            <textarea id="questionInput" rows="3" placeholder="請輸入問題。回答會使用你勾選且啟用的來源。"></textarea>
+            <button id="askBtn" type="button">送出</button>
+          </div>
+
+          <div class="card section-block">
+            <div class="card llm-card" id="chatLogCard">
+              <h3>對話紀錄（一問一答）</h3>
+              <div id="chatLog" class="chat-log"></div>
+            </div>
+          </div>
+
+          <div class="card section-block">
+            <h3>查詢框</h3>
+            <div class="card llm-card collapsible-card is-collapsed" id="chunkLogCard">
+              <div class="collapsible-header" id="chunkLogHeader">
+                <h3>CHUNK 查詢紀錄</h3>
+                <span class="toggle-icon">▾</span>
+              </div>
+              <div class="collapsible-body">
+                <div id="chunkLogPanel" class="chunk-log-panel">尚無 CHUNK 查詢紀錄。</div>
+              </div>
+            </div>
+            <div class="card llm-card collapsible-card is-collapsed" id="llmPromptCard">
+              <div class="collapsible-header" id="llmPromptHeader">
+                <h3>LLM 提示詞（送入 LLM）</h3>
+                <span class="toggle-icon">▾</span>
+              </div>
+              <div class="collapsible-body">
+                <div id="llmPromptPanel" class="llm-prompt-panel">尚無提示詞快照。</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

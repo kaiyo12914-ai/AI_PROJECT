@@ -235,6 +235,37 @@ def _looks_like_english_only(s: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z0-9\s.,:;!?'\-_/()]+", s))
 
 
+def _local_translate_fallback(text: str, target_lang: str) -> str:
+    """
+    Conservative local fallback when LLM is unavailable.
+    - Only attempts basic EN -> zh-Hant token mapping.
+    - If target is not Traditional Chinese, return original text.
+    """
+    if not _target_is_traditional_chinese(target_lang):
+        return text
+
+    # Keep this map small and conservative to avoid wrong translations.
+    word_map = {
+        "test": "測試",
+        "ok": "好的",
+        "hello": "您好",
+        "thanks": "謝謝",
+        "thank": "感謝",
+        "you": "您",
+        "yes": "是",
+        "no": "否",
+        "please": "請",
+    }
+
+    def repl(m):
+        w = m.group(0)
+        t = word_map.get(w.lower())
+        return t if t else w
+
+    out = re.sub(r"[A-Za-z]+", repl, text)
+    return out
+
+
 # =========================
 # Context path resolver (avoid 500)
 # =========================
@@ -475,27 +506,36 @@ def translate_core(
     prompt = build_translate_prompt(text, source_lang, target_lang)
     messages = build_translate_messages(prompt)
 
-    llm = get_chat_model(temperature=temperature, timeout=timeout)
-    out = llm.invoke(messages)
-    translated = _to_text(out).strip()
+    try:
+        llm = get_chat_model(temperature=temperature, timeout=timeout)
+        out = llm.invoke(messages)
+        translated = _to_text(out).strip()
 
-    # 防呆：目標繁中時，若模型原樣回傳英文，做一次強制翻譯重試
-    if (
-        _target_is_traditional_chinese(target_lang)
-        and translated
-        and translated.strip() == text.strip()
-        and _looks_like_english_only(text)
-        and not _has_cjk(translated)
-    ):
-        retry_prompt = (
-            "請將下列內容翻譯成繁體中文。"
-            "只輸出譯文，不可輸出英文原文，不可加註解。\n\n"
-            f"原文：{text}"
-        )
-        retry_messages = build_translate_messages(retry_prompt)
-        retry_out = llm.invoke(retry_messages)
-        retry_translated = _to_text(retry_out).strip()
-        if retry_translated:
-            translated = retry_translated
+        # 防呆：目標繁中時，若模型原樣回傳英文，做一次強制翻譯重試
+        if (
+            _target_is_traditional_chinese(target_lang)
+            and translated
+            and translated.strip() == text.strip()
+            and _looks_like_english_only(text)
+            and not _has_cjk(translated)
+        ):
+            retry_prompt = (
+                "請將下列內容翻譯成繁體中文。"
+                "只輸出譯文，不可輸出英文原文，不可加註解。\n\n"
+                f"原文：{text}"
+            )
+            retry_messages = build_translate_messages(retry_prompt)
+            retry_out = llm.invoke(retry_messages)
+            retry_translated = _to_text(retry_out).strip()
+            if retry_translated:
+                translated = retry_translated
 
-    return {"translated": translated, "backend": "auto_llm"}
+        return {"translated": translated, "backend": "auto_llm", "fallback": False}
+    except Exception as e:
+        translated = _local_translate_fallback(text, target_lang)
+        return {
+            "translated": translated,
+            "backend": "local_rule_fallback",
+            "fallback": True,
+            "llmError": str(e)[:300],
+        }

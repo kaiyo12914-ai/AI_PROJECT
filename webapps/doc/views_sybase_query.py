@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import datetime as dt
 import hashlib
 import io
 import ipaddress
@@ -112,6 +113,8 @@ DOC_CATEGORY_ALL = "all"
 DOC_CATEGORY_DRAFT_DOCS = "draft_docs"
 DOC_CATEGORY_DRAFT_ATTACHMENTS = "draft_attachments"
 DOC_CATEGORY_INCOMING_ALL = "incoming_all"
+QUERY_LIMIT_MAX = 5000
+QUERY_LIMIT_DEFAULT = 3000
 DOC_CATEGORY_ALLOWED = {
     DOC_CATEGORY_ALL,
     DOC_CATEGORY_DRAFT_DOCS,
@@ -399,6 +402,60 @@ def _make_df_attach_key(df_path: str) -> str:
     return f"DF:{_b64url_encode(df_path or '')}"
 
 
+def _build_incoming_attach_index(incoming_attachments: Sequence[Dict[str, Any]]) -> Tuple[Dict[str, Dict[str, str]], Dict[str, str]]:
+    by_grsno_name: Dict[str, Dict[str, str]] = {}
+    only_one: Dict[str, str] = {}
+    count_by_grsno: Dict[str, int] = {}
+    for it in incoming_attachments or []:
+        g = (str(it.get("grsno") or "")).strip()
+        k = (str(it.get("attach_key") or "")).strip()
+        n = _norm_filename(str(it.get("filename") or ""))
+        if not g or not k:
+            continue
+        if g not in by_grsno_name:
+            by_grsno_name[g] = {}
+        if n and n not in by_grsno_name[g]:
+            by_grsno_name[g][n] = k
+        count_by_grsno[g] = count_by_grsno.get(g, 0) + 1
+        if count_by_grsno[g] == 1:
+            only_one[g] = k
+        elif g in only_one:
+            del only_one[g]
+    return by_grsno_name, only_one
+
+
+def _prefer_incoming_attach_key(
+    *,
+    grsno: str,
+    filename: str,
+    subject: str,
+    td_path: str,
+    has_blob: bool,
+    current_attach_key: str,
+    incoming_by_name: Dict[str, Dict[str, str]],
+    incoming_only_one: Dict[str, str],
+) -> str:
+    if has_blob:
+        return current_attach_key
+    g = (grsno or "").strip()
+    if not g:
+        return current_attach_key
+    names = []
+    for raw in (filename, subject, os.path.basename((td_path or "").replace("\\", "/"))):
+        n = _norm_filename(raw)
+        if n and n not in names:
+            names.append(n)
+    name_map = incoming_by_name.get(g, {})
+    for n in names:
+        k = (name_map.get(n) or "").strip()
+        if k:
+            return k
+    one = (incoming_only_one.get(g) or "").strip()
+    if one:
+        return one
+    return current_attach_key if has_blob else ""
+
+
 def _limit_rows_by_grsno(rows: Sequence[Any], limit_docs: int, is_trst: bool = False) -> List[Any]:
     if not rows:
         return []
@@ -446,6 +503,102 @@ def _parse_attach_key(attach_key: str) -> Tuple[str, str, str]:
     if s.startswith("DF:"):
         return "DF", s[3:].strip(), ""
     return "", "", ""
+
+
+def _fetch_ef_blob_by_ref(svc: docService, ref: str) -> Tuple[str, bytes]:
+    token = (ref or "").strip()
+    if not token:
+        return "", b""
+    ef_id = token
+    ef_page = ""
+    if "@" in token:
+        left, right = token.rsplit("@", 1)
+        if re.fullmatch(r"\d{1,6}", (right or "").strip()):
+            ef_id = (left or "").strip()
+            ef_page = (right or "").strip()
+    rows = svc.list_files_by_ef_id(ef_id, ef_page if ef_page else None)
+    if not rows and ef_page:
+        rows = svc.list_files_by_ef_id(ef_id, None)
+    if not rows:
+        return "", b""
+    row = rows[0]
+    filename = (_coerce_text(row[0] if len(row) > 0 else "") or "attachment.bin").strip() or "attachment.bin"
+    data = _bytes_from_blob(row[1] if len(row) > 1 else None)
+    if not data:
+        return "", b""
+    return filename, data
+
+
+def _extract_digits_token(s: str, min_len: int = 6) -> List[str]:
+    out: List[str] = []
+    seen = set()
+    for m in re.findall(r"\d{%d,}" % int(min_len), (s or "")):
+        t = (m or "").strip()
+        if not t or t in seen:
+            continue
+        seen.add(t)
+        out.append(t)
+    return out
+
+
+def _fetch_ef_blob_by_td_path_fallback(svc: docService, td_path: str) -> Tuple[str, bytes]:
+    p = (td_path or "").strip()
+    if not p:
+        return "", b""
+
+    path_norm = p.replace("\\", "/")
+    base_name = os.path.basename(path_norm).strip()
+    base_norm = _norm_filename(base_name)
+
+    grsno_candidates = []
+    g = _extract_grsno_from_df_path(p)
+    if g:
+        grsno_candidates.append(g)
+    for tok in _extract_digits_token(p, 6):
+        if tok not in grsno_candidates:
+            grsno_candidates.append(tok)
+
+    seen_ef = set()
+
+    def _try_ref(ef_id: str, ef_page: str = "") -> Tuple[str, bytes]:
+        key = f"{(ef_id or '').strip()}@{(ef_page or '').strip()}"
+        if not ef_id or key in seen_ef:
+            return "", b""
+        seen_ef.add(key)
+        return _fetch_ef_blob_by_ref(svc, f"{ef_id}@{ef_page}" if ef_page else ef_id)
+
+    # 1) direct token hit from TD_PATH (some paths carry EF_ID / EF_ID@PAGE)
+    token_match = re.search(r"([A-Za-z0-9_\-]{4,})(?:@(\d{1,6}))?$", path_norm)
+    if token_match:
+        name, data = _try_ref((token_match.group(1) or "").strip(), (token_match.group(2) or "").strip())
+        if name and data:
+            return name, data
+
+    # 2) query incoming rows by possible GRSNO and match EF_ID/filename against TD_PATH.
+    for cg in grsno_candidates:
+        try:
+            rows = svc.search_incoming_advanced(grsno=cg, subject="", psids=None, limit=500)
+        except Exception:
+            rows = []
+        for r in rows or []:
+            ef_id = (_coerce_text(r[3] if len(r) > 3 else "") or "").strip()
+            ef_name = (_coerce_text(r[4] if len(r) > 4 else "") or "").strip()
+            ef_page = (_coerce_text(r[5] if len(r) > 5 else "") or "").strip()
+            if not ef_id:
+                continue
+            ef_name_norm = _norm_filename(ef_name)
+            hit = False
+            if ef_id and ef_id in p:
+                hit = True
+            if not hit and base_norm and ef_name_norm and (base_norm == ef_name_norm or base_norm in ef_name_norm or ef_name_norm in base_norm):
+                hit = True
+            if not hit:
+                continue
+            name, data = _try_ref(ef_id, ef_page)
+            if name and data:
+                return name, data
+
+    return "", b""
 
 
 def _parse_ip_token(raw: str) -> str:
@@ -628,9 +781,8 @@ def _deny_if_ip_not_allowed(request: HttpRequest, *, api: bool):
 
 
 def _is_authorized_query_ip(request: HttpRequest) -> bool:
-    ip = _get_client_ip_for_policy(request)
-    allow_list = list(getattr(settings, "DOC_QUERY_ALLOWED_IPS", []) or [])
-    return _ip_in_allow_list(ip, allow_list)
+    # IP allow-list restriction disabled by requirement.
+    return True
 
 
 def _deny_if_user_not_allowed(request: HttpRequest, *, api: bool):
@@ -646,13 +798,14 @@ def _deny_if_user_not_allowed(request: HttpRequest, *, api: bool):
     return HttpResponseForbidden("Forbidden: user not allowed")
 
 
-def _parse_search_args(request: HttpRequest) -> Tuple[str, str, str, int, str, Optional[int], str]:
+def _parse_search_args(request: HttpRequest) -> Tuple[str, str, str, int, str, str, str, str]:
     grsno = (_safe_str(request.GET.get("grsno")) or "").strip()
     subject = (_safe_str(request.GET.get("subject")) or "").strip()
     handler_name = (_safe_str(request.GET.get("handler_name")) or "").strip()
     limit_raw = (_safe_str(request.GET.get("limit")) or "").strip()
     plant_raw = (_safe_str(request.GET.get("plant")) or "").strip()
-    days_ago_raw = (_safe_str(request.GET.get("days_ago")) or "").strip()
+    start_date_raw = (_safe_str(request.GET.get("start_date")) or "").strip()
+    end_date_raw = (_safe_str(request.GET.get("end_date")) or "").strip()
     doc_category = (_safe_str(request.GET.get("doc_category")) or "").strip().lower()
 
     if request.method == "POST":
@@ -671,35 +824,56 @@ def _parse_search_args(request: HttpRequest) -> Tuple[str, str, str, int, str, O
             limit_raw = (_safe_str(body.get("limit")) or "").strip()
         if not plant_raw:
             plant_raw = (_safe_str(body.get("plant")) or "").strip()
-        if not days_ago_raw:
-            days_ago_val = body.get("days_ago")
-            if days_ago_val is not None:
-                days_ago_raw = str(days_ago_val).strip()
+        if not start_date_raw:
+            start_date_raw = (_safe_str(body.get("start_date")) or "").strip()
+        if not end_date_raw:
+            end_date_raw = (_safe_str(body.get("end_date")) or "").strip()
         if not doc_category:
             doc_category = (_safe_str(body.get("doc_category")) or "").strip().lower()
 
     try:
-        limit = int(limit_raw or "50")
+        limit = int(limit_raw or str(QUERY_LIMIT_DEFAULT))
     except Exception:
-        limit = 50
+        limit = QUERY_LIMIT_DEFAULT
     if limit <= 0:
-        limit = 50
-    if limit > 500:
-        limit = 500
+        limit = QUERY_LIMIT_DEFAULT
+    if limit > QUERY_LIMIT_MAX:
+        limit = QUERY_LIMIT_MAX
 
-    days_ago = None
-    if days_ago_raw:
+    start_date = ""
+    end_date = ""
+    try:
+        if start_date_raw:
+            start_date = dt.date.fromisoformat(start_date_raw).isoformat()
+    except Exception:
+        start_date = ""
+    try:
+        if end_date_raw:
+            end_date = dt.date.fromisoformat(end_date_raw).isoformat()
+    except Exception:
+        end_date = ""
+    if start_date and end_date and start_date > end_date:
+        start_date, end_date = end_date, start_date
+    if start_date and end_date:
         try:
-            da = int(days_ago_raw)
-            if da > 0:
-                days_ago = da
+            start_obj = dt.date.fromisoformat(start_date)
+            end_obj = dt.date.fromisoformat(end_date)
+            total_days = (end_obj - start_obj).days + 1
+            if total_days < 1:
+                total_days = 1
+            auto_limit = total_days * 100
+            if auto_limit > QUERY_LIMIT_MAX:
+                auto_limit = QUERY_LIMIT_MAX
+            if auto_limit < 100:
+                auto_limit = 100
+            limit = auto_limit
         except Exception:
             pass
 
     plant = normalize_doc_plant(plant_raw, default="MPC") if plant_raw else "MPC"
     if doc_category not in DOC_CATEGORY_ALLOWED:
         doc_category = DOC_CATEGORY_ALL
-    return grsno, subject, handler_name, limit, plant, days_ago, doc_category
+    return grsno, subject, handler_name, limit, plant, start_date, end_date, doc_category
 
 
 def _read_plant_arg(request: HttpRequest) -> str:
@@ -786,12 +960,27 @@ def _fetch_blob_by_attach_key(svc: docService, attach_key: str) -> Tuple[str, by
     df_path = _b64url_decode(val) or val
     if not df_path:
         return "", b""
+    # Some TRST attachment rows use TD_PATH to reference incoming EF_ID
+    # (e.g. 來文(檔案)); try EF lookup when key is explicitly EF-shaped.
+    if df_path.startswith("EF:"):
+        return _fetch_ef_blob_by_ref(svc, df_path[3:])
     row = svc.get_file_by_df_path(df_path)
     if not row:
-        return "", b""
+        # Fallback: TD_PATH may store EF_ID/EF_ID@PAGE rather than DF_PATH.
+        name, data = _fetch_ef_blob_by_ref(svc, df_path)
+        if name and data:
+            return name, data
+        return _fetch_ef_blob_by_td_path_fallback(svc, df_path)
     raw_name = (_coerce_text(row[0]) or "").strip()
     data = _bytes_from_blob(row[1] if len(row) > 1 else None)
     if not data:
+        # Fallback: DF row exists but blob is empty; retry through EF reference.
+        ef_name, ef_data = _fetch_ef_blob_by_ref(svc, df_path)
+        if ef_name and ef_data:
+            return ef_name, ef_data
+        ef_name2, ef_data2 = _fetch_ef_blob_by_td_path_fallback(svc, df_path)
+        if ef_name2 and ef_data2:
+            return ef_name2, ef_data2
         return "", b""
 
     filename = _sanitize_filename(raw_name)
@@ -955,11 +1144,14 @@ def _build_oracle_three_block_payload(
         td_path = parsed["path"]
         df_name = parsed["df_name"]
         data_len = parsed["data_len"]
+        has_blob = data_len > 0
         if not _match_subject(td_subj):
             continue
         if not _match_handler(tm_psid, tm_name):
             continue
-        attach_key = _make_df_attach_key(td_path) if td_path else ""
+        # Keep list/download behavior consistent:
+        # DF download is only available when DF_DATA exists.
+        attach_key = _make_df_attach_key(td_path) if (td_path and has_blob) else ""
         if not attach_key:
             continue
         row = {
@@ -1091,13 +1283,18 @@ def sybase_query_page(request: HttpRequest):
 
     app_base_url = _calc_app_base_url(request)
     svc = _build_doc_service(request, plant=_read_plant_arg(request))
-    authorized_ip = _is_authorized_query_ip(request)
+    authorized_ip = True
     ip_debug = (_safe_str(request.GET.get("ipdebug")) or "").strip() == "1"
+    today = dt.date.today()
     context = {
         "app_base_url": app_base_url,
         "client_ip": _get_client_ip(request),
         "authorized_ip": authorized_ip,
         "restricted_to_self": (not authorized_ip),
+        "query_limit_max": QUERY_LIMIT_MAX,
+        "query_limit_default": QUERY_LIMIT_DEFAULT,
+        "query_start_default": (today - dt.timedelta(days=29)).isoformat(),
+        "query_end_default": today.isoformat(),
         "plants": ["MPC", "202", "205", "209", "401"],
         "default_plant": svc.target.plant or "MPC",
         "ip_debug_meta": (_collect_ip_debug_meta(request) if ip_debug else {}),
@@ -1126,7 +1323,7 @@ def api_sybase_query_search(request: HttpRequest):
     if request.method not in ("GET", "POST"):
         return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
 
-    grsno, subject, handler_name, limit, plant, days_ago, doc_category = _parse_search_args(request)
+    grsno, subject, handler_name, limit, plant, start_date, end_date, doc_category = _parse_search_args(request)
     if not grsno and not subject and not handler_name:
         return JsonResponse(
             {"ok": False, "error": "need handler_name or grsno or subject"},
@@ -1148,14 +1345,8 @@ def api_sybase_query_search(request: HttpRequest):
     incoming_python_subject = use_python_subject_filter
     trst_python_subject = use_python_subject_filter
     subject_sql = "" if use_python_subject_filter else subject
+    # Single limit policy: backend uses the same limit value as UI parameter.
     fetch_limit = limit
-    if use_python_subject_filter:
-        if grsno:
-            fetch_limit = min(max(limit * 4, 400), 2000)
-        else:
-            fetch_limit = min(max(limit * 8, 800), 3000)
-    elif handler_name and not grsno and not subject:
-        fetch_limit = min(max(limit * 8, 800), 3000)
 
     svc = _build_doc_service(request, plant=plant)
 
@@ -1172,14 +1363,16 @@ def api_sybase_query_search(request: HttpRequest):
             subject=subject_sql,
             psids=incoming_sql_psids,
             limit=fetch_limit,
-            days_ago=days_ago,
+            start_date=start_date,
+            end_date=end_date,
         ) if need_incoming else []
         trst_rows = svc.search_trst_advanced(
             grsno=grsno,
             subject=subject_sql,
             psids=trst_sql_psids,
             limit=fetch_limit,
-            days_ago=days_ago,
+            start_date=start_date,
+            end_date=end_date,
         ) if need_trst else []
     except Exception as e:
         return JsonResponse(
@@ -1232,10 +1425,7 @@ def api_sybase_query_search(request: HttpRequest):
         return out
 
     if subject and (not use_python_subject_filter):
-        if grsno:
-            fetch_limit_fb = min(max(limit * 4, 400), 2000)
-        else:
-            fetch_limit_fb = min(max(limit * 8, 800), 3000)
+        fetch_limit_fb = limit
 
         if need_incoming and not incoming_rows:
             incoming_python_subject = True
@@ -1245,6 +1435,8 @@ def api_sybase_query_search(request: HttpRequest):
                     subject="",
                     psids=incoming_sql_psids,
                     limit=fetch_limit_fb,
+                    start_date=start_date,
+                    end_date=end_date,
                 )
             except Exception:
                 incoming_rows = []
@@ -1257,6 +1449,8 @@ def api_sybase_query_search(request: HttpRequest):
                     subject="",
                     psids=trst_sql_psids,
                     limit=fetch_limit_fb,
+                    start_date=start_date,
+                    end_date=end_date,
                 )
             except Exception:
                 trst_rows = []
@@ -1269,8 +1463,9 @@ def api_sybase_query_search(request: HttpRequest):
                 grsno=g,
                 subject="",
                 psids=incoming_sql_psids,
-                limit=2000,
-                days_ago=days_ago,
+                limit=limit,
+                start_date=start_date,
+                end_date=end_date,
             ),
         )
 
@@ -1282,8 +1477,9 @@ def api_sybase_query_search(request: HttpRequest):
                 grsno=g,
                 subject="",
                 psids=trst_sql_psids,
-                limit=2000,
-                days_ago=days_ago,
+                limit=limit,
+                start_date=start_date,
+                end_date=end_date,
             ),
         )
 
@@ -1345,25 +1541,51 @@ def api_sybase_query_search(request: HttpRequest):
         return False
 
     if handler_name and not handler_filter_disabled:
-        fallback_limit = min(max(fetch_limit * 4, 400), 2000) if (grsno or subject) else min(max(fetch_limit * 8, 800), 3000)
+        fallback_limit = limit
 
         matched_incoming = [r for r in (incoming_rows or []) if _incoming_match_handler(r)] if need_incoming else []
         if need_incoming and not matched_incoming:
             try:
-                incoming_rows_fb = svc.search_incoming_advanced(grsno=grsno, subject="" if incoming_python_subject else subject_sql, psids=None, limit=fallback_limit, days_ago=days_ago)
+                incoming_rows_fb = svc.search_incoming_advanced(
+                    grsno=grsno,
+                    subject="" if incoming_python_subject else subject_sql,
+                    psids=None,
+                    limit=fallback_limit,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
             except Exception: incoming_rows_fb = []
             if incoming_python_subject:
-                incoming_rows_fb = _subject_filter_and_rehydrate(incoming_rows_fb or [], subject_idx=2, fetch_by_grsno=lambda g: svc.search_incoming_advanced(grsno=g, subject="", psids=None, limit=2000, days_ago=days_ago))
+                incoming_rows_fb = _subject_filter_and_rehydrate(
+                    incoming_rows_fb or [],
+                    subject_idx=2,
+                    fetch_by_grsno=lambda g: svc.search_incoming_advanced(
+                        grsno=g, subject="", psids=None, limit=limit, start_date=start_date, end_date=end_date
+                    ),
+                )
             matched_incoming = [r for r in (incoming_rows_fb or []) if _incoming_match_handler(r)]
         incoming_rows = _limit_rows_by_grsno(matched_incoming, limit, is_trst=False) if need_incoming else []
 
         matched_trst = [r for r in (trst_rows or []) if _trst_match_handler(r)] if need_trst else []
         if need_trst and not matched_trst:
             try:
-                trst_rows_fb = svc.search_trst_advanced(grsno=grsno, subject="" if trst_python_subject else subject_sql, psids=None, limit=fallback_limit, days_ago=days_ago)
+                trst_rows_fb = svc.search_trst_advanced(
+                    grsno=grsno,
+                    subject="" if trst_python_subject else subject_sql,
+                    psids=None,
+                    limit=fallback_limit,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
             except Exception: trst_rows_fb = []
             if trst_python_subject:
-                trst_rows_fb = _subject_filter_and_rehydrate(trst_rows_fb or [], subject_idx=6, fetch_by_grsno=lambda g: svc.search_trst_advanced(grsno=g, subject="", psids=None, limit=2000, days_ago=days_ago))
+                trst_rows_fb = _subject_filter_and_rehydrate(
+                    trst_rows_fb or [],
+                    subject_idx=6,
+                    fetch_by_grsno=lambda g: svc.search_trst_advanced(
+                        grsno=g, subject="", psids=None, limit=limit, start_date=start_date, end_date=end_date
+                    ),
+                )
             matched_trst = [r for r in (trst_rows_fb or []) if _trst_match_handler(r)]
         trst_rows = _limit_rows_by_grsno(matched_trst, limit, is_trst=True) if need_trst else []
     else:
@@ -1408,7 +1630,14 @@ def api_sybase_query_search(request: HttpRequest):
     for g in merged_grsnos:
         if need_incoming and g not in incoming_by_grsno:
             try:
-                rows_fb = svc.search_incoming_advanced(grsno=g, subject="", psids=incoming_sql_psids, limit=2000, days_ago=days_ago)
+                rows_fb = svc.search_incoming_advanced(
+                    grsno=g,
+                    subject="",
+                    psids=incoming_sql_psids,
+                    limit=limit,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
             except Exception: rows_fb = []
             rows_fb = [r for r in (rows_fb or []) if _incoming_match_handler(r)]
             rows_fb = _dedupe_rows(rows_fb)
@@ -1416,7 +1645,14 @@ def api_sybase_query_search(request: HttpRequest):
 
         if need_trst and g not in trst_by_grsno:
             try:
-                rows_fb = svc.search_trst_advanced(grsno=g, subject="", psids=trst_sql_psids, limit=2000, days_ago=days_ago)
+                rows_fb = svc.search_trst_advanced(
+                    grsno=g,
+                    subject="",
+                    psids=trst_sql_psids,
+                    limit=limit,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
             except Exception: rows_fb = []
             rows_fb = [r for r in (rows_fb or []) if _trst_match_handler(r)]
             rows_fb = _dedupe_rows(rows_fb)
@@ -1490,6 +1726,8 @@ def api_sybase_query_search(request: HttpRequest):
     seen_draft_doc = set()
     seen_draft_attach = set()
 
+    incoming_by_name, incoming_only_one = _build_incoming_attach_index(incoming_attachments)
+
     for r in trst_rows or []:
         parsed = _parse_trst_row(r)
         tm_grsno = parsed["grsno"]
@@ -1506,6 +1744,18 @@ def api_sybase_query_search(request: HttpRequest):
 
         attach_key = _make_df_attach_key(td_path) if td_path else ""
         filename = df_name or (td_subj if td_subj else "")
+        attach_key = _prefer_incoming_attach_key(
+            grsno=tm_grsno,
+            filename=filename,
+            subject=td_subj,
+            td_path=td_path,
+            has_blob=has_blob,
+            current_attach_key=attach_key,
+            incoming_by_name=incoming_by_name,
+            incoming_only_one=incoming_only_one,
+        )
+        attach_kind = "EF" if attach_key.startswith("EF:") else "DF"
+        mime = _guess_content_type(filename or td_subj or "")
 
         row = {
             "grsno": tm_grsno,
@@ -1520,10 +1770,10 @@ def api_sybase_query_search(request: HttpRequest):
             "attach_key": attach_key,
             "has_blob": has_blob,
             "blob_size": data_len,
-            "mime": _guess_content_type(filename or td_subj or ""),
-            "hash": _lookup_blob_hash(attach_key, (filename or td_subj or ""), data_len, _guess_content_type(filename or td_subj or "")),
-            "id": _lookup_item_id("DF", attach_key, (filename or td_subj or ""), tm_grsno, td_subj),
-            "has_attachment": bool(attach_key and has_blob),
+            "mime": mime,
+            "hash": _lookup_blob_hash(attach_key, (filename or td_subj or ""), data_len, mime),
+            "id": _lookup_item_id(attach_kind, attach_key, (filename or td_subj or ""), tm_grsno, td_subj),
+            "has_attachment": bool(attach_key and (has_blob or attach_key.startswith("EF:"))),
             "plant": svc.target.plant,
         }
 
@@ -1546,13 +1796,22 @@ def api_sybase_query_search(request: HttpRequest):
         "ok": True,
         "query": {
             "grsno": grsno, "subject": subject, "handler_name": handler_name,
-            "plant": svc.target.plant, "limit": limit, "doc_category": doc_category,
+            "plant": svc.target.plant,
+            "limit": limit,
+            "fetch_limit": fetch_limit,
+            "start_date": start_date,
+            "end_date": end_date,
+            "doc_category": doc_category,
             "lookup_mode": "metadata_only",
             "download_mode": "single_item_or_bundle",
             "case_counts": {
                 "incoming_only": len(case_incoming_only),
                 "incoming_and_trst": len(case_both),
                 "trst_only": len(case_trst_only),
+            },
+            "raw_rows": {
+                "incoming": len(incoming_rows or []),
+                "trst": len(trst_rows or []),
             },
         },
         "counts": {

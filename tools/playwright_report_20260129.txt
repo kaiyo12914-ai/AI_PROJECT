@@ -1,0 +1,23 @@
+﻿Playwright 前端測試報告 (使用舊 JSON)
+日期: 2026-01-29
+
+環境:
+- ENV=EXT
+- 測試頁: http://127.0.0.1/djangoai/doc/
+- Mock JSON: H:\AI\Django\SQLTEST_output1150001261.json
+- Playwright Script: H:\AI\Django\tools\playwright_mock_from_json.py
+
+執行指令:
+H:\AI\Django\venv3.12\Scripts\python.exe H:\AI\Django\tools\playwright_mock_from_json.py --json H:\AI\Django\SQLTEST_output1150001261.json --url http://127.0.0.1/djangoai/doc/
+
+執行結果:
+OK: mock lookup + attachments rendered
+options: 2, attachments: 2
+
+檢核重點:
+1) 查詢結果有 1 筆主旨 (subject/td_subj) -> 通過
+2) 附件列表顯示 2 筆 EF_NAME -> 通過
+3) 前端選單有資料 (placeholder + 1 筆) -> 通過
+
+備註:
+- EXT 模式會 fallback DB，因此本次使用舊 JSON 進行前端模擬。

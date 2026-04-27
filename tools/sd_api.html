@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stable Diffusion API Call</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #prompt-container {
+            margin-bottom: 20px;
+        }
+        #image-container {
+            margin-top: 20px;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Stable Diffusion API Call</h1>
+    <div id="prompt-container">
+        <label for="prompt">Prompt:</label>
+        <input type="text" id="prompt" name="prompt" placeholder="Enter a prompt">
+        <button onclick="generateImage()">Generate Image</button>
+    </div>
+    <div id="image-container">
+        <h2>Generated Image:</h2>
+        <img id="generated-image" src="" alt="Generated Image">
+    </div>
+
+    <script>
+        async function generateImage() {
+            const prompt = document.getElementById('prompt').value;
+            const response = await fetch('http://mpcai.mpc.mil.tw:7860/sdapi/v1/txt2img', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                     prompt: prompt ,
+                     steps:20,
+                     width:1024,
+                     height:768,
+                     sampler_name:'Euler a',
+                     sd_model_checkpoint:"AnythingV5_v5PrtRE",
+                     negative_prompt:"worst quality,low quality,score_1,score_2,score_3,ai-generated,lowers,girl,nsfw"
+                    })
+            });
+
+            if (response.ok) {
+                const data = await response.json();                
+                document.getElementById('generated-image').src = 'data:image/png;base64,' + data.images[0];
+            } else {
+                alert('Failed to generate image');
+            }
+        }
+    </script>
+</body>
+</html>

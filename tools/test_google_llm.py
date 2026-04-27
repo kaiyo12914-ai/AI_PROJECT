@@ -14,11 +14,11 @@ try:
     from langchain_google_genai import ChatGoogleGenerativeAI
     from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
-    api_key = os.getenv('GOOGLE_API_KEY')
+    api_key = os.getenv('GEMINI_API_KEY')
     model = os.getenv('GOOGLE_MODEL', 'gemini-flash-latest')
 
     if not api_key:
-        print("ERROR: GOOGLE_API_KEY is missing in system environment variables")
+        print("ERROR: GEMINI_API_KEY is missing in system environment variables")
         sys.exit(1)
 
     print(f"Testing Google LLM (Model: {model})...")
@@ -33,7 +33,7 @@ try:
 
     llm = ChatGoogleGenerativeAI(
         model=model,
-        google_api_key=api_key,
+        GEMINI_API_KEY=api_key,
         safety_settings=safety_settings,
         timeout=30
     )

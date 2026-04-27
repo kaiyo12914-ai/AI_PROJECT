@@ -1,15 +1,16 @@
 {% load static %}
+{% load custom_tags %}
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <title>人員績效考核系統(雛形)</title>
-  <link rel="stylesheet" href="{% static 'comment/css/index.css' %}">
-  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+  <link rel="stylesheet" href="{% url_with_relative 'comment/css/index.css' %}">
+  <script defer src="{% url_with_relative 'portal/js/apiurl_factory.js' %}"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
-  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/png" sizes="32x32" href="{% url_with_relative 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% url_with_relative 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% url_with_relative 'portal/img/favicon-ai.png' %}?v=3">
 </head>
 
 <!-- ✅ 專案規範：
@@ -109,6 +110,6 @@
     </div>
   </div>
 </div>
-  <script defer src="{% static 'comment/js/index.js' %}"></script>
+  <script defer src="{% custom_static 'comment/js/index.js' %}"></script>
 </body>
 </html>

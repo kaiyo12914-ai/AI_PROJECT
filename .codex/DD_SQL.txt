@@ -1,0 +1,316 @@
+會議指裁示待辦事項
+SELECT
+    IA.DeptCode_Factory,
+    IA.DEPTCODE,
+    IA.CASEID,
+    IA.ITEMNO,
+    CS.MEETINGTYPE,
+    CS.CaseName,
+    CS.IsAllowReply,
+    '項次' + CAST(CM.SEQNO AS VARCHAR(3)) + '.' SEQNO,
+    CASE
+        WHEN CM.ITEMTYPE = '0' THEN '<STRONG>持續列管</STRONG><BR>'
+        ELSE ''
+    END + CI.CONTENTS CONTENTS,
+    IA.DEPTCONTENTS,
+    CS.MEETINGTYPE + ',' + CAST(CM.CASEID AS VARCHAR(6)) + ',' + CAST(CM.ITEMNO AS VARCHAR(6)) ARG,
+    IA.PROCMAN,
+    SUBSTRING(IA.DTE_FINISH, 1, 3) + '.' + SUBSTRING(IA.DTE_FINISH, 4, 2) + '.' + SUBSTRING(IA.DTE_FINISH, 6, 2) + '.' + SUBSTRING(IA.DTE_FINISH, 8, 4) DTE_FINISH,  SUBSTRING(CS.DTE_DEADLINE, 1, 3) + '.' + SUBSTRING(CS.DTE_DEADLINE, 4, 2) + '.' + SUBSTRING(CS.DTE_DEADLINE, 6, 2) + '.' + SUBSTRING(CS.DTE_DEADLINE, 8, 4) DTE_DEADLINE,
+    (
+        SELECT
+            SUBSTRING(DTE_DEADLINE, 1, 3) + '.' + SUBSTRING(DTE_DEADLINE, 4, 2) + '.' + SUBSTRING(DTE_DEADLINE, 6, 2) + '.' + SUBSTRING(DTE_DEADLINE, 8, 4)
+        FROM
+            FactoryHandleMan
+        WHERE
+            FACTORYID = '  Session(FactoryID)  '
+            AND MEETINGTYPE = CS.MEETINGTYPE
+    ) FACTORYDTE_DEADLINE
+FROM
+   CASES CS
+    INNER JOIN CaseItem_Matches CM ON CS.CaseID = CM.CaseID
+    INNER JOIN CASE_ITEMS CI ON CM.ITEMNO = CI.ITEMNO
+    INNER JOIN ITEMS_ASSIGN IA ON CM.CASEID = IA.CASEID
+    AND CM.ITEMNO = IA.ITEMNO
+WHERE
+    PROCMAN = @PROCMAN
+    AND 1 = 1
+    AND IA.ISFINISHED = '0'
+ORDER BY
+    IA.DEPTCODE, CS.MEETINGTYPE, CM.CASEID, CM.ITEMTYPE, CM.SEQNO
+
+個人承辦案件查詢
+SELECT top 300
+        TM.TM_GRSNO,
+        CONVERT(VARCHAR(10), TM.TM_TDATE, 23) AS TM_TDATE,
+        TM.TM_PSID,
+        TM.TM_NAME,
+--        EM.EM_SNO,
+        TM.TM_RSTP,TM_RCDATE AS "核畢日期",
+        TM_RCTYPE AS "核畢否",--(1.核畢 0.否 2.退件 3.加會 4.受會會辦重呈)
+        TM_RPDT AS "核判日期",    
+        OL.OR_STATUS AS "呈核狀態",  -- 處理狀態(0:原始檔;1:待處理;2:處理完成;3:退件;4:已核判)
+        TM.TM_SUBJ AS "來文主旨/創案案由",
+        TD.TD_FORMAT,        --文件種類
+        DF.DF_NAME AS DF_NAME,
+        DF.DF_DATA AS DF_DATA,
+        DATALENGTH(DF.DF_DATA) AS DF_DATA_LEN,
+--        EF.EF_ID AS EF_ID,
+        EF.EF_NAME AS EF_NAME,
+        EF.EF_DATA AS EF_DATA,
+        DATALENGTH(EF.EF_DATA) AS EF_DATA_LEN,
+        EF.EF_PAGE AS EF_PAGE,
+        --CASE WHEN TD.TD_FORMAT in ('來文(檔案)') THEN  COALESCE(EF.EF_NAME,TD.TD_SUBJ)
+        --     ELSE  COALESCE(TD.TD_SUBJ,EF.EF_NAME) END AS DOC_NAME,
+        TD.TD_SUBJ AS TD_SUBJ
+    FROM mnda.dbo.DCS3_TRST_MST TM                                       -- 呈核主檔
+    LEFT JOIN mnda.dbo.DCS3_TRST_DAT TD ON TM.TM_SNO = TD.TD_SNO            -- 呈核文稿附件關連識別檔 
+    LEFT JOIN mnda.dbo.DCS0_DOC_FILE DF ON DF.DF_PATH = TD.TD_PATH            -- 文稿實體檔
+    LEFT JOIN mnda.dbo.DCS0_OLS_REC OL ON OR_GRSNO=TM.TM_GRSNO            -- 來文簽核檔
+    LEFT JOIN mnda.dbo.DCS1_EMAL_TMP EM ON TM.TM_GRSNO = EM.EM_GRSNO      -- 來文電子交換檔
+    LEFT JOIN mnda.dbo.DCS1_EMAL_FILE EF ON EM.EM_FID = EF.EF_ID                -- 來文電子資料檔
+WHERE
+--    TM.GRSNO = '1140020708'
+--      TD.TD_FORMAT IN ('簽呈', '便籤')
+      TM_RSTP in ('收')
+--    AND TM.TM_SUBJ LIKE '%獎金%'
+      AND TM.TM_NAME IN ('姚承佑')
+--      AND TM.TM_PSID = 'M122255948'  -- 使用等於比IN更精確
+--    AND EM.EM_GRSNO = '1150001261'
+--    AND TD.TD_FORMAT = '檔案'
+--     AND OL.OR_STATUS in ('4')  --4:已核判
+AND TM.TM_TDATE >= DATEADD(DAY, -30, GETDATE())
+ORDER BY TM.TM_TDATE DESC;
+ 
+收文未結案件查詢
+SELECT TOP 60 
+EM.EM_GRSNO,
+EM.EM_PSID,
+COALESCE(EM.EM_SUBJ, IM.IM_SUBJ) AS TD_SUBJ,
+EF.EF_ID AS EF_ID,
+EF.EF_NAME AS EF_NAME,
+IM_CNCDT, EF_DATA,
+DATALENGTH(EF.EF_DATA) AS EF_DATA_LEN,
+EF.EF_PAGE
+FROM mnda.dbo.DCS1_EMAL_TMP EM
+LEFT JOIN mnda.dbo.DCS1_IN_MAST IM ON EM.EM_GRSNO=IM.IM_GRSNO      --收文承辦主檔 
+LEFT JOIN mnda.dbo.DCS1_EMAL_FILE EF ON EM.EM_FID = EF.EF_ID
+WHERE 1=1
+AND (IM.IM_PSID = :AS_IM_PSID)
+  --    AND EM.EM_GRSNO = ?
+AND IM.IM_CNCDT is null  -- 結案日期
+ORDER BY EF.EF_PAGE
+ 
+
+DOC資料辭典
+DCS3_TRST_MST
+CREATE TABLE DCS3_TRST_MST                    -- 3-02 呈核主檔    34  欄
+(
+  TM_SBDEPT   VARCHAR2(10)    NOT NULL,       -- 送核機關
+  TM_SNO      VARCHAR2(16)    NOT NULL,       -- 呈核文號
+  TM_DATE     DATE            NOT NULL,       -- 日期
+  TM_TDATE    DATE            NOT NULL,       -- 上呈日期
+  TM_DPID     VARCHAR2(10)    NOT NULL,       -- 承辦單位
+  TM_PSID     VARCHAR2(10)    NOT NULL,       -- 使用者帳號
+  TM_NAME     VARCHAR2(16),                   -- 承辦人姓名
+  TM_TEL      VARCHAR2(20),                   -- 承辦人電話(ONLY FOR補登)
+  TM_SUBJ     VARCHAR2(310)   NOT NULL,       -- 主旨(案情摘要)    
+  TM_RSTP     VARCHAR2(2)     NOT NULL,       -- 收創別(收/創/來)
+  TM_GRSNO    VARCHAR2(16)    NOT NULL,       -- 文號
+  TM_RCDATE   DATE,                           -- 核畢日期
+  TM_RCTYPE   VARCHAR2(1),                    -- 核畢否(1.核畢 0.否 2.退件 3.加會 4.受會會辦重呈)
+  TM_RPDT     DATE,                           -- 核判日期
+  TM_SUBDP    VARCHAR2(10),                   -- 下屬機關之次級部門
+  TM_RTNDT    DATE,                           -- 退轉原承辦單位日期
+  TM_TYPE     VARCHAR2(1),                    -- 作業識別 0: 以補登方惑INSERT 2:下級機關呈核資料轉入
+  TM_FNPSNM   VARCHAR2(16),                   -- 核判長官姓名
+  TM_IMFLG    VARCHAR2(1),                    -- 部長重大案件批示別(1:是 NULL:否)
+  TM_DPNM     VARCHAR2(100),                   -- 單位名稱
+  TM_SECUR    VARCHAR2(1),                    -- 密等(E:普通 D:密 C:機密 B:極機密 A:絻對機密)
+  TM_OPION    VARCHAR2(160),                  -- 核判長官意見
+  TM_TYPE2    VARCHAR2(1),                    -- 呈核會辦別 (NULL OR 0:呈核 1: 會辦)
+  TM_CUSWORD  VARCHAR2(16),                   -- 會辦字 ONLY FOR TM_TYPE2  = '1'
+  TM_CUSNO    VARCHAR2(16),                   -- 會辦號 ONLY FOR TM_TYPE2 = '1'
+  TM_CUSLN    NUMBER(5),                      -- 受會順序 ONLY FOR TM_TYPE2  = '1'
+  TM_KIND     VARCHAR2(1),                    -- 會辦型態(1:主辦 2:受會)
+  TM_PKSEQNO  VARCHAR2(16),                   -- 封裝索引號                   
+  TM_PKFLOWID VARCHAR2(25),                   -- 封裝簽核點定義            
+  TM_PKBRANCH NUMBER(5),                      -- 封裝文稿支號   
+  TM_FNROLE   VARCHAR2(10),                   -- 決行長官角色代碼
+  TM_MCA      VARCHAR2(1),                    -- 呈核模式(0:紙本 1:線上)
+  TM_STTYPE   NUMBER(10),                     -- 呈核狀態(1.簽擬中,2.呈核中,3.退件中,4.覆閱中,5.覆閱完成,6.批核完成 7.退件 8.加會中) link  DCS0_KIND_DSC.KD_STYPE (DCS0_KIND_DSC.KD_TYPE='E' E.呈核)
+  TM_ORISNO   VARCHAR2(16)                    -- 前張呈核單
+)
+DCS3_TRST_DAT
+CREATE TABLE DCS3_TRST_DAT                    -- 3-34 呈核文稿檔    7 欄
+(
+  TD_DIID     VARCHAR2(80)    NOT NULL,       -- 稿關連識別
+  TD_LN       NUMBER(10)      NOT NULL,      -- 序號
+  TD_PATH     VARCHAR2(80)    NOT NULL,       -- 附件關連識別
+  TD_SUBJ     VARCHAR2(310),                  -- 文件說明
+  TD_FORMAT   VARCHAR2(50),                  -- 文件格式
+  TD_SNO      VARCHAR2(16),                   -- 呈核號
+  TD_MEMO     VARCHAR2(20)                  -- 備註說明
+)
+
+
+
+DCS0_DOC_FILE  
+CREATE TABLE DCS0_DOC_FILE                    -- 0-11 文稿檔    8欄
+(
+  DF_PATH     VARCHAR2(80)    NOT NULL,      -- 路徑
+  DF_DATE     DATE            NOT NULL,      -- 日期    
+  DF_UPDATE   DATE            NOT NULL,      -- 最近修改日
+  DF_EXT      VARCHAR2(10),                   -- 檔案延伸名稱
+  DF_NAME     VARCHAR2(310),                 -- WIN NAME
+  DF_DATA     BLOB,                           -- 文稿內容
+  DF_AESKEY   VARCHAR2(4000),                 -- 當密等不為普通時所產生的key,供國軍加解密元件使用
+  DF_CHARNUM  NUMBER(10)                   -- 明文長度不合規定,補足整個檔案的字元長度
+)
+DCS0_OLS_REC
+CREATE TABLE DCS0_OLS_REC                         -- 0-11 簽核檔 21 欄
+(
+  OR_GRSNO     VARCHAR2(16)    NOT NULL,          -- 收(創)文號
+  OR_TMSNO     VARCHAR2(16),                      -- 呈核號
+  OR_PATH      VARCHAR2(80)    NOT NULL,          -- 路徑
+  OR_DOCTP     VARCHAR2(2)     NOT NULL,          -- 0:創稿,1:簽稿,2:清稿,3:文稿,4:電子來文,5:附件,6:電子來文附件,7:簽核點,8:補簽
+  OR_STATUS    VARCHAR2(2),                       -- 處理狀態(0:原始檔;1:待處理;2:處理完成;3:退件;4:已核判)
+  OR_FROM      VARCHAR2(10),                      -- 上呈者角色
+  OR_TO        VARCHAR2(10),                      -- 受呈者角色
+  OR_FROMPS    VARCHAR2(10),                      -- 上呈者ID
+  OR_TOPS      VARCHAR2(10),                      -- 受呈者ID
+  OR_ID        VARCHAR2(80),                      -- 簽核檔案關聯路徑
+  OR_SEQNO     VARCHAR2(80)    NOT NULL,          -- 實際檔案關聯識別      
+  OR_STAMPCODE VARCHAR2(1),                       -- 職官章識別(0:無;1:有;3:有會辦章;4:有會畢時間)      
+  OR_PAGES     NUMBER(10),                        -- 總頁數
+  OR_UPDATE    DATE            NOT NULL,          -- 最近修改日
+  OR_PKSEQNO   VARCHAR2(16),                      -- 索引號
+  OR_PKFLOWID  VARCHAR2(25),                      -- 簽核點定義
+  OR_PKBRANCH  NUMBER(5),                         -- 文稿支號(Branch),初始即為0
+  OR_FILENUM   NUMBER(5),                         -- 檔案序號
+  OR_CMLNUM    NUMBER(5),                         -- 文稿序號
+  OR_DOCNUM    NUMBER(5),                         -- 文件夾識別碼序號
+  OR_FNROLE    VARCHAR2(40)                       -- 決行長官角色代號
+)
+
+DCS1_EMAL_TMP
+CREATE TABLE DCS1_EMAL_TMP                    -- 1-02 電子交換檔    27欄
+(
+  EM_FROM     VARCHAR2(60)    NOT NULL,       -- REMOTE SERVER
+  EM_DID      VARCHAR2(24),                   -- 來文字
+  EM_SNO      VARCHAR2(16),                   -- 來文號
+  EM_DEPT     VARCHAR2(100)    NOT NULL,       -- 來文機關
+  EM_DATE     DATE,                           -- 來文日期
+  EM_SUBJ     VARCHAR2(310)   NOT NULL,       -- 主旨
+  EM_CPYTP    VARCHAR2(1)     NOT NULL,       -- 正副本別(1:正本 2:副本 3:抄本 4:影本 5譯本A稿本B草稿C定稿D底圖E藍圖)
+  EM_TP       VARCHAR2(2)     NOT NULL,       -- 來文文別(1令1A獎懲令2呈3咨4函4A獎懲建議函5公告6書函7簡便行文表8開會通知單8A會勘通知單9會銜公文9A會辦單)
+                                              -- A交辦案件通知單B交議案件通知單C移文單D催辦案件通知單
+                                              -- E機密文書機密等級變更或註銷建議F機密文書機密等級變更或註銷通知
+                                              -- G簽G1呈總統簽呈H簽稿會核單I會銜公文會辦單J公文時效統計M通報 N發佈令Z其他
+                                              -- Z1公務電話紀錄Z2手令或手諭Z3報告Z4箋函或便簽Z5聘書Z6證明書Z7證書或執照
+                                              -- Z8契約書Z9提案ZA紀錄ZB節略ZC說帖ZD代電ZE原本ZF判決書ZG起訴書ZH處分書ZI定型化表單ZJ電報ZL重要工作提報單
+					      -- ZM派免令ZN派免建議函 ZZ其他
+  EM_OBJ      VARCHAR2(100)    NOT NULL,       -- 受文者
+  EM_SECUR    VARCHAR2(1)     NOT NULL,       -- 密等(E:普通件 D:密 C:機密 B:極機密 A:絕對機密)
+  EM_EMGTP    VARCHAR2(1)     NOT NULL,       -- 速別(1:普通件 2:速件 3:最速件)
+  EM_ENCLO    VARCHAR2(600),                  -- 附件說明
+  EM_ENCNT    NUMBER(5)       NOT NULL,       -- 附件數    
+  EM_FID      VARCHAR2(80)    NOT NULL,       -- 電子檔名
+  EM_DEPTNO   VARCHAR2(16),                   -- 局收號
+  EM_GRSNO    VARCHAR2(16),                   -- 收文號
+  EM_GOVNO    VARCHAR2(16),                   -- 府號
+  EM_PRTM     DATE,                           -- 列印時間
+  EM_RDATE    DATE,                           -- 收件日期
+  EM_MOVDT    DATE,                           -- 退至交換中心時間
+  EM_PSID     VARCHAR2(10),                   -- 操作員帳號
+  EM_UID      VARCHAR2(255),
+  EM_IMDATE   DATE,                           -- 總收文之收文時間(ONLY FOR 總收發分來之文)
+  EM_NSECDT   DATE,                           -- 自動解密時間(解密日期)
+  EM_NSECC    VARCHAR2(40),                   -- 解密條件               
+  EM_SECMEMO  VARCHAR2(20),                   -- 機密屬性
+  EM_FLG      VARCHAR2(1),                    -- 0 人工登錄, 1 公文交換中心, 2 EMAIL 3.人工掃描
+  EM_PFLG     VARCHAR2(1)                     -- 紙本模式 NULL:線上 1:紙本
+)
+
+DCS1_EMAL_FILE  
+CREATE TABLE DCS1_EMAL_FILE                   -- 1-07 電子資料檔    7欄
+(
+  EF_ID       VARCHAR2(80)    NOT NULL,       -- 電子識別檔
+  EF_TYPE     VARCHAR2(1)     NOT NULL,       -- 1 文, 2 其它
+  EF_EXT      VARCHAR2(10),                   -- 檔案延伸名稱, OD, SGML, ...
+  EF_NAME     VARCHAR2(310),                  -- WIN NAME
+  EF_DATA     BLOB,                           -- 內容
+  EF_LN       NUMBER(10),                     -- 文件順序
+  EF_PAGE     NUMBER(5)                       -- 頁數
+)
+
+
+
+DCS1_IN_MAST  
+CREATE TABLE DCS1_IN_MAST                     -- 1-01 收文主檔    58欄
+(
+  IM_GRSNO    VARCHAR2(16)    NOT NULL,       -- 收文號
+  IM_DATE     DATE            NOT NULL,       -- 日期
+  IM_SUBJ     VARCHAR2(310)   NOT NULL,       -- 主旨
+  IM_ENCLO    VARCHAR2(600),                  -- 附件說明
+  IM_ENCSO    VARCHAR2(240),                  -- 附件備註
+  IM_ENCNO    NUMBER(5)       NOT NULL,       -- 附件數
+  IM_SECUR    VARCHAR2(1)     NOT NULL,       -- 密等(E:普通 D:密 C:機密 B:極機密 A:絕對機密)
+  IM_EMGTP    VARCHAR2(1)     NOT NULL,       -- 速別(1:普通件 2:速件 3:最速件 4:限期公文)
+  IM_CPYTP    VARCHAR2(1)     NOT NULL,       -- 正副本別(1:正本 2:副本 3:抄本 4:影本 5譯本A稿本B草稿C定稿D底圖E藍圖)
+  IM_INTP     VARCHAR2(2)     NOT NULL,       -- 來文文別(1令1A獎懲令2呈3咨4函4A獎懲建議函5公告6書函7簡便行文表8開會通知單8A會勘通知單9會銜公文9A會辦單)
+                                              -- A交辦案件通知單B交議案件通知單C移文單D催辦案件通知單
+                                              -- E機密文書機密等級變更或註銷建議F機密文書機密等級變更或註銷通知
+                                              -- G簽H簽稿會核單I會銜公文會辦單J公文時效統計M通報 N發佈令Z其他
+                                              -- Z1公務電話紀錄Z2手令或手諭Z3報告Z4箋函或便簽Z5聘書Z6證明書Z7證書或執照
+                                              -- Z8契約書Z9提案ZA紀錄ZB節略ZC說帖ZD代電ZE原本ZF判決書ZG起訴書ZH處分書ZI定型化表單ZJ電報ZL重要工作提報單
+					      -- ZM派免令ZN派免建議函 ZZ其他
+  IM_INDP     VARCHAR2(100)    NOT NULL,       -- 來文機關
+  IM_INDID    VARCHAR2(24),                   -- 來文字
+  IM_INSNO    VARCHAR2(16),                   -- 來文號
+  IM_INDT     DATE,                           -- 來文日期
+  IM_INATR    VARCHAR2(20)    NOT NULL,       -- 來文性質
+  IM_OBJ      VARCHAR2(100)    NOT NULL,       -- 受文者    
+  IM_DPID     VARCHAR2(10)    NOT NULL,       -- 承辦單位
+  IM_PSID     VARCHAR2(10),                   -- 承辦人
+  IM_MEMO     VARCHAR2(40),                   -- 備考
+  IM_PDATE    DATE,                           -- 列印日期(分文送件簿)
+  IM_LOT      NUMBER(5),                      -- 列印批次
+  IM_CDATE    DATE,                           -- 單位分文日期
+  IM_LMTDT    DATE,                           -- 限辦日期
+  IM_PRCDY    NUMBER(5,1),                    -- 辦理天數
+  IM_DEFDY    NUMBER(5,1),                    -- 延誤天數
+  IM_CNT      NUMBER(5)       NOT NULL,       -- 延辦次數
+  IM_CNCDT    DATE,                           -- 結案日期
+  IM_REQDT    DATE,                           -- 預定辦畢日期(全程日期、完成期限)        
+  IM_ITEM     VARCHAR2(60),                   -- 項目 NULL:一般 OUTER:行政革新、人民申請分類
+  IM_CCTYPE   VARCHAR2(1),                    -- 結案方式 1.存查 0.發文
+  IM_DCLVL    VARCHAR2(1),                    -- 決行層次 1.市長 2.上級機關首長 3.本機關首長 4.單位主管
+  IM_RETDT    DATE,                           -- 退文日期(登記桌退總收發)
+  IM_MOVDT    DATE,                           -- 移至外單位時間
+  IM_CDSTG    VARCHAR2(1)    NOT NULL,        -- 稽催別 1.不稽催 0.稽催
+  IM_RNT      NUMBER(5)       NOT NULL,       -- 退文次數
+  IM_RID      VARCHAR2(1),                    -- 退文人員(1:單位分文員  2:承辦人)
+  IM_DVPSID   VARCHAR2(10),                   --
+  IM_DVDATA   VARCHAR2(1),                    --
+  IM_BPDT     DATE,                           -- 號碼標簽列印日期
+  IM_BLOT     NUMBER(5),                      -- 號碼標簽列印批之
+  IM_TYPE     VARCHAR2(1)    NOT NULL,        -- 登錄方式 0 人工登錄, 1 公文交換中心, 2 EMAIL 3.人工掃描
+  IM_KPSID    VARCHAR2(10),                   -- 登錄使用者帳號
+  IM_RETF     VARCHAR2(1),                    -- 退文別(1:退總收發)
+  IM_PPSID    VARCHAR2(10),                   -- 單位分文人員
+  IM_YPDATE   VARCHAR2(10),                   -- 公文處理單列印日期
+  IM_YLOT     NUMBER(5),                      -- 公文處理單列印批次
+  IM_AUDNT    NUMBER(5),                      -- 稽催次數
+  IM_PKSEQNO  VARCHAR2(16),                   -- 封裝索引號
+  IM_PKFLOWID VARCHAR2(25),                   -- 封裝簽核點定義
+  IM_PKBRANCH NUMBER(5),                      -- 封裝文稿支號
+  IM_CLSDT    DATE,                           -- 辦結日期(等同act_case.AC_CLSDT)(等同act_case.AC_CLSDT)
+  IM_NSECDT   DATE,                           -- 自動解密時間(解密日期)
+  IM_NSECC    VARCHAR2(40),                   -- 解密條件
+  IM_SECMEMO  VARCHAR2(20),                   -- 機密屬性
+  IM_KDATE    DATE,                           -- 登錄更新時間  
+  IM_MEMO2    VARCHAR2(100),                  -- 限辦或來文性質調整備註
+  IM_PFLG     VARCHAR2(1),                    -- 紙本模式 NULL:線上 1:紙本
+  IM_36FLG    VARCHAR2(1),                     -- 呈核類別 1:覆閱完成或已完會，0:其它狀態  
+  IM_DTYPE    VARCHAR2(1) DEFAULT '0' NOT NULL  --0:非收發同號   1: 收發同號 
+)

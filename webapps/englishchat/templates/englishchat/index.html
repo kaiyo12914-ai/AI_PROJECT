@@ -1,0 +1,60 @@
+{% load custom_tags %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>美語學習教室</title>
+  <link rel="stylesheet" href="{% custom_static 'englishchat/css/index.css' %}">
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% custom_static 'englishchat/js/index.js' %}"></script>
+</head>
+<body data-base-url="{{ request.script_name }}">
+  <main class="wrap">
+    <header class="top">
+      <h1>美語學習教室</h1>
+      <p>先選主題與程度，再和 AI 練習自然美式英文。</p>
+    </header>
+
+    <section class="panel setup">
+      <div class="setup-grid">
+      <div class="row">
+        <label for="topicSelect">常見主題</label>
+        <select id="topicSelect">
+          {% for t in topic_presets %}
+            <option value="{{ t }}">{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="row">
+        <label for="customTopic">自訂主題</label>
+        <input id="customTopic" type="text" placeholder="例如：機場入境、咖啡店聊天">
+      </div>
+      <div class="row">
+        <label for="levelSelect">英文程度</label>
+        <select id="levelSelect">
+          <option value="beginner">初級</option>
+          <option value="intermediate">中級</option>
+          <option value="advanced">高級</option>
+        </select>
+      </div>
+      </div>
+      <button id="startBtn" type="button">開始聊天</button>
+    </section>
+
+    <section class="panel chat">
+      <div id="chatLog" class="chat-log" aria-live="polite"></div>
+      <div id="starterBox" class="starter-box"></div>
+      <div id="hintBox" class="hint-box"></div>
+      <div id="correctionBox" class="correction-box"></div>
+      <div class="composer">
+        <textarea id="userInput" rows="3" placeholder="輸入英文訊息..."></textarea>
+        <div class="actions">
+          <button id="stuckBtn" type="button">我卡住了</button>
+          <button id="sendBtn" type="button">送出</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

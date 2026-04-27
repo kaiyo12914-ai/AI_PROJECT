@@ -1,0 +1,54 @@
+{% load custom_tags %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ProjectNotes 指標儀表</title>
+  <link rel="stylesheet" href="{% custom_static 'projectnotes/css/index.css' %}">
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
+</head>
+<body data-base-url="{{ request.script_name }}">
+  <main class="wrap">
+    <h1>ProjectNotes 指標儀表</h1>
+    <div class="card">
+      <div class="line">
+        <input id="projectId" type="text" placeholder="project_id（可空）">
+        <input id="days" type="text" value="7" placeholder="天數">
+        <button id="loadBtn" type="button">查詢</button>
+      </div>
+      <div id="status" class="status"></div>
+      <pre id="json" class="source-list" style="white-space:pre-wrap;"></pre>
+    </div>
+  </main>
+  <script>
+    (function () {
+      function u(path) { return typeof window.apiurl === "function" ? window.apiurl(path) : path; }
+      const projectId = document.getElementById("projectId");
+      const days = document.getElementById("days");
+      const loadBtn = document.getElementById("loadBtn");
+      const status = document.getElementById("status");
+      const json = document.getElementById("json");
+
+      async function load() {
+        const q = new URLSearchParams();
+        if (projectId.value.trim()) q.set("project_id", projectId.value.trim());
+        q.set("days", days.value.trim() || "7");
+        const resp = await fetch(u("/projectnotes/metrics_api/?" + q.toString()));
+        const data = await resp.json();
+        if (!data.ok) {
+          status.textContent = data.error || "查詢失敗";
+          status.style.color = "#b91c1c";
+          return;
+        }
+        status.textContent = `查詢完成，區間 ${data.days} 天`;
+        status.style.color = "#0f766e";
+        json.textContent = JSON.stringify(data.metrics, null, 2);
+      }
+      loadBtn.addEventListener("click", () => load().catch(() => {}));
+      load().catch(() => {});
+    })();
+  </script>
+</body>
+</html>
+

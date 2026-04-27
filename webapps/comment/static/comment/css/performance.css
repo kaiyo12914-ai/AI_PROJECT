@@ -160,6 +160,16 @@ input[type="text"] {
   box-shadow: none;
 }
 
+.student-btn.completed {
+  background-color: rgba(34, 197, 94, 0.2) !important; /* 綠色透明背景 */
+  color: rgba(34, 197, 94, 0.8);
+  border-color: rgba(34, 197, 94, 0.5);
+}
+
+.student-btn.completed:hover {
+  background-color: rgba(34, 197, 94, 0.3) !important;
+}
+
 .student-btn.active {
   background: #2563eb;
   color: white;
@@ -241,6 +251,14 @@ input[type="text"] {
   margin-top: 20px;
 }
 
+.ml-5{
+  margin-left: 5px;
+}
+
+.ml-20{
+  margin-left: 20px;
+}
+
 .note {
   font-size: 14px;
   line-height: 1.5;
@@ -254,4 +272,119 @@ input[type="text"] {
 @media (max-width: 768px) {
   .container { margin: 12px; padding: 16px; }
   .grid-2 { grid-template-columns: minmax(0, 1fr); }
+}
+
+.grade-selection {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    margin-top: 8px;
+}
+
+/* 禁用按鈕樣式 */
+button:disabled {
+  background-color: #ccc;
+  color: #666;
+  cursor: not-allowed;
+}
+
+/* 隱藏原始的 radio button */
+input[type="radio"] {
+  display: none;
+}
+
+/* 為每個 radio button 設置一個自定義的標籤 */
+label.radio-custom-label {
+  display: inline-block;
+  padding: 5px 10px;  
+  border: 2px solid #ccc;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s, border-color 0.3s;
+  font-family: Arial, sans-serif;
+  font-size: 16px;
+  color: #333;
+}
+
+/* 當 radio button 被選中時的樣式 */
+input[type="radio"]:checked + label.radio-custom-label {
+  background-color: #007bff;
+  color: #fff;
+  border-color: #007bff;
+}
+
+/* 滑過時的樣式 */
+label.radio-custom-label:hover {
+  background-color: #f0f0f0;
+}
+
+/* radiobutton 標籤樣式 */
+.grade-selection label {
+    display: flex;
+    align-items: center;
+    margin-right: 8px;
+}
+
+.grade-item-card {
+    background-color: white; /* 背景色與 card 一致 */
+    padding: 3px 14px;
+    border-radius: 6px;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+}
+
+/* 每一個指標（如「思想」、「績效」）卡片樣式 */
+.performance-sub-grade-row {    
+    margin-bottom: 0px;
+}
+
+.performance-sub-grade-row .item-name {
+    font-weight: bold;
+    min-width: 80px; /* 確保項目名稱區塊固定寬度 */
+}
+
+.performance-sub-grade-row .grade-options {
+    display: flex;
+    gap: 4px;
+}
+
+#evaluationsList {
+  position: relative; /* 容納 absolute 的 loading */
+  min-height: 200px;
+}
+
+/* Loading overlay styles */
+#loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.8); /* Semi-transparent white background */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 10; /* Ensure it's above other content */
+}
+
+#loading-overlay .spinner {
+  border: 8px solid #f3f3f3; /* Light gray */
+  border-top: 8px solid #3498db; /* Blue */
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  animation: spin 1s linear infinite;
+}
+
+#loading-overlay .text {
+  margin-top: 10px;
+  font-size: 16px;
+  color: #333;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }

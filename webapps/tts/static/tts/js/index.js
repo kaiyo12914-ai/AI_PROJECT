@@ -105,7 +105,7 @@
       const model = (ttsModel.value || "").trim();
       if (model) form.append("model", model);
 
-      const resp = await fetch(apiurlFn("generate_from_file/"), {
+      const resp = await fetch(apiurlFn("tts/generate_from_file/"), {
         method: "POST",
         body: form,
       });
@@ -170,7 +170,7 @@
     btnTts.disabled = true;
 
     try {
-      const resp = await fetch(apiurlFn("generate/"), {
+      const resp = await fetch(apiurlFn("tts/generate/"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, model }),
@@ -241,7 +241,7 @@
       const form = new FormData();
       form.append("audio", file);
 
-      const resp = await fetch(apiurlFn("transcribe/"), {
+      const resp = await fetch(apiurlFn("tts/transcribe/"), {
         method: "POST",
         body: form,
       });
@@ -297,7 +297,7 @@
     }
     setStatus(sttStatus, "匯出 TXT…");
     try {
-      const resp = await fetch(apiurlFn("export_txt/"), {
+      const resp = await fetch(apiurlFn("tts/export_txt/"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
@@ -319,7 +319,7 @@
     }
     setStatus(sttStatus, "匯出 DOCX…");
     try {
-      const resp = await fetch(apiurlFn("export_docx/"), {
+      const resp = await fetch(apiurlFn("tts/export_docx/"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),

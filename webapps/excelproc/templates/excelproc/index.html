@@ -1,16 +1,17 @@
 {% load static %}
+{% load custom_tags %}
 <!-- webapps/excelproc/templates/excelproc/index.html -->
 <!doctype html>
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
-  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% custom_static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
 <title>ExcelProc｜人事資料處理</title>
-  <link rel="stylesheet" href="{% static 'excelproc/css/index.css' %}">
-  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+  <link rel="stylesheet" href="{% custom_static 'excelproc/css/index.css' %}">
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
 </head>
 
 <body data-base-url="{{ request.script_name }}" data-api-run-path="{% url 'excelproc:run' %}">
@@ -49,7 +50,7 @@
       <textarea id="oExport" placeholder="結果..."></textarea>
     </div>
   </div>
-  <script defer src="{% static 'excelproc/js/index.js' %}"></script>
+  <script defer src="{% custom_static 'excelproc/js/index.js' %}"></script>
 </body>
 </html>
 

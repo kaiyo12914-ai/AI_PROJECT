@@ -9,17 +9,17 @@
 (function () {
   "use strict";
 
-  
+
 
   // ✅ 全專案共用：apiurl_factory（由 portal/js/apiurl_factory.js 提供）
-  var apiurl_factory = window.apiurl_factory || function(path){
+  var apiurl_factory = window.apiurl_factory || function (path) {
     var base = String((document.body && document.body.dataset && document.body.dataset.baseUrl) || "").trim();
     var p = String(path || "");
     if (p && p.charAt(0) !== "/") p = "/" + p;
     return base + p;
   };
 
-// ✅ CSRF：即使目前 API 可能 csrf_exempt，也先做滿（未來改回 CSRF 不會炸）
+  // ✅ CSRF：即使目前 API 可能 csrf_exempt，也先做滿（未來改回 CSRF 不會炸）
   function getCookie(name) {
     const cookieStr = document.cookie || "";
     const cookies = cookieStr.split(";").map(c => c.trim()).filter(Boolean);
@@ -28,6 +28,11 @@
     }
     return "";
   }
+
+  // 搜尋輸入值
+  let traitSearchValue = "";
+
+  let emploies = [];
 
   // 維度數據
   const thoughtCharacteristics = [
@@ -136,12 +141,38 @@
     { name: "丙等", color: "#ef4444" }
   ];
 
+  const postures = [
+    { name: "適中", color: "#3b82f6" },  // 可以選擇適合的顏色
+    { name: "瘦", color: "#536dfa" },    // 可以選擇適合的顏色
+    { name: "胖", color: "#22c55e" },    // 可以選擇適合的顏色
+    { name: "過瘦", color: "#10b981" },  // 可以選擇適合的顏色
+    { name: "過胖", color: "#f43f5e" }   // 可以選擇適合的顏色
+  ];
+
+  const physicals = [
+    { name: "合格", color: "#22c55e" },  // 綠色代表合格
+    { name: "不合格", color: "#f43f5e" } // 紅色代表不合格
+  ];
+
+  const hrSuggestions = [
+    { name: "部隊指揮職", color: "#3b82f6" },  // 藍色
+    { name: "一般幕僚職", color: "#536dfa" },  // 靛青色
+    { name: "專才專業職", color: "#22c55e" },  // 綠色
+    { name: "向上派職", color: "#10b981" },    // 淺綠色
+    { name: "進修深造", color: "#f43f5e" },    // 紅色
+    { name: "平衡歷練", color: "#ef4444" },    // 橙紅色
+    { name: "續任現職", color: "#eab308" },    // 橙黃色
+    { name: "不適現職", color: "#f43f5e" }     // 紅色
+  ];
+
   const state = {
     traits: [],
     selectedTraits: new Set(),
     customTraits: [],
     comments: [],
+    evaluations: [],
     currentStudent: null,
+    currentIDNO: null,
     activeTab: "all",
     performanceGrade: null,
     // ✅ 避免連點造成多次請求堆疊（符合穩定性）
@@ -150,7 +181,7 @@
 
   // elements
   let traitListEl, selectedTraitsEl, customTraitListEl, customTraitInputEl, customTraitCountEl;
-  let studentListEl, studentButtonsEl, commentPreviewEl;
+  let studentListEl, studentButtonsEl, commentPreviewEl, btnGetEvaluations, traitSearchInput;
 
   function initElements() {
     traitListEl = document.getElementById("traitList");
@@ -161,6 +192,8 @@
     studentListEl = document.getElementById("studentList");
     studentButtonsEl = document.getElementById("studentButtons");
     commentPreviewEl = document.getElementById("commentPreview");
+    btnGetEvaluations = document.getElementById("btnGetEvaluations");
+    traitSearchInput = document.getElementById("traitSearchInput");
   }
 
   function initState() {
@@ -192,6 +225,10 @@
     document.getElementById("btnResetPerformance").addEventListener("click", resetPerformanceGrades);
     document.getElementById("btnClearComments").addEventListener("click", clearComments);
 
+    document.getElementById("btnGetEvaluations").addEventListener('click', loadEvaluations);
+
+    traitSearchInput.addEventListener('input', traitSearch);
+
     customTraitInputEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter") addCustomTrait();
     });
@@ -201,12 +238,31 @@
     });
   }
 
+  function showLoading() {
+    const evaluationsList = document.getElementById('evaluationsList');
+    const overlay = document.createElement('div');
+    overlay.id = 'loading-overlay';
+    overlay.innerHTML = `
+        <div class="spinner"></div>
+        <div class="text">生成中</div>
+    `;
+    evaluationsList.appendChild(overlay);
+  }
+
+  function hideLoading() {
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) {
+      overlay.remove();
+    }
+  }
+
   function toggleTab(tab) {
     document.querySelectorAll("#tabs button").forEach(btn => btn.classList.remove("active"));
     const active = document.querySelector(`#tabs button[data-tab="${tab}"]`);
     if (active) active.classList.add("active");
     state.activeTab = tab || "all";
     renderTraits();
+    traitSearch();
   }
 
   function renderTraits() {
@@ -230,7 +286,7 @@
       if (state.selectedTraits.has(trait.name)) {
         btn.style.backgroundColor =
           trait.color === "#3b82f6" ? "#536dfa" :
-          trait.color === "#f43f5e" ? "#ef4444" : "#2563eb";
+            trait.color === "#f43f5e" ? "#ef4444" : "#2563eb";
         btn.style.color = "white";
       } else {
         btn.style.backgroundColor = trait.color + "1A";
@@ -257,6 +313,9 @@
     else state.selectedTraits.add(traitName);
     renderTraits();
     renderSelectedTraits();
+    traitSearch();
+
+    checkCommentGenerateButtonState();
   }
 
   function renderSelectedTraits() {
@@ -296,9 +355,82 @@
       btn.addEventListener("click", () => {
         state.performanceGrade = grade.name;
         renderPerformanceGrades();
+        checkCommentGenerateButtonState();
       });
 
       performanceListEl.appendChild(btn);
+    });
+  }
+
+  // 績效子項目渲染
+  function renderSubPerformanceGrades() {
+    renderSubPerformanceGradeItem(document.getElementById("thoughtGradeOptions"), "thoughtGradeOptions");
+    renderSubPerformanceGradeItem(document.getElementById("moralityOptions"), "moralityOptions");
+    renderSubPerformanceGradeItem(document.getElementById("abilityOptions"), "abilityOptions");
+    renderSubPerformanceGradeItem(document.getElementById("knowledgeOptions"), "knowledgeOptions");
+    renderSubPerformanceGradeItem(document.getElementById("performanceOptions"), "performanceOptions");
+
+    renderSubPerformanceGradeItem(document.getElementById("postureOptions"), "postureOptions", postures);
+    renderSubPerformanceGradeItem(document.getElementById("physicalOptions"), "physicalOptions", physicals);
+    renderSubPerformanceGradeItem(document.getElementById("hrSuggestionOptions"), "hrSuggestionOptions", hrSuggestions);
+  }
+
+  function getRadioButtonListValue(ElName) {
+    return document.querySelector(`input[name="${ElName}"]:checked`)?.value;
+  }
+
+  function getSubPerformanceGrades(showAlert = true) {
+    let r = [];
+
+    let items = ["thoughtGradeOptions", "moralityOptions", "abilityOptions", "knowledgeOptions", "performanceOptions", "postureOptions", "physicalOptions", "hrSuggestionOptions"];
+
+    items.forEach(element => {
+      let v = getRadioButtonListValue(element);
+      if (!v && showAlert) {
+        alert("請勾選每一項績效評等的項目");
+        throw new Error(`${element} not selected`);
+      }
+
+      let item = {};
+      item[element] = v;
+      r.push(item);
+    });
+
+    return r;
+  }
+
+  /*
+  績效單一項目渲染
+  gradeItemEl : 要渲染的元素
+  inputName : input元素的name值，讓radiobuttonlist分組用
+  */
+  function renderSubPerformanceGradeItem(gradeItemEl, inputName, grades = performanceGrades) {
+    gradeItemEl.innerHTML = '';
+
+    let index = 0;
+    grades.forEach(grade => {
+      const label = document.createElement("label");
+      const input = document.createElement("input");
+
+      input.type = "radio";
+      input.value = grade.name;
+      input.name = inputName;
+      input.id = `${inputName}_${index}`;
+
+      label.append(`${grade.name}`);
+      label.className = 'radio-custom-label';
+      label.htmlFor = input.id;
+
+      gradeItemEl.appendChild(input);
+      gradeItemEl.appendChild(label);
+
+      index++;
+    });
+
+    document.querySelectorAll(`input[name="${inputName}"]`).forEach(function (radio) {
+      radio.addEventListener('change', function () {
+        checkCommentGenerateButtonState();
+      });
     });
   }
 
@@ -370,15 +502,26 @@
       return;
     }
 
-    lines.forEach(line => {
+    emploies.forEach(employ => {
       const btn = document.createElement("button");
       btn.className = "student-btn";
-      btn.textContent = line;
+      btn.textContent = employ.name;
+      btn.setAttribute("data-idno", employ.idno);
       btn.addEventListener("click", () => {
         Array.from(studentButtonsEl.children).forEach(b => b.classList.remove("active"));
-        state.currentStudent = line;
+        state.currentStudent = employ.name;
+        state.currentIDNO = employ.idno;
         btn.classList.add("active");
+
+        checkCommentGenerateButtonState();
       });
+
+      // 新增：檢查該學員是否已生成評語
+      // if (state.evaluations.some(evalItem => evalItem.getAttribute("data-idno") === employ.idno)) {
+      //   btn.classList.add("completed");
+      //   btn.title = "已完成考核評語生成";
+      // }
+
       studentButtonsEl.appendChild(btn);
     });
 
@@ -386,20 +529,72 @@
     if (firstBtn) {
       state.currentStudent = lines[0];
       firstBtn.classList.add("active");
+      state.currentIDNO = emploies[0].idno;
     }
   }
 
+  // 檢查並設置生成評語按鈕的狀態:沒有完成所需參數的設置之前，讓按鈕顯示為disable
+  function checkCommentGenerateButtonState() {
+    let comment_btn = document.getElementById("btnGenerateComment");
+
+    // 檢查績效項目評定：每一個項目都要勾選
+    let subgradesArray = getSubPerformanceGrades(false);
+
+    const everySubGradeHasValue = subgradesArray.every(item => {
+      const keys = Object.keys(item);
+      // 檢查是否只有一個屬性
+      if (keys.length === 1) {
+        const key = keys[0];
+        // 檢查這個屬性是否有值
+        return item[key] !== undefined && item[key] !== null && item[key] !== '';
+      }
+      return false;
+    });
+
+    let r = Boolean(state.currentStudent &&
+      state.currentIDNO &&
+      state.selectedTraits.size > 0 &&
+      state.performanceGrade &&
+      everySubGradeHasValue);
+
+    comment_btn.disabled = !r;
+  }
+
+  function scrollToCommentPreview(event) {
+    const targetElement = document.getElementById('evaluationsList');
+    targetElement.focus(); // 將焦點移到目標元素
+    event.preventDefault();
+    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' }); // 平滑滾動到目標元素
+    // 此處的id值為hardcode，元素順序有變更時需要調整
+    document.getElementById("tab-4").click();
+  }
+
   // ✅ 生成評語：依規範 반드시 comment node 前綴 → comment/api/generate_comment/
-  async function generateComment() {
+  async function generateComment(event) {
     if (state.generating) return; // ✅ 避免連點
     if (!state.currentStudent) {
       alert("請先選擇人員！");
       return;
     }
+
+    if (!state.currentIDNO) {
+      alert("缺少受評人員帳號資訊");
+      return;
+    }
+
     if (state.selectedTraits.size === 0 && !state.performanceGrade) {
       alert("請至少選擇一個維度或評等！");
       return;
     }
+
+    if (!state.performanceGrade) {
+      alert("請選擇績效評等！");
+      return;
+    }
+
+    let subPerformanceGrades = getSubPerformanceGrades();
+
+    scrollToCommentPreview(event);
 
     state.generating = true;
 
@@ -412,10 +607,13 @@
     state.comments.unshift(loadingItem);
     renderComments();
 
+    showLoading();
+
     try {
       const traitsArr = Array.from(state.selectedTraits);
       const grade = state.performanceGrade || "";
       const csrftoken = getCookie("csrftoken");
+      const idno = state.currentIDNO;
 
       const response = await fetch(apiurl_factory("comment/api/generate_comment/"), {
         method: "POST",
@@ -425,11 +623,14 @@
         },
         body: JSON.stringify({
           student_name: namePart,
+          idno: idno,
           traits: traitsArr,
           performance_grade: grade,
+          subPerformanceGrades: subPerformanceGrades,
           max_chars: 80,
           temperature: 0.7,
-          timeout: 30
+          timeout: 30,
+          store: true
         })
       });
 
@@ -447,11 +648,19 @@
 
       loadingItem.comment = payload.reply || payload.result || "(empty)";
       renderComments();
+
+      await loadEvaluations();
+      renderEvaluations();
+
+      hideLoading();
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("生成評語失敗:", error);
       loadingItem.comment = `❌ 生成失敗: ${error.message || error}`;
       renderComments();
+
+      await loadEvaluations();
+      renderEvaluations();
     } finally {
       state.generating = false;
     }
@@ -497,7 +706,7 @@
 
     const a = document.createElement("a");
     a.href = url;
-    a.download = `人員考核評語_${new Date().toISOString().slice(0,10)}.txt`;
+    a.download = `人員考核評語_${new Date().toISOString().slice(0, 10)}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -521,12 +730,150 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `人員考核評語_${new Date().toISOString().slice(0,10)}.csv`;
+    a.download = `人員考核評語_${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
 
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  // 新增：獲取當前使用者生成的所有 Evaluation
+  async function loadEvaluations() {
+    if (!state.loadedEvaluations) { // 防止重複呼叫 API
+      try {
+        const response = await fetch(apiurl_factory("comment/api/get_evaluations/"));
+        let payload;
+
+        try { payload = await response.json(); } catch (e) {
+          console.error("載入評語失敗: JSON 解析錯誤", e);
+          return;
+        }
+
+        if (!response.ok || !payload.ok) {
+          const errorMsg = payload && payload.error ? `\nError: ${payload.error}` : "";
+          throw new Error(`伺服器錯誤: ${response.status}${errorMsg}`);
+        }
+
+        state.evaluations = payload.evaluations || [];
+
+        debugger;
+        //state.comments
+
+      } catch (error) {
+        console.error("載入評語失敗:", error);
+        alert("載入評論失敗，請檢查網路連線或聯絡系統管理員。");
+      }
+    }
+  }
+
+  // 新增：渲染Evaluation列表
+  function renderEvaluations() {
+    const evaluationsContainer = document.getElementById('evaluationsList');
+    if (!evaluationsContainer) return;
+
+    if (state.evaluations.length === 0) {
+      const emptyMsg = document.createElement("div");
+      emptyMsg.textContent = "無現有評論記錄";
+      emptyMsg.style.color = "#6b7280";
+      evaluationsContainer.innerHTML = "";
+      evaluationsContainer.appendChild(emptyMsg);
+    } else {
+      evaluationsContainer.innerHTML = "";
+
+      state.evaluations.forEach(evaluation => {
+        const itemDiv = document.createElement("div");
+        itemDiv.className = "evaluation-item";
+
+        itemDiv.dataset.id = evaluation.id;
+
+        const nameHeader = document.createElement("header");
+        nameHeader.textContent = evaluation.student_name;
+        nameHeader.style.fontWeight = "500";
+        nameHeader.style.marginBottom = "6px";
+
+        const gradeSpan = document.createElement("span");
+        if (evaluation.performance_grade) {
+          gradeSpan.textContent = `績效等級: ${evaluation.performance_grade}`;
+          gradeSpan.style.color = "#4f46e5";
+          gradeSpan.style.marginRight = "10px";
+          itemDiv.appendChild(gradeSpan);
+        }
+
+        const traitsList = document.createElement("ul");
+        if (evaluation.traits && evaluation.traits.length > 0) {
+          traitsList.innerHTML = "<li>特質:</li>";
+          evaluation.traits.forEach(trait => {
+            const traitItem = document.createElement("li");
+            traitItem.textContent = "- " + trait;
+            traitItem.style.color = "#374151";
+            traitsList.appendChild(traitItem);
+          });
+        }
+
+        const dateSpan = document.createElement("span");
+        if (evaluation.created_at) {
+          const date = new Date(evaluation.created_at).toLocaleString();
+          dateSpan.textContent = `生成日期: ${date}`;
+          dateSpan.style.color = "#6b7280";
+          dateSpan.style.fontSize = "smaller";
+          itemDiv.appendChild(dateSpan);
+
+          let deleteButton = document.createElement("button");
+          deleteButton.className = "ml-20 danger";
+          deleteButton.textContent = "刪除";
+          deleteButton.addEventListener('click', deleteEvaluation);
+          itemDiv.appendChild(deleteButton);
+        }
+
+        const commentText = document.createElement("pre");
+        commentText.className = "evaluation-comment";
+        commentText.textContent = evaluation.comment_text;
+        commentText.style.whiteSpace = "pre-wrap";
+        commentText.style.maxWidth = "100%";
+
+        itemDiv.appendChild(nameHeader);
+        if (traitsList.children.length > 1) {
+          itemDiv.appendChild(traitsList);
+        }
+        itemDiv.appendChild(commentText);
+
+        evaluationsContainer.appendChild(itemDiv);
+      });
+    }
+  }
+
+  async function deleteEvaluation(event) {
+    const csrftoken = getCookie("csrftoken");
+    const evaluationId = event.currentTarget.closest(".evaluation-item").dataset.id;;
+    try {
+      const response = await fetch(apiurl_factory(`comment/api/delete_evaluation/${evaluationId}/`), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(csrftoken ? { "X-CSRFToken": csrftoken } : {}),
+        }
+      });
+      let payload;
+
+      try { payload = await response.json(); } catch (e) {
+        console.error("刪除評語失敗: JSON 解析錯誤", e);
+        return;
+      }
+
+      if (!response.ok || !payload.ok) {
+        const errorMsg = payload && payload.error ? `\nError: ${payload.error}` : "";
+        throw new Error(`伺服器錯誤: ${response.status}${errorMsg}`);
+      }
+
+      state.evaluations = payload.evaluations || [];
+
+      loadEvaluations();
+      renderEvaluations();
+    } catch (error) {
+      console.error("刪除評語失敗:", error);
+      alert("載入評論失敗，請檢查網路連線或聯絡系統管理員。");
+    }
   }
 
   function resetAll() {
@@ -561,6 +908,7 @@
     state.selectedTraits = new Set();
     renderTraits();
     renderSelectedTraits();
+    traitSearch();
   }
 
   function importFile() {
@@ -611,15 +959,90 @@
     renderComments();
   }
 
+  // 新增：獲取當前使用者生成的所有 Evaluation
+  async function loadEvaluations() {
+    if (!state.loadedEvaluations) { // 防止重複呼叫 API
+      try {
+        const response = await fetch(apiurl_factory("comment/api/get_evaluations/"));
+        let payload;
+
+        try { payload = await response.json(); } catch (e) {
+          console.error("載入評語失敗: JSON 解析錯誤", e);
+          return;
+        }
+
+        if (!response.ok || !payload.ok) {
+          const errorMsg = payload && payload.error ? `\nError: ${payload.error}` : "";
+          throw new Error(`伺服器錯誤: ${response.status}${errorMsg}`);
+        }
+
+        state.evaluations = payload.evaluations || [];
+
+        state.comments = state.evaluations.map(x => ({ student: x.student_name, comment: x.comment_text }));
+      } catch (error) {
+        console.error("載入評語失敗:", error);
+        alert("載入評論失敗，請檢查網路連線或聯絡系統管理員。");
+      }
+    }
+
+    renderEvaluations();
+  }
+
+  // 取得單位內所有人員並產生人員按鈕
+  async function queryEmploies() {
+
+    let factory = document.querySelector("#h_factory").value;
+    let dep = document.querySelector("#h_dep").value;
+
+    const response = await fetch(`${window.location.protocol}//www.mpc.mil.tw/PersonnelWebService/Employ/GetEmploies`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        factory: factory,
+        dep: dep
+      })
+    });
+
+    emploies = await response.json();
+
+    studentListEl.value = emploies.map(item => item.name).join("\n");
+
+    generateStudentButtons({ silentEmpty: true });
+  }
+
+  function traitSearch() {
+    let keyword = traitSearchInput.value;
+    console.log(keyword);
+
+    let traitListDOMs = Array.from(traitListEl.querySelectorAll("button"));
+    // 每次的搜尋都要先重置可見度
+    traitListDOMs.forEach(element => {
+      element.style['display'] = "block";
+    });
+
+    let unselectedTraitListDOMs = traitListDOMs.filter(item => { return item.textContent?.indexOf(keyword) == -1 });
+
+    unselectedTraitListDOMs.forEach(element => {
+      element.style['display'] = "none";
+    });
+  }
+
   function boot() {
     initElements();
     initState();
     bindEvents();
 
+    queryEmploies();
+    loadEvaluations(); // 新增：載入評論資訊
+
     renderTraits();
     renderSelectedTraits();
     renderPerformanceGrades();
+    renderSubPerformanceGrades();
     renderComments();
+    renderEvaluations(); // 新增：渲染現有評論記錄
   }
 
   window.addEventListener("DOMContentLoaded", boot);

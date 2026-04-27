@@ -1,19 +1,20 @@
 {% load static %}
+{% load custom_tags %}
 <!doctype html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
-  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% custom_static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
   <title>會議指裁事項擬答（RAG + LLM）</title>
 
   <!-- ✅ 規範：CSS 外掛（static） -->
-  <link rel="stylesheet" href="{% static 'meetingreply/css/index.css' %}">
+  <link rel="stylesheet" href="{% custom_static 'meetingreply/css/index.css' %}">
 
   <!-- ✅ 規範：全專案共用 apiurl_factory（只讀 body.dataset.baseUrl） -->
-  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
 </head>
 
 <!-- {# ============================================================
@@ -29,7 +30,7 @@
   data-api-build-path="meetingreply/api/build_reply/"
   data-env="{{ ENV_NAME|default:'' }}"
   data-int-todo-url="{{ INT_TODO_URL|default:'' }}"
-  data-mock-todo-url="{% static 'meetingreply/mockMeetingItems.json' %}"
+  data-mock-todo-url="{% custom_static 'meetingreply/mockMeetingItems.json' %}"
 >
 <div class="wrap">
   <div class="card">
@@ -124,6 +125,6 @@
 </div>
 
 <!-- ✅ 規範：JS 外掛（static + defer） -->
-<script defer src="{% static 'meetingreply/js/index.js' %}"></script>
+<script defer src="{% custom_static 'meetingreply/js/index.js' %}"></script>
 </body>
 </html>

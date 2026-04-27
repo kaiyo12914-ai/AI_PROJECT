@@ -1,21 +1,22 @@
 {% load static %}
+{% load custom_tags %}
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
   <title>公文轉入範例庫維護</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
-  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% custom_static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
 
-  <link rel="stylesheet" href="{% static 'doc/css/doc_index.css' %}">
+  <link rel="stylesheet" href="{% custom_static 'doc/css/doc_index.css' %}">
 
-  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
-  <script defer src="{% static 'doc/js/incoming_sybase.js' %}"></script>
-  <script defer src="{% static 'doc/js/doc_index_templates.js' %}"></script>
-  <script defer src="{% static 'doc/js/doc_index_editor.js' %}"></script>
-  <script defer src="{% static 'doc/js/doc_index_bootstrap.js' %}"></script>
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% custom_static 'doc/js/incoming_sybase.js' %}"></script>
+  <script defer src="{% custom_static 'doc/js/doc_index_templates.js' %}"></script>
+  <script defer src="{% custom_static 'doc/js/doc_index_editor.js' %}"></script>
+  <script defer src="{% custom_static 'doc/js/doc_index_bootstrap.js' %}"></script>
 </head>
 
 <body data-base-url="{{ app_base_url }}" class="templates-manage">

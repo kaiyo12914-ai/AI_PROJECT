@@ -1,63 +1,25 @@
 # webapps/llm/llm_factory.py
 import os
 import inspect
-import json
 import logging
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
 
 from dotenv import load_dotenv
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-_ENV_ALIASES = {
-    "DEV": "DEV_EXT",
-    "EXT": "DEV_EXT",
-    "INT": "DEV_INT",
-    "PROD": "PROD_EXT",
-}
-
-
-def _normalize_env_name(raw: str) -> str:
-    return _ENV_ALIASES.get((raw or "").strip().upper(), (raw or "").strip().upper())
-
-
-def _active_env_name() -> str:
-    return _normalize_env_name(os.getenv("ENV") or "DEV_EXT")
-
-
-def _env_keys(name: str) -> list[str]:
-    env_name = _active_env_name()
-    keys = [f"{name}__{env_name}"]
-    keys.append(name)
-    return keys
-
-
-def _env_get(name: str, default: str | None = None) -> str | None:
-    for key in _env_keys(name):
-        if key in os.environ:
-            return os.environ.get(key)
-    return default
-
-
-def _env_has(name: str) -> bool:
-    for key in _env_keys(name):
-        if key in os.environ:
-            return True
-    return False
-
 
 def _f(name: str, default: float) -> float:
     try:
-        return float(_env_get(name, str(default)))
+        return float(os.getenv(name, str(default)))
     except Exception:
         return default
 
 
 def _i(name: str, default: int) -> int:
     try:
-        return int(_env_get(name, str(default)))
+        return int(os.getenv(name, str(default)))
     except Exception:
         return default
 
@@ -66,7 +28,7 @@ def _b(name: str, default: bool = False) -> bool:
     """
     env bool: 1/0, true/false, yes/no, on/off
     """
-    v = (_env_get(name, "") or "").strip().lower()
+    v = (os.getenv(name) or "").strip().lower()
     if not v:
         return default
     return v in ("1", "true", "yes", "y", "on")
@@ -86,17 +48,16 @@ def _model_timeout_default() -> int:
 def _resolved_model_priority() -> list[str]:
     """
     Resolve AUTO backend priority by ENV first, then MODEL_PRIORITY, then legacy fallback.
-    - ENV=DEV_INT/PROD_INT: force OLLAMA only (intranet policy)
-    - ENV=DEV_EXT/PROD_EXT: default GOOGLE -> OPENAI -> OLLAMA
-    - Legacy aliases: EXT/DEV->DEV_EXT, INT->DEV_INT, PROD->PROD_EXT.
+    - ENV=INT: force OLLAMA only (intranet policy)
+    - ENV=EXT: default GOOGLE -> OPENAI -> OLLAMA
     """
-    env_name = _active_env_name()
-    raw_prio = (_env_get("MODEL_PRIORITY", "") or "").strip()
+    env_name = (os.getenv("ENV") or "").strip().upper()
+    raw_prio = (os.getenv("MODEL_PRIORITY") or "").strip()
 
-    if env_name in ("DEV_INT", "PROD_INT"):
+    if env_name == "INT":
         return ["OLLAMA"]
 
-    if env_name in ("DEV_EXT", "PROD_EXT"):
+    if env_name == "EXT":
         if raw_prio:
             return [x.strip().upper() for x in raw_prio.split(",") if x.strip()]
         return ["GOOGLE", "OPENAI", "OLLAMA"]
@@ -168,7 +129,7 @@ def _ollama_fallback_models(primary_model: str) -> list[str]:
     Override by OLLAMA_FALLBACK_MODELS, e.g.:
       OLLAMA_FALLBACK_MODELS=gemma3:4b,qwen3:8b
     """
-    raw = (_env_get("OLLAMA_FALLBACK_MODELS", "gemma3:4b,qwen3:8b") or "gemma3:4b,qwen3:8b").strip()
+    raw = (os.getenv("OLLAMA_FALLBACK_MODELS") or "gemma3:4b,qwen3:8b").strip()
     out: list[str] = []
     seen = set()
     for x in raw.split(","):
@@ -185,66 +146,6 @@ def _ollama_fallback_models(primary_model: str) -> list[str]:
     return out
 
 
-def _ollama_list_models(base_url: str, timeout_sec: int = 5) -> list[str]:
-    """
-    Probe Ollama /api/tags and return installed model names.
-    Returns [] when probe fails.
-    """
-    base = (base_url or "").strip().rstrip("/")
-    if not base:
-        return []
-
-    url = f"{base}/api/tags"
-    try:
-        req = Request(url, headers={"Accept": "application/json"})
-        with urlopen(req, timeout=max(1, int(timeout_sec))) as resp:
-            raw = resp.read()
-        payload = json.loads(raw.decode("utf-8", errors="ignore"))
-    except Exception as e:
-        logger.info("[LLM] OLLAMA tags probe failed: %r", e)
-        return []
-
-    models = payload.get("models") or []
-    out: list[str] = []
-    seen = set()
-    for item in models:
-        if isinstance(item, dict):
-            name = (item.get("name") or item.get("model") or "").strip()
-        else:
-            name = str(item).strip()
-        if not name:
-            continue
-        key = name.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(name)
-    return out
-
-
-def _merge_ollama_fallback_models(
-    primary_model: str,
-    *,
-    base_url: str,
-    timeout_sec: int,
-) -> list[str]:
-    merged: list[str] = []
-    seen = set()
-
-    for model_name in _ollama_fallback_models(primary_model) + _ollama_list_models(base_url, timeout_sec):
-        m = (model_name or "").strip()
-        if not m:
-            continue
-        if m.lower() == primary_model.lower():
-            continue
-        key = m.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        merged.append(m)
-    return merged
-
-
 def _should_try_ollama_fallback(err: Exception) -> bool:
     s = str(err or "").lower()
     return (
@@ -254,8 +155,17 @@ def _should_try_ollama_fallback(err: Exception) -> bool:
     )
 
 
-def get_chat_model(temperature: float | None = None, timeout: int | None = None):
-    model_type = (_env_get("MODEL_TYPE", "AUTO") or "AUTO").strip().upper()
+def get_chat_model(temperature: float | None = None, timeout: int | None = None,model_type:str | None = None):
+    """
+    透過工廠方法產生llm物件
+
+    # 範例
+     - 若需要使用LM-Studio的新模型時：
+     llm = get_chat_model(0.7,30,"LM_STUDIO")
+     
+     可參考單元測試 `tests\test_llm_factory.py`
+    """
+    model_type = (os.getenv("MODEL_TYPE") or "AUTO").strip().upper()
 
     if model_type == "GOOGLE":
         return _make_google(temperature=temperature, timeout=timeout)
@@ -265,6 +175,9 @@ def get_chat_model(temperature: float | None = None, timeout: int | None = None)
 
     if model_type == "OPENAI":
         return _make_openai(temperature=temperature, timeout=timeout)
+    
+    if model_type == "LM_STUDIO":
+        return _make_openai(temperature=temperature, timeout=timeout,model="ministral-3-14b-instruct-2512",base_url="http://mpcai.mpc.mil.tw:1234/v1")
 
     if model_type == "AUTO":
         return _make_auto(temperature=temperature, timeout=timeout)
@@ -283,7 +196,7 @@ def _resolve_temperature(provider_key: str, passed: float | None) -> float:
         return float(passed)
 
     # provider-specific first (if set)
-    if _env_has(provider_key):
+    if os.getenv(provider_key) is not None:
         return _f(provider_key, _model_temperature_default())
 
     # fallback to MODEL_TEMPERATURE
@@ -295,7 +208,7 @@ def _resolve_timeout(provider_key: str, passed: int | None) -> int:
         return int(passed)
 
     # provider-specific first (if set)
-    if _env_has(provider_key):
+    if os.getenv(provider_key) is not None:
         return _i(provider_key, _model_timeout_default())
 
     # fallback to MODEL_TIMEOUT
@@ -306,7 +219,7 @@ def log_llm_config():
     """
     啟動時列印 LLM 配置摘要，方便診斷。
     """
-    model_type = (_env_get("MODEL_TYPE", "AUTO") or "AUTO").strip().upper()
+    model_type = (os.getenv("MODEL_TYPE") or "AUTO").strip().upper()
     logger.info("[LLM CONFIG] MODEL_TYPE=%s", model_type)
 
     def _mask_key(key):
@@ -315,16 +228,16 @@ def log_llm_config():
         return f"SET ({key[:4]}...{key[-4:]})"
 
     if model_type == "GOOGLE":
-        m = _env_get("GOOGLE_MODEL", "gemini-1.5-flash")
-        k = _env_get("GOOGLE_API_KEY")
+        m = os.getenv("GOOGLE_MODEL", "gemini-3-flash")
+        k = os.getenv("GEMINI_API_KEY")
         logger.info("[LLM CONFIG] GOOGLE: model=%s, api_key=%s", m, _mask_key(k))
     elif model_type == "OPENAI":
-        m = _env_get("OPENAI_MODEL", "gpt-4o-mini")
-        k = _env_get("OPENAI_API_KEY")
+        m = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        k = os.getenv("OPENAI_API_KEY")
         logger.info("[LLM CONFIG] OPENAI: model=%s, api_key=%s", m, _mask_key(k))
     elif model_type == "OLLAMA":
-        m = _env_get("OLLAMA_MODEL", "mistral_small_3_1_2503:latest")
-        u = _env_get("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
+        m = os.getenv("OLLAMA_MODEL", "mistral_small_3_1_2503:latest")
+        u = os.getenv("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
         logger.info("[LLM CONFIG] OLLAMA: model=%s, base_url=%s", m, u)
     elif model_type == "AUTO":
         prio = _resolved_model_priority()
@@ -334,9 +247,9 @@ def log_llm_config():
         status_line = []
         for p in prio:
             if p == "GOOGLE":
-                status_line.append(f"GOOGLE:{_mask_key(_env_get('GOOGLE_API_KEY'))}")
+                status_line.append(f"GOOGLE:{_mask_key(os.getenv('GEMINI_API_KEY'))}")
             elif p == "OPENAI":
-                status_line.append(f"OPENAI:{_mask_key(_env_get('OPENAI_API_KEY'))}")
+                status_line.append(f"OPENAI:{_mask_key(os.getenv('OPENAI_API_KEY'))}")
             elif p == "OLLAMA":
                 status_line.append(f"OLLAMA:Ready")
         logger.info("[LLM CONFIG] Status: %s", " | ".join(status_line))
@@ -352,8 +265,8 @@ def _make_ollama(temperature: float | None, timeout: int | None):
         from langchain_community.llms.ollama import Ollama as OllamaLLM  # type: ignore
         _new_pkg = False
 
-    base_url = _env_get("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
-    model = _env_get("OLLAMA_MODEL", "mistral_small_3_1_2503:latest")
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
+    model = os.getenv("OLLAMA_MODEL", "mistral_small_3_1_2503:latest")
 
     # ✅ 改：支援 MODEL_TEMPERATURE / MODEL_TIMEOUT fallback
     t = _resolve_temperature("OLLAMA_TEMPERATURE", temperature)
@@ -384,34 +297,18 @@ def _make_ollama(temperature: float | None, timeout: int | None):
         kwargs["model"] = model_name
         return OllamaLLM(**kwargs)
 
-    probe_timeout = max(3, min(to, 8))
-    installed_models = _ollama_list_models(base_url, timeout_sec=probe_timeout)
-
-    active_model = model
-    if installed_models and all(m.lower() != model.lower() for m in installed_models):
-        active_model = installed_models[0]
-        logger.warning(
-            "[LLM] OLLAMA model '%s' not found in /api/tags. Auto switch to '%s'.",
-            model,
-            active_model,
-        )
-
-    llm = _build_ollama(active_model)
+    llm = _build_ollama(model)
 
     class LoggedOllama:
         def invoke(self, input, **kwargs):
-            _log_llm_use("OLLAMA", active_model, temperature=t, timeout=to)
+            _log_llm_use("OLLAMA", model, temperature=t, timeout=to)
             try:
                 return llm.invoke(input, **kwargs)
             except Exception as e:
                 if not _should_try_ollama_fallback(e):
                     raise
                 last_err = e
-                for alt in _merge_ollama_fallback_models(
-                    active_model,
-                    base_url=base_url,
-                    timeout_sec=probe_timeout,
-                ):
+                for alt in _ollama_fallback_models(model):
                     try:
                         _log_llm_use("OLLAMA_FALLBACK", alt, temperature=t, timeout=to)
                         return _build_ollama(alt).invoke(input, **kwargs)
@@ -421,18 +318,14 @@ def _make_ollama(temperature: float | None, timeout: int | None):
                 raise last_err
 
         async def ainvoke(self, input, **kwargs):
-            _log_llm_use("OLLAMA", active_model, temperature=t, timeout=to)
+            _log_llm_use("OLLAMA", model, temperature=t, timeout=to)
             try:
                 return await llm.ainvoke(input, **kwargs)
             except Exception as e:
                 if not _should_try_ollama_fallback(e):
                     raise
                 last_err = e
-                for alt in _merge_ollama_fallback_models(
-                    active_model,
-                    base_url=base_url,
-                    timeout_sec=probe_timeout,
-                ):
+                for alt in _ollama_fallback_models(model):
                     try:
                         _log_llm_use("OLLAMA_FALLBACK", alt, temperature=t, timeout=to)
                         return await _build_ollama(alt).ainvoke(input, **kwargs)
@@ -443,25 +336,26 @@ def _make_ollama(temperature: float | None, timeout: int | None):
 
         def __repr__(self):
             backend_name = "OllamaLLM" if _new_pkg else "Ollama(community)"
-            return f"{backend_name}(model={active_model})"
+            return f"{backend_name}(model={model})"
 
     return LoggedOllama()
 
 
-def _make_openai(temperature: float | None, timeout: int | None):
+def _make_openai(temperature: float | None, timeout: int | None,model:str |None=None,base_url:str | None=None):
     from langchain_openai import ChatOpenAI
 
-    api_key = _env_get("OPENAI_API_KEY")
+    api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY 未設定（OpenAI 不可用）")
 
-    model = _env_get("OPENAI_MODEL", "gpt-4o-mini")
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
     # ✅ 改：支援 MODEL_TEMPERATURE / MODEL_TIMEOUT fallback
     t = _resolve_temperature("OPENAI_TEMPERATURE", temperature)
     to = _resolve_timeout("OPENAI_TIMEOUT", timeout)
 
     llm = ChatOpenAI(
+        base_url=base_url,
         model=model,
         temperature=t,
         timeout=to,
@@ -501,11 +395,11 @@ def _make_google(temperature: float | None, timeout: int | None):
             HarmCategory = None
             HarmBlockThreshold = None
 
-    api_key = _env_get("GOOGLE_API_KEY")
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not api_key:
-        raise RuntimeError("GOOGLE_API_KEY 未設定（Google Gemini 不可用）")
+        raise RuntimeError("GEMINI_API_KEY 未設定（Google Gemini 不可用）")
 
-    model = _env_get("GOOGLE_MODEL", "gemini-1.5-flash")
+    model = os.getenv("GOOGLE_MODEL", "gemini-1.5-flash")
 
     t = _resolve_temperature("GOOGLE_TEMPERATURE", temperature)
     to = _resolve_timeout("GOOGLE_TIMEOUT", timeout)
@@ -590,7 +484,7 @@ def _make_auto(temperature: float | None, timeout: int | None):
                     continue
                 
                 try:
-                    _log_llm_use(f"AUTO->({name})", _env_get(f"{name}_MODEL", ""))
+                    _log_llm_use(f"AUTO->({name})", os.getenv(f"{name}_MODEL", ""))
                     return llm.invoke(input, config=config, **kwargs)
                 except Exception as e:
                     last_err = e
@@ -607,7 +501,7 @@ def _make_auto(temperature: float | None, timeout: int | None):
                     continue
                 
                 try:
-                    _log_llm_use(f"AUTO->({name})", _env_get(f"{name}_MODEL", ""))
+                    _log_llm_use(f"AUTO->({name})", os.getenv(f"{name}_MODEL", ""))
                     return await llm.ainvoke(input, config=config, **kwargs)
                 except Exception as e:
                     last_err = e

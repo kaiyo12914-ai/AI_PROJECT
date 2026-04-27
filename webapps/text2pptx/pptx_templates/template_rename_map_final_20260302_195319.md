@@ -1,7 +1,7 @@
 # PPTX Template Rename Map (Final)
 
 - Generated: 2026-03-02 19:53:19
-- Directory: `H:\AI\AI_TOOLS\webapps\text2pptx\pptx_templates`
+- Directory: `h:\AI\Django\webapps\text2pptx\pptx_templates`
 
 | Old Name | New Name | Status |
 |---|---|---|

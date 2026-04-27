@@ -1,41 +1,39 @@
 {% load static %}
+{% load custom_tags %}
+{# webapps/portal/templates/portal/index.html #}
 {% load portal_extras %}
+{% load custom_tags %}
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <title>AI（雛形）輔助系統入口</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
-  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="stylesheet" href="{% static 'portal/css/index.css' %}">
-  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
-  <script defer src="{% static 'portal/js/index.js' %}"></script>
+  <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% custom_static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="stylesheet" href="{% custom_static 'portal/css/index.css' %}">
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% custom_static 'portal/js/index.js' %}"></script>
 </head>
 <body
   data-base-url="{{ request.script_name }}"
   class="portal-home {% if request.GET.bg_variant|default:'a'|lower == 'b' %}bg-enhanced{% else %}bg-conservative{% endif %} {% if request.GET.bg_anim == '0' %}bg-anim-off{% endif %}"
 >
 {% with card_variant=request.GET.card_variant|default:'a'|lower bg_variant=request.GET.bg_variant|default:'a'|lower panel_variant=request.GET.panel_variant|default:'a'|lower %}
-  {% include "portal/_ai_background.html" with variant=bg_variant %}
   <div class="container {% if panel_variant == 'b' %}container--glass{% else %}container--soft{% endif %}">
     <h1>AI（雛形）輔助系統入口</h1>
     <div class="subtitle">請選擇欲使用之系統功能</div>
 
     <div class="loginbar">
       <span>歡迎：</span>
-      <span class="pill">
-        {% if request.login_user_name %}
-          {{ request.login_user_name }}
-        {% else %}
-          （未取得姓名）
-        {% endif %}
-      </span>
+      <span class="pill">{% if request.login_user_name %}{{ request.login_user_name }}{% else %}未取得姓名{% endif %}</span>
     </div>
 
     <div class="menu {% if card_variant == 'b' %}menu--b{% else %}menu--a{% endif %}">
       {% allow "translator" as can_translator %}
+      {% allow "englishchat" as can_englishchat %}
+      {% allow "projectnotes" as can_projectnotes %}
       {% allow "comment" as can_comment %}
       {% allow "doc" as can_doc %}
       {% allow "excelproc" as can_excelproc %}
@@ -47,15 +45,31 @@
       {% allow "todo" as can_todo %}
       {% allow "portal" as can_portal %}
       {% allow "vanna" as can_vanna %}
+      {% allow "formalize" as can_formalize %}
 
       {% if can_translator %}
         {% url 'translator_page' as translator_href %}
         {% include "portal/_svg_card.html" with href=translator_href title="翻譯工具" subtitle="中英 / 多語翻譯" tone="blue" icon="translate" variant=card_variant %}
       {% endif %}
 
+      {% if can_englishchat %}
+        {% url 'englishchat:page' as englishchat_href %}
+        {% include "portal/_svg_card.html" with href=englishchat_href title="美語學習教室" subtitle="主題對話 / 口語陪練" tone="blue" icon="chat" variant=card_variant %}
+      {% endif %}
+
+      {% if can_formalize %}
+        {% url 'document_formalize:page' as formalize_href %}
+        {% include "portal/_svg_card.html" with href=formalize_href title="文件公文化" subtitle="口語改正式公文" tone="gray" icon="formalize" variant=card_variant %}
+      {% endif %}
+
+      {% if can_projectnotes %}
+        {% url 'projectnotes:page' as projectnotes_href %}
+        {% include "portal/_svg_card.html" with href=projectnotes_href title="專案筆記查詢" subtitle="專案知識選界 / 引用對話" tone="green" icon="notebook" variant=card_variant %}
+      {% endif %}
+
       {% if can_comment %}
         {% url 'comment:page_index' as comment_href %}
-        {% include "portal/_svg_card.html" with href=comment_href title="考績評量工具" subtitle="評語建議與文字優化" tone="blue" icon="comment" variant=card_variant %}
+        {% include "portal/_svg_card.html" with href=comment_href title="考績評語評量" subtitle="評語建議文字優化" tone="blue" icon="comment" variant=card_variant %}
       {% endif %}
 
       {% if can_todo %}
@@ -70,12 +84,12 @@
 
       {% if can_doc %}
         {% url 'doc:doc_page' as doc_href %}
-        {% include "portal/_svg_card.html" with href=doc_href title="簽文輔助系統" subtitle="公文、簽呈擬稿輔助" tone="blue" icon="doc" variant=card_variant %}
+        {% include "portal/_svg_card.html" with href=doc_href title="截圖 → 文字檔" subtitle="圖表 / 流程圖轉文字" tone="blue" icon="doc" variant=card_variant %}
       {% endif %}
 
       {% if can_graph %}
         {% url 'graph_page' as graph_href %}
-        {% include "portal/_svg_card.html" with href=graph_href title="截圖 → 文字檔" subtitle="圖表 / 流程圖轉文字" tone="blue" icon="graph" variant=card_variant %}
+        {% include "portal/_svg_card.html" with href=graph_href title="圖表整理工具" subtitle="統計圖 / 關聯圖轉文字" tone="blue" icon="graph" variant=card_variant %}
       {% endif %}
 
       {% if can_pdf %}
@@ -90,25 +104,25 @@
 
       {% if can_tts %}
         {% url 'tts_page' as tts_href %}
-        {% include "portal/_svg_card.html" with href=tts_href title="語音 / 文字" subtitle="TTS / STT" tone="cyan" icon="tts" variant=card_variant %}
+        {% include "portal/_svg_card.html" with href=tts_href title="語音轉文字" subtitle="TTS / STT" tone="cyan" icon="tts" variant=card_variant %}
       {% endif %}
 
       {% if can_portal %}
         {% url 'portal:usage_page' as usage_href %}
-        {% include "portal/_svg_card.html" with href=usage_href title="Portal 使用紀錄" subtitle="使用紀錄查詢" tone="gray" icon="usage" variant=card_variant %}
+        {% include "portal/_svg_card.html" with href=usage_href title="Portal 使用統計" subtitle="使用紀錄與匯出" tone="gray" icon="usage" variant=card_variant %}
       {% endif %}
 
       {% if can_excelproc %}
         {% url 'excelproc:excelproc_page' as excelproc_href %}
-        {% include "portal/_svg_card.html" with href=excelproc_href title="Excel 處理工具" subtitle="分頁 / 欄位 / 合併 Excel" tone="gray" icon="excel" variant=card_variant %}
+        {% include "portal/_svg_card.html" with href=excelproc_href title="Excel 程式工具" subtitle="模板 / 解析 / 下載" tone="gray" icon="excel" variant=card_variant %}
       {% endif %}
 
       {% if can_vanna %}
-        {% include "portal/_svg_card.html" with href="http://mpcai.mpc.mil.tw:8084" title="Vanna" subtitle="SQL 產生 / 查詢助理" tone="cyan" icon="vanna" variant=card_variant new_tab=True %}
+        {% include "portal/_svg_card.html" with href="http://mpcai.mpc.mil.tw:8084" title="Vanna" subtitle="SQL 產生 / 問答" tone="cyan" icon="vanna" variant=card_variant new_tab=True %}
       {% endif %}
     </div>
 
-    <footer>© {% now "Y" %} 生產製造中心 | 內部系統</footer>
+    <footer>© {% now "Y" %} 內部系統服務平台</footer>
   </div>
 {% endwith %}
 </body>
