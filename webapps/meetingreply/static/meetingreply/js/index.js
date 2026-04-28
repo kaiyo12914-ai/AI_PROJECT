@@ -395,50 +395,70 @@ function apiFromDatasetPath(key) {
     return Number.isFinite(n) ? n : null;
   }
 
+  function clipBlock(text, maxLen = 180) {
+    const s = String(text || "").replace(/\s+/g, " ").trim();
+    if (!s) return "";
+    return s.length > maxLen ? s.slice(0, maxLen) + "..." : s;
+  }
+
   // ============================================================
   // snippet formatting
   // ============================================================
-  function formatSnippetForPickList(raw) {
+  function formatSnippetForPickList(raw, meta = {}) {
     const text = String(raw || "").replace(/\r/g, "").trim();
-    if (!text) return "";
+    const m = meta && typeof meta === "object" ? meta : {};
 
-    const lines = text.split("\n").map((x) => x.trim()).filter(Boolean);
-
+    const lines = text ? text.split("\n").map((x) => x.trim()).filter(Boolean) : [];
     const pickVal = (keys) => {
       for (const ln of lines) {
         for (const key of keys) {
           const esc = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
           const re = new RegExp("^" + esc + "\\s*[:=：]\\s*(.*)$", "i");
-          const m = ln.match(re);
-          if (m && m[1] !== undefined) return m[1].trim();
+          const match = ln.match(re);
+          if (match && match[1] !== undefined) return match[1].trim();
         }
       }
       return "";
     };
 
-    const meetingName = pickVal(["案件名稱", "會議名稱"]);
-    const directive = pickVal(["指裁示", "指示", "裁示"]);
-    const status = pickVal(["辦況", "辦理情形", "辦理狀況", "辦理結果"]);
-    const plant = pickVal(["廠別"]);
-    const approvedAt = pickVal(["核定日", "審定日"]);
+    const meetingName = String(
+      m.case_name || m.meeting_name || m.title || pickVal(["案件名稱", "會議名稱", "會議名稱"])
+    ).trim();
+    const directive = String(
+      m.directive || pickVal(["指裁示內容", "指裁示", "指示", "裁示"])
+    ).trim();
+    const status = String(
+      m.status || pickVal(["辦理情形/擬答", "辦理情形", "辦理狀況", "辦理結果", "辦況"])
+    ).trim();
+    const deptName = String(
+      m.dept_name || m.dept || pickVal(["主辦單位", "回覆單位", "廠別"])
+    ).trim();
+    const updatedAt = String(
+      m.updated_at || pickVal(["回覆日期", "核定日", "審定日"])
+    ).trim();
 
     const out = [];
     if (meetingName) out.push(`會議名稱：${meetingName}`);
-    if (directive) out.push(`指裁示：\n${directive}`);
-    if (directive && status) out.push("—".repeat(90));
-    if (status) out.push(`辦況：\n${status}`);
+    if (directive) out.push(`指裁示：${clipBlock(directive, 160)}`);
+    if (status) out.push(`辦理情形：${clipBlock(status, 160)}`);
 
     const tail = [];
-    if (plant) tail.push(`回覆單位：${plant}`);
-    if (approvedAt) tail.push(`回覆日期：${approvedAt}`);
+    if (deptName) tail.push(`主辦單位：${deptName}`);
+    if (updatedAt) tail.push(`日期：${updatedAt}`);
     if (tail.length) out.push(tail.join("   "));
 
-    return out.length ? out.join("\n") : lines.slice(0, 6).join("\n");
+    if (out.length) return out.join("\n");
+    return lines.slice(0, 6).join("\n");
   }
 
   function getSnippet(h) {
+    const meta = (h && (h.meta || h.metadata)) || {};
     const raw = String(h?.snippet || h?.text || h?.document || "").trim();
-    return formatSnippetForPickList(raw);
+    return formatSnippetForPickList(raw, meta);
+  }
+
+  function getMeta(h) {
+    return (h && (h.meta || h.metadata)) || {};
   }
 
   // ============================================================
@@ -465,6 +485,21 @@ function apiFromDatasetPath(key) {
       const docId = getDocId(h);
       const dist = getDist(h);
       const snip = getSnippet(h);
+      const meta = getMeta(h);
+      const meetingName = String(meta.case_name || meta.meeting_name || h.title || "").trim();
+      const directive = clipBlock(meta.directive || "", 220);
+      const status = clipBlock(meta.status || "", 220);
+      const deptName = String(meta.dept_name || meta.dept || "").trim();
+      const updatedAt = String(meta.updated_at || "").trim();
+      const detailRows = [];
+      if (meetingName) detailRows.push(`<div><b>會議名稱：</b>${escHtml(meetingName)}</div>`);
+      if (directive) detailRows.push(`<div><b>指裁示：</b>${escHtml(directive)}</div>`);
+      if (status) detailRows.push(`<div><b>辦理情形：</b>${escHtml(status)}</div>`);
+      if (deptName || updatedAt) {
+        detailRows.push(
+          `<div><b>主辦單位：</b>${escHtml(deptName || "—")}　<b>日期：</b>${escHtml(updatedAt || "—")}</div>`
+        );
+      }
 
       let distPill = `<span class="pill warn">no distance</span>`;
       if (dist !== null) {
@@ -485,7 +520,7 @@ function apiFromDatasetPath(key) {
               <div class="pickid">[${i + 1}] ${escHtml(docId || key || "（missing id）")}</div>
               ${distPill}
             </div>
-            <div class="snippet">${snip ? escHtml(snip) : "（無 snippet）"}</div>
+            <div class="snippet">${detailRows.length ? detailRows.join("") : (snip ? escHtml(snip) : "（無資料）")}</div>
           </div>
         </div>
       `;

@@ -11,7 +11,7 @@
   <title>會議指裁事項擬答（RAG + LLM）</title>
 
   <!-- ✅ 規範：CSS 外掛（static） -->
-  <link rel="stylesheet" href="{% custom_static 'meetingreply/css/index.css' %}">
+  <link rel="stylesheet" href="{% custom_static 'meetingreply/css/index.css' %}?v=20260428b">
 
   <!-- ✅ 規範：全專案共用 apiurl_factory（只讀 body.dataset.baseUrl） -->
   <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
@@ -125,6 +125,6 @@
 </div>
 
 <!-- ✅ 規範：JS 外掛（static + defer） -->
-<script defer src="{% custom_static 'meetingreply/js/index.js' %}"></script>
+<script defer src="{% custom_static 'meetingreply/js/index.js' %}?v=20260428b"></script>
 </body>
 </html>

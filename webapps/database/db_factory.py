@@ -295,15 +295,15 @@ def _mock_sybase(sql: str, params: Any, data: Dict[str, Any]) -> List[Any]:
                 ):
                     # docService.SEARCH_TRST_BASE_SQL shape
                     order = ["TM_GRSNO", "TM_DATE", "TM_PSID", "TM_NAME", "TM_RSTP", "TD_FORMAT", "TD_SUBJ", "TD_PATH", "DF_NAME", "DF_DATA_LEN"]
-                elif "TM_GRSNO" in s and "TM_RSTP" in s and "DF_DATA" in s and "EF_ID" not in s: # docService.SYB_OFFICIAL_DOC_BY_GRSNO_SQL ???
-                    # docService ??? official SQL?????SQLTEST.py?????TD_PATH/DF_NAME/DF_DATA_LEN
+                elif "TM_GRSNO" in s and "TM_RSTP" in s and "DF_DATA" in s and "EF_ID" not in s:  # docService.SYB_OFFICIAL_DOC_BY_GRSNO_SQL shape
+                    # Keep column order aligned with SQLTEST.py variants (with/without TD_PATH/DF_NAME/DF_DATA_LEN).
                     if "TD_PATH" in s or "DF_NAME" in s or "DF_DATA_LEN" in s:
                         order = ["TM_GRSNO", "TM_RSTP", "TD_FORMAT", "TD_SUBJ", "TM_DATE", "TM_PSID", "TM_NAME", "TD_PATH", "DF_NAME", "DF_DATA", "DF_DATA_LEN"]
                     elif "EF_NAME" in s or "EF_DATA" in s:
                         order = ["TM_GRSNO", "TM_RSTP", "TD_FORMAT", "TD_SUBJ", "TM_DATE", "TM_PSID", "TM_NAME", "DF_DATA", "EF_NAME", "EF_DATA"]
                     else:
                         order = ["TM_GRSNO", "TM_RSTP", "TD_FORMAT", "TD_SUBJ", "TM_DATE", "TM_PSID", "TM_NAME", "DF_DATA"]
-                elif "EF_ID" in s: # SQLtest.py ???
+                elif "EF_ID" in s:  # SQLTEST attachment variant
                     if "DF_DATA_LEN" in s or "EF_DATA_LEN" in s:
                         order = ["TM_GRSNO", "TM_RSTP", "TD_FORMAT", "TD_SUBJ", "TM_DATE", "TM_PSID", "TM_NAME", "TD_PATH", "DF_NAME", "DF_DATA", "DF_DATA_LEN", "EF_ID", "EF_NAME", "EF_DATA", "EF_DATA_LEN", "EF_PAGE"]
                     else:
@@ -314,7 +314,7 @@ def _mock_sybase(sql: str, params: Any, data: Dict[str, Any]) -> List[Any]:
                 out.append(_MockRow(row_map, order))
         return out
 
-    if "TM_SUBJ LIKE ?" in s and "TM_TDATE" in s: # SEARCH_OFFICIAL_DOCS_SQL ?????
+    if "TM_SUBJ LIKE ?" in s and "TM_TDATE" in s:  # SEARCH_OFFICIAL_DOCS_SQL shape
         results = record.get("search_results", []) or []
         out = []
         for r in results:
@@ -350,7 +350,7 @@ def _mock_sybase(sql: str, params: Any, data: Dict[str, Any]) -> List[Any]:
         return out
 
     if "DCS1_EMAL_TMP" in s and "DCS1_EMAL_FILE" in s:
-        # ??????????????? record????????????records ??attachments (???????????????瞉??? grsno ??????????
+        # Aggregate attachments across records; if grsno is exact-match mode, use current-record attachments only.
         all_recs = data.get("records", [data]) if isinstance(data.get("records"), list) else [data]
         if record not in all_recs:
             all_recs.insert(0, record)
@@ -393,7 +393,7 @@ def _mock_sybase(sql: str, params: Any, data: Dict[str, Any]) -> List[Any]:
                 if not any(q in f.lower() for f in fields):
                     continue
             
-            # ??????SELECT 1 ???雓??????????????????謅???∴???(1,)
+            # Existence-style query: return a single tuple (1,).
             if "SELECT TOP 1 1" in s or "SELECT 1" in s:
                 out.append((1,))
                 continue
@@ -416,7 +416,7 @@ def _mock_sybase(sql: str, params: Any, data: Dict[str, Any]) -> List[Any]:
                 "EF_PAGE": a.get("ef_page"),
             }
             
-            if "EM_PSID" in s: # SQL_1 / SYB_INCOMING_LOOKUP_SQL ?????
+            if "EM_PSID" in s:  # SQL_1 / SYB_INCOMING_LOOKUP_SQL shape
                 if "EM_SUBJ_LEN" in s or "TM_SUBJ_LEN" in s or "EF_NAME_LEN" in s:
                     order = ["EM_GRSNO", "EM_PSID", "TD_SUBJ", "EF_ID", "EF_NAME", "EF_DATA", "EF_DATA_LEN", "EM_SUBJ_LEN", "TM_SUBJ_LEN", "EF_NAME_LEN", "EF_PAGE"]
                 elif "EF_DATA" in s or "EF_DATA_LEN" in s:
@@ -913,7 +913,8 @@ def _load_db_factory_md_overrides() -> Dict[str, str]:
     Supports plain env-style lines anywhere in markdown:
       DOC_DB_205_ORA_HOST=10.29.136.198
       ORA_HOST=10.29.136.198
-      SQL_SERVER_HOST=mssql1.mpc.mil.tw\\mpcsqlserver
+      SQL_SERVER_HOST=mssql1.mpc.mil.tw
+      SQL_SERVER_INSTANCE=mpcsqlserver
     """
     p = _db_factory_md_path()
     try:
@@ -998,15 +999,19 @@ class SQLServerDB(BaseDB):
 
         driver = _pick_sqlserver_driver(c.sql_driver)
 
-        # instance ????????ost\\instance
-        if c.sql_instance:
-            server = f"{c.sql_host}\\{c.sql_instance}"
+        # SQL Server server token normalization:
+        # - If SQL_SERVER_HOST already contains "\instance", treat it as final.
+        # - Otherwise, append SQL_SERVER_INSTANCE when provided.
+        # - Fallback to host,port.
+        host = (c.sql_host or "").strip().replace("\\\\", "\\")
+        instance = (c.sql_instance or "").strip().lstrip("\\")
+
+        if "\\" in host:
+            server = host
+        elif instance:
+            server = f"{host}\\{instance}"
         else:
-            server = (
-                c.sql_host.replace("\\\\", "\\")
-                if "\\" in c.sql_host
-                else f"{c.sql_host},{int(c.sql_port)}"
-            )
+            server = f"{host},{int(c.sql_port)}"
 
         base = (
             f"DRIVER={{{driver}}};"
@@ -1048,7 +1053,7 @@ class SybaseDB(BaseDB):
     def _build_conn_str(self) -> str:
         c = self.cfg
 
-        # DSN ?????
+        # DSN mode
         if c.syb_dsn:
             parts = [f"DSN={c.syb_dsn}"]
             if c.syb_user:
@@ -1095,7 +1100,7 @@ class SybaseDB(BaseDB):
             cs = _normalize_charset(self.cfg.syb_charset)
             if cs:
                 try:
-                    # CHAR ??BIG5?????????踝?R ???? Unicode??????皝弄????????????
+                    # Explicit decoding/encoding to avoid mojibake on BIG5 text columns.
                     conn.setdecoding(pyodbc.SQL_CHAR, encoding=cs)
                     conn.setdecoding(pyodbc.SQL_WCHAR, encoding="utf-16le")
                     conn.setencoding(encoding=cs)
@@ -1113,9 +1118,9 @@ class SybaseDB(BaseDB):
 
 class OracleDB(BaseDB):
     """
-    Oracle ???????oracledb???hin mode??????
-    - ??????Oracle ODBC Driver
-    - ????????ip install oracledb
+    Oracle connection via python-oracledb (thin/thick).
+    - No Oracle ODBC driver is required.
+    - Install with: pip install oracledb
     """
 
     def __init__(self, config: Optional[DBConfig] = None, profile: str = "") -> None:
@@ -1126,7 +1131,7 @@ class OracleDB(BaseDB):
         try:
             import oracledb  # type: ignore
         except Exception as e:
-            raise RuntimeError("OracleDB ?? oracledb ????????pip install oracledb") from e
+            raise RuntimeError("OracleDB requires oracledb. Run: pip install oracledb") from e
         # Oracle path: fetch LOB columns as bytes/str immediately (not detached locators).
         try:
             if hasattr(oracledb, "defaults"):
@@ -1137,7 +1142,7 @@ class OracleDB(BaseDB):
         c = self.cfg
         if not (c.ora_host and c.ora_service and c.ora_user and c.ora_pass):
             raise RuntimeError(
-                "Oracle ?????????? ORA_HOST / ORA_SERVICE_NAME / ORA_USER / ORA_PASS?"
+                "Oracle config incomplete. Set ORA_HOST / ORA_SERVICE_NAME / ORA_USER / ORA_PASS."
             )
 
         dsn = f"{c.ora_host}:{int(c.ora_port)}/{c.ora_service}"
@@ -1171,12 +1176,12 @@ class OracleDB(BaseDB):
             try:
                 conn = _do_connect()
             except Exception as e:
-                raise RuntimeError(f"Oracle thick ?????dsn={dsn}, err={e}") from e
+                raise RuntimeError(f"Oracle thick connect failed. dsn={dsn}, err={e}") from e
         elif mode == "THIN":
             try:
                 conn = _do_connect()
             except Exception as e:
-                raise RuntimeError(f"Oracle thin ?????dsn={dsn}, err={e}") from e
+                raise RuntimeError(f"Oracle thin connect failed. dsn={dsn}, err={e}") from e
         else:
             # AUTO:
             # - default prefer thick when ORA_CLIENT_LIB_DIR is configured.
@@ -1241,7 +1246,7 @@ class PostgreSQLDB(BaseDB):
         c = self.cfg
         host, port, dbname, user, password = c.pg_host, c.pg_port, c.pg_db, c.pg_user, c.pg_pass
 
-        # 支援從 DATABASE_URL 中解析
+        # Prefer DATABASE_URL when present.
         db_url = _env("DATABASE_URL", "").strip()
         if db_url.startswith("postgres://") or db_url.startswith("postgresql://"):
             try:
@@ -1295,13 +1300,13 @@ def db_connect(db_type: DBType = "sqlserver", profile: str = ""):
 
 
 # ============================================================
-# Query helpers???????????
+# Query helpers
 # ============================================================
 def _normalize_params(db_type: DBType, params: Params) -> Any:
     """
-    - params=None?????????????None
-    - pyodbc???QLServer/Sybase???????????sequence????ist/tuple???????????dict
-    - oracledb???racle????????? dict ??sequence
+    - params=None: pass through None.
+    - pyodbc (SQLServer/Sybase): use positional params (list/tuple), not dict.
+    - oracledb (Oracle): supports dict or positional sequence.
     """
     if params is None:
         return None
@@ -1356,8 +1361,8 @@ def _normalize_params_for_db(db_type: DBType, params: Params) -> Any:
 
 def _apply_query_timeout(db_type: DBType, cursor: Any) -> None:
     """
-    pyodbc cursor.timeout ??driver ??????????獢???????蹌肅??????????
-    Oracle ??conn.call_timeout????????????
+    pyodbc cursor.timeout depends on driver support and can be ignored by some drivers.
+    Oracle timeout is mainly controlled by conn.call_timeout.
     """
     try:
         if db_type == "sqlserver":

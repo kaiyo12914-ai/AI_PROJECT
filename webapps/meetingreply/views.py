@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
@@ -14,7 +15,6 @@ from django.views.decorators.csrf import csrf_exempt
 
 from webapps.llm.llm_factory import get_chat_model
 from webapps.portal.decorators import require_node
-from webapps.doc.utils_login import get_login_user_idno
 from webapps.database.db_factory import db_connect
 
 # ✅ 直接呼叫 rag_search（不走 HTTP）
@@ -86,6 +86,52 @@ def _safe_json_body(request: HttpRequest) -> Dict[str, Any]:
         return obj if isinstance(obj, dict) else {}
     except Exception:
         return {}
+
+
+def _get_login_user_idno(request: HttpRequest) -> str:
+    """
+    Resolve current login user IDNO for meetingreply only.
+    Priority:
+    1) request.login_user
+    2) request.user.username
+    3) aaa token/header/cookie fallback
+    """
+    try:
+        v = getattr(request, "login_user", None)
+        if v is not None:
+            s = str(v).strip()
+            if s:
+                return s
+    except Exception:
+        pass
+
+    try:
+        u = getattr(request, "user", None)
+        if u and getattr(u, "is_authenticated", False):
+            name = str(getattr(u, "username", "") or "").strip()
+            if name:
+                return name
+    except Exception:
+        pass
+
+    try:
+        aaa = (
+            request.META.get("HTTP_X_AAA")
+            or request.META.get("HTTP_AAA")
+            or request.GET.get("aaa")
+            or request.COOKIES.get("aaa")
+            or ""
+        ).strip()
+        if aaa:
+            from webapps.portal.utils import aaadecode
+
+            decoded = str(aaadecode(aaa) or "").strip()
+            if decoded:
+                return decoded
+    except Exception:
+        pass
+
+    return ""
 
 
 def _as_int(
@@ -171,6 +217,54 @@ def _extract_todo_items(raw: Any) -> List[Any]:
     return []
 
 
+def _build_keyword_terms(q: str, *, max_terms: int = 12) -> List[str]:
+    """
+    Build keyword terms from mixed Chinese/English query text.
+    - Split by whitespace and common punctuation.
+    - For long Chinese segments, also derive short n-gram terms.
+    """
+    text = (q or "").strip()
+    if not text:
+        return []
+
+    pieces = [
+        p.strip()
+        for p in re.split(r"[\s,，。；;：:、|()（）\[\]{}<>《》「」『』\"'`~!@#$%^&*_+=?！？／\\\-]+", text)
+        if p and p.strip()
+    ]
+    terms: List[str] = []
+
+    def _push(term: str) -> None:
+        t = (term or "").strip()
+        if not t:
+            return
+        if len(t) > 32:
+            t = t[:32]
+        if len(t) < 2:
+            return
+        if t not in terms:
+            terms.append(t)
+
+    for p in pieces:
+        _push(p)
+
+        has_cjk = bool(re.search(r"[\u4e00-\u9fff]", p))
+        if has_cjk and len(p) >= 8:
+            step = 2
+            size = 4
+            for i in range(0, max(1, len(p) - size + 1), step):
+                _push(p[i : i + size])
+                if len(terms) >= max_terms:
+                    break
+        if len(terms) >= max_terms:
+            break
+
+    if not terms and text:
+        _push(text)
+
+    return terms[:max_terms]
+
+
 # ============================================================
 # RAG settings
 # ============================================================
@@ -215,7 +309,7 @@ def todo_list(request: HttpRequest):
     if request.method not in ("GET", "POST"):
         return _json_err("Method not allowed", status=405)
 
-    login_user = (get_login_user_idno(request) or "").strip()
+    login_user = (_get_login_user_idno(request) or "").strip()
     if not login_user:
         return _json_err("missing_login_user", status=401)
 
@@ -297,27 +391,38 @@ def _rag_ask_direct(q: str, *, k: int) -> Dict[str, Any]:
         conn = db_connect("postgresql")
         cur = conn.cursor()
         
-        words = [w.strip() for w in q.split() if w.strip()]
-        if not words:
-            words = [q]
+        terms = _build_keyword_terms(q, max_terms=12)
+        if not terms:
+            return {"ok": True, "sources": [], "top_k": 0}
 
-        conditions = []
-        params = []
-        # 只取前五個詞
-        for w in words[:5]:
-            conditions.append("(directive ILIKE %s OR title ILIKE %s OR case_name ILIKE %s)")
-            params.extend([f"%{w}%", f"%{w}%", f"%{w}%"])
+        where_parts: List[str] = []
+        where_params: List[str] = []
+        score_parts: List[str] = []
+        score_params: List[str] = []
+        for t in terms:
+            like = f"%{t}%"
+            cond = "(directive ILIKE %s OR title ILIKE %s OR case_name ILIKE %s OR status ILIKE %s OR dept_name ILIKE %s)"
+            where_parts.append(cond)
+            where_params.extend([like, like, like, like, like])
+            score_parts.append(f"(CASE WHEN {cond} THEN 1 ELSE 0 END)")
+            score_params.extend([like, like, like, like, like])
 
-        where_clause = " OR ".join(conditions)
-        sql = f"SELECT doc_id, case_id, item_no, case_name, title, directive, status, dept_name, updated_at FROM public.meeting_records WHERE {where_clause} ORDER BY updated_at DESC NULLS LAST LIMIT %s"
-        params.append(k)
-
-        cur.execute(sql, tuple(params))
+        where_clause = " OR ".join(where_parts)
+        score_expr = " + ".join(score_parts)
+        sql = (
+            "SELECT doc_id, case_id, item_no, case_name, title, directive, status, dept_name, updated_at, "
+            f"({score_expr}) AS hit_score "
+            "FROM public.meeting_records "
+            f"WHERE {where_clause} "
+            "ORDER BY hit_score DESC, updated_at DESC NULLS LAST LIMIT %s"
+        )
+        params = tuple(score_params + where_params + [k])
+        cur.execute(sql, params)
         rows = cur.fetchall()
 
         sources = []
         for index, r in enumerate(rows):
-            doc_id, case_id, item_no, case_name, title, directive, status, dept_name, updated_at = r
+            doc_id, case_id, item_no, case_name, title, directive, status, dept_name, updated_at, hit_score = r
             
             # 假造一個假距離分數(dist) 以利原有的 RAG pick 邏輯順利勾選（預設第一名0.1，循序增加）
             dist = 0.1 + (index * 0.01)
@@ -331,7 +436,14 @@ def _rag_ask_direct(q: str, *, k: int) -> Dict[str, Any]:
                 "meta": {
                     "case_id": case_id,
                     "item_no": item_no,
+                    "case_name": case_name,
+                    "title": title,
+                    "directive": directive,
+                    "status": status,
                     "dept": dept_name,
+                    "dept_name": dept_name,
+                    "updated_at": updated_at.isoformat() if updated_at else "",
+                    "hit_score": hit_score,
                 }
             })
 

@@ -53,16 +53,6 @@ def _normalize_subordinate_unit_short_name(text: str) -> str:
     )
     return t
 
-# ✅ RAG: context retrieval (Chroma knowledge base)
-try:
-    from webapps.llm.services import LLMServiceConfig, try_get_rag_context
-    _RAG_SERVICES_OK = True
-except Exception:
-    LLMServiceConfig = None  # type: ignore
-    try_get_rag_context = None  # type: ignore
-    _RAG_SERVICES_OK = False
-
-
 def _resolve_signer_org(request: HttpRequest, body: Dict[str, Any]) -> tuple[str, str, str]:
     explicit = normalize_doc_plant(str(body.get("plant") or "").strip(), default="") if body.get("plant") else ""
     from_whoami = normalize_doc_plant(get_login_user_org(request), default="")

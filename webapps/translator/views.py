@@ -17,6 +17,7 @@ from webapps.doc.models import DocumentTemplate
 
 # ✅ 統一 LLM：只走 llm_factory（禁止在 translator 內 new Ollama / 打 OpenAI HTTP）
 from webapps.llm.llm_factory import get_chat_model
+from webapps.llm.services import translate_core
 
 
 # =========================
@@ -291,6 +292,51 @@ def _llm_provider_tag(llm_obj: object) -> str:
         return "openai"
     # fallback
     return (os.getenv("MODEL_TYPE") or "AUTO").strip().lower()
+
+
+@csrf_exempt
+@require_node("translator", api=True)
+def api_translate(request):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+        if not isinstance(body, dict):
+            body = {}
+    except Exception:
+        return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
+
+    text = _safe_str(body.get("text")).strip()
+    if not text:
+        return JsonResponse({"ok": False, "error": "text is required"}, status=400)
+
+    source_lang = _safe_str(body.get("source_lang")).strip() or "auto"
+    target_lang = _safe_str(body.get("target_lang")).strip() or "zh-Hant"
+
+    try:
+        temperature = float(body.get("temperature")) if body.get("temperature") is not None else 0.2
+    except Exception:
+        temperature = 0.2
+
+    try:
+        timeout = int(body.get("timeout")) if body.get("timeout") is not None else 120
+    except Exception:
+        timeout = 120
+
+    try:
+        result = translate_core(
+            text,
+            source_lang=source_lang,
+            target_lang=target_lang,
+            temperature=temperature,
+            timeout=timeout,
+        )
+        return JsonResponse(result, status=200)
+    except ValueError as e:
+        return JsonResponse({"ok": False, "error": str(e)}, status=400)
+    except Exception as e:
+        return JsonResponse({"ok": False, "error": "internal error", "detail": repr(e)}, status=500)
 
 
 # =========================

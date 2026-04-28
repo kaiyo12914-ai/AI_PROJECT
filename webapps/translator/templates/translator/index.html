@@ -9,10 +9,15 @@
   <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
   <link rel="icon" type="image/svg+xml" href="{% custom_static 'portal/img/favicon-ai.svg' %}?v=3">
   <link rel="shortcut icon" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="stylesheet" href="{% custom_static 'translator/css/index.css' %}">
+  <link rel="stylesheet" href="{% custom_static 'translator/css/index.css' %}?v=20260428b">
   <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
 </head>
-<body data-base-url="{{ request.script_name }}" data-pdfjs-src="{% custom_static 'vendor/pdfjs/pdf.mjs' %}" data-pdfjs-worker="{% custom_static 'vendor/pdfjs/pdf.worker.mjs' %}">
+<body
+  data-base-url="{{ request.script_name }}"
+  data-api-translate-path="translator/translate/"
+  data-pdfjs-src="{% custom_static 'vendor/pdfjs/pdf.mjs' %}"
+  data-pdfjs-worker="{% custom_static 'vendor/pdfjs/pdf.worker.mjs' %}"
+>
   <div class="container">
     <h1>翻譯工具（免安裝版）</h1>
 
@@ -75,6 +80,6 @@
 
   <!-- ✅ PDF：pdf.js（你現在資料夾內是 pdf.mjs / pdf.worker.mjs） -->
 
-  <script type="module" src="{% custom_static 'translator/js/index.js' %}"></script>
+  <script type="module" src="{% custom_static 'translator/js/index.js' %}?v=20260428b"></script>
 </body>
 </html>

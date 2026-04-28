@@ -1,6 +1,14 @@
-const apiurlFn = (typeof window.apiurl === "function" && window.apiurl) || ((p) => p);
-// Use project-standard apiurl() + body[data-base-url], avoid brittle "../api/..." guessing.
-const API_TRANSLATE_URL = apiurlFn("api/translate/");
+function getTranslateApiUrl() {
+  const rawPath =
+    (document.body && document.body.dataset && document.body.dataset.apiTranslatePath) ||
+    "translator/translate/";
+  if (typeof window.apiurl === "function") {
+    return window.apiurl(rawPath);
+  }
+  const path = rawPath.startsWith("/") ? rawPath : "/" + rawPath;
+  const base = (document.body && document.body.dataset && document.body.dataset.baseUrl) || "";
+  return `${base}${path}`;
+}
 
 const pdfjsSrc = (document.body && document.body.dataset && document.body.dataset.pdfjsSrc) ? document.body.dataset.pdfjsSrc : "";
 const pdfjsWorker = (document.body && document.body.dataset && document.body.dataset.pdfjsWorker) ? document.body.dataset.pdfjsWorker : "";
@@ -119,7 +127,7 @@ if (pdfjsSrc) {
       setStatus("送出翻譯請求中...");
 
       try {
-        const resp = await fetch(API_TRANSLATE_URL, {
+        const resp = await fetch(getTranslateApiUrl(), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

@@ -4,6 +4,7 @@ from . import views
 
 urlpatterns = [
     path("", views.index, name="translator_page"),
+    path("translate/", views.api_translate, name="translator_translate"),
     path("parse/", views.api_parse_attachments, name="translator_parse"),
     path("templates/", views.api_templates, name="translator_templates"),
     path("generate/", views.api_generate_doc_prompt, name="translator_generate"),

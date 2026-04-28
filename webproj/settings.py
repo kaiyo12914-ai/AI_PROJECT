@@ -302,7 +302,8 @@ PORTAL_ACL = {
         "中心雲端網頁通用群組",
     ],
     "doc": [
-        "網頁系統管理員"
+        "ALL_AUTHENTICATED",
+         "服務中心人員群組",
     ],
     "meetingreply": [
         "ALL_AUTHENTICATED",
