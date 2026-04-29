@@ -1,5 +1,4 @@
 {% load static %}
-{% load custom_tags %}
 {% load portal_extras %}
 {# templates/pptx/index.html (或你實際路徑) #}
 <!DOCTYPE html>
@@ -7,12 +6,12 @@
 <head>
   <meta charset="UTF-8" />
   <title>TEXT → PPTX</title>
-  <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="icon" type="image/svg+xml" href="{% custom_static 'portal/img/favicon-ai.svg' %}?v=3">
-  <link rel="shortcut icon" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="stylesheet" href="{% custom_static 'text2pptx/css/index.css' %}">
-  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
-  <script defer src="{% custom_static 'text2pptx/js/index.js' %}"></script>
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="stylesheet" href="{% static 'text2pptx/css/index.css' %}">
+  <script defer src="{% static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% static 'text2pptx/js/index.js' %}"></script>
 </head>
 
 
@@ -41,55 +40,6 @@
       用 <b>===</b> 分隔投影片；每段第 1 行是標題，其餘各行是條列。<br>
       可用標記：<b>[標題投影片]</b>、<b>[章節標題]</b>、<b>[內容頁]</b>、<b>[雙欄必較頁]</b>。<br>
       送出後會直接下載 <b>.pptx</b>。
-    </div>
-
-    <div class="obj-guide">
-      <div class="obj-guide-title">文字內容與模板對應說明</div>
-      <div class="obj-grid">
-        <div class="obj-card">
-          <div class="obj-card-title">封面</div>
-          <ul>
-            <li>有填「簡報主題及檔名」就使用該名稱；未填則由內容自動產生。</li>
-          </ul>
-        </div>
-        <div class="obj-card">
-          <div class="obj-card-title">分頁</div>
-          <ul>
-            <li>每個 <b>===</b> 區塊會產生一頁。</li>
-          </ul>
-        </div>
-        <div class="obj-card">
-          <div class="obj-card-title">長內容</div>
-          <ul>
-            <li>條列過多會自動分頁（標題加「續」）。</li>
-          </ul>
-        </div>
-        <div class="obj-card">
-          <div class="obj-card-title">範本檢查</div>
-          <ul>
-            <li>需包含四種版型；缺少時會提示。</li>
-          </ul>
-        </div>
-        <div class="obj-card">
-          <div class="obj-card-title">版面名稱（優先）</div>
-          <ul>
-            <li>來源：PPTX 實際使用的版面配置名稱（例如：感謝您、市場比較）。</li>
-            <li>用途：優先匹配模板中同名版型，命中率最高。</li>
-            <li>抽取格式：每頁標頭為 <b>[版面名稱]投影片標題</b>。</li>
-          </ul>
-        </div>
-        <div class="obj-card">
-          <div class="obj-card-title">slide_type（備援）</div>
-          <ul>
-            <li>來源：系統判斷的結構類型（content / section / two_content / comparison）。</li>
-            <li>用途：當版面名稱無法匹配時，改用結構類型挑選相近版型。</li>
-            <li>特性：跨模板通用，但精準度低於版面名稱。</li>
-          </ul>
-        </div>
-      </div>
-      <div class="obj-guide-summary">
-        套用順序：先嘗試 <b>版面名稱</b> 對應模板版型，若找不到再回退到 <b>slide_type</b>。
-      </div>
     </div>
 
     <div class="layout-guide">
@@ -192,7 +142,7 @@
         <line x1="1440" y1="432" x2="1440" y2="488" stroke="#63b9c0" stroke-width="5"/>
 
         <text x="255" y="530" text-anchor="middle" font-size="40" font-weight="700" fill="#1f2329">
-          <tspan x="255" dy="0">1. 標題投影片</tspan>
+          <tspan x="255" dy="0">1. 版型1</tspan>
           <tspan x="255" dy="42">（首頁封面）</tspan>
         </text>
         <text x="255" y="608" text-anchor="middle" font-size="26" fill="#1f2329">
@@ -201,7 +151,7 @@
         </text>
 
         <text x="650" y="530" text-anchor="middle" font-size="40" font-weight="700" fill="#1f2329">
-          <tspan x="650" dy="0">2. 章節標題</tspan>
+          <tspan x="650" dy="0">2. 版型2</tspan>
           <tspan x="650" dy="42">（章節分頁）</tspan>
         </text>
         <text x="650" y="608" text-anchor="middle" font-size="26" fill="#1f2329">
@@ -210,7 +160,7 @@
         </text>
 
         <text x="1045" y="530" text-anchor="middle" font-size="40" font-weight="700" fill="#1f2329">
-          <tspan x="1045" dy="0">3. 內容頁</tspan>
+          <tspan x="1045" dy="0">3. 版型3</tspan>
           <tspan x="1045" dy="42">（多數內容需求）</tspan>
         </text>
         <text x="1045" y="608" text-anchor="middle" font-size="26" fill="#1f2329">
@@ -219,7 +169,7 @@
         </text>
 
         <text x="1440" y="530" text-anchor="middle" font-size="40" font-weight="700" fill="#1f2329">
-          <tspan x="1440" dy="0">4. 雙欄必較頁</tspan>
+          <tspan x="1440" dy="0">4. 版型4</tspan>
           <tspan x="1440" dy="42">（比較與對照）</tspan>
         </text>
         <text x="1440" y="608" text-anchor="middle" font-size="26" fill="#1f2329">

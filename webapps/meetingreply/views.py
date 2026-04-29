@@ -16,6 +16,7 @@ from django.views.decorators.csrf import csrf_exempt
 from webapps.llm.llm_factory import get_chat_model
 from webapps.portal.decorators import require_node
 from webapps.database.db_factory import db_connect
+from webapps.common.login_utils import get_login_user_idno
 
 # ✅ 直接呼叫 rag_search（不走 HTTP）
 try:
@@ -86,52 +87,6 @@ def _safe_json_body(request: HttpRequest) -> Dict[str, Any]:
         return obj if isinstance(obj, dict) else {}
     except Exception:
         return {}
-
-
-def _get_login_user_idno(request: HttpRequest) -> str:
-    """
-    Resolve current login user IDNO for meetingreply only.
-    Priority:
-    1) request.login_user
-    2) request.user.username
-    3) aaa token/header/cookie fallback
-    """
-    try:
-        v = getattr(request, "login_user", None)
-        if v is not None:
-            s = str(v).strip()
-            if s:
-                return s
-    except Exception:
-        pass
-
-    try:
-        u = getattr(request, "user", None)
-        if u and getattr(u, "is_authenticated", False):
-            name = str(getattr(u, "username", "") or "").strip()
-            if name:
-                return name
-    except Exception:
-        pass
-
-    try:
-        aaa = (
-            request.META.get("HTTP_X_AAA")
-            or request.META.get("HTTP_AAA")
-            or request.GET.get("aaa")
-            or request.COOKIES.get("aaa")
-            or ""
-        ).strip()
-        if aaa:
-            from webapps.portal.utils import aaadecode
-
-            decoded = str(aaadecode(aaa) or "").strip()
-            if decoded:
-                return decoded
-    except Exception:
-        pass
-
-    return ""
 
 
 def _as_int(
@@ -309,7 +264,7 @@ def todo_list(request: HttpRequest):
     if request.method not in ("GET", "POST"):
         return _json_err("Method not allowed", status=405)
 
-    login_user = (_get_login_user_idno(request) or "").strip()
+    login_user = (get_login_user_idno(request) or "").strip()
     if not login_user:
         return _json_err("missing_login_user", status=401)
 

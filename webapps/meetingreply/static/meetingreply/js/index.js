@@ -308,7 +308,7 @@ function apiFromDatasetPath(key) {
       setText("todoStatus", `待辦 ${_todoRows.length} 筆`);
       if (_todoRows.length > 0) {
         applyTodoToDirective(true, { index: 0 });
-        setTodoPickVisible(false);
+        setTodoPickVisible(true);
       } else {
         setTodoPickVisible(true);
       }

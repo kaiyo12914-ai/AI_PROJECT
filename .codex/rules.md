@@ -94,20 +94,29 @@
 
 ## 7) 測試規範（vibe coding）
 1. 新增或修改功能時，必須同步產出測試。
-2. 測試採金字塔：
-   - Unit 約 70%
-   - Integration 約 20%
-   - E2E 約 10%
-3. 每個測試主題至少含：
-   - happy path
-   - boundary case
-   - error handling
-4. 涉及外部 API / DB / 檔案 / 第三方時，優先使用 mock/stub/fake。
-5. 測試檔集中於：`H:\AI\AI_TOOLS\tests`
+2. 新子系統開發必須依 `H:\AI\AI_TOOLS\tests` 現有架構，同步補三層測試，不可只寫單層測試後宣稱完成：
    - `tests\unit\`
    - `tests\integration\`
    - `tests\e2e\`
-6. 檔名：`test_<功能名稱>.py`，框架優先 `pytest`。
+3. 三層測試要求如下：
+   - Unit：驗證純函式、service、formatter、validator、權限判斷等可局部隔離邏輯
+   - Integration：驗證 view、service、DB_FACTORY、ACL、request/response、mock 外部依賴整合行為
+   - E2E：驗證使用者關鍵流程與主要入口行為
+4. 新子系統若未附三層測試骨架與對應測試案例，視為未完成，不得合併。
+5. 測試採金字塔：
+   - Unit 約 70%
+   - Integration 約 20%
+   - E2E 約 10%
+6. 每個測試主題至少含：
+   - happy path
+   - boundary case
+   - error handling
+7. 涉及外部 API / DB / 檔案 / 第三方時，優先使用 mock/stub/fake；不得讓 unit test 直接依賴真實外部服務。
+8. 測試檔集中於：`H:\AI\AI_TOOLS\tests`
+   - `tests\unit\`
+   - `tests\integration\`
+   - `tests\e2e\`
+9. 檔名：`test_<功能名稱>.py`，框架優先 `pytest`。
 
 ---
 
