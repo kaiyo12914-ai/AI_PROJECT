@@ -55,3 +55,91 @@ webapps/text2pptx/pptx_templates/~$*
 
 .git_backup_20260330
 .pytest_cache
+
+# Open Notebook local/runtime files
+webapps/open-notebook-main
+webapps/open-notebook-main/.env
+webapps/open-notebook-main/docker.env
+webapps/open-notebook-main/.uploads/
+webapps/open-notebook-main/data/
+webapps/open-notebook-main/notebooks/
+webapps/open-notebook-main/notebook_data/
+webapps/open-notebook-main/prompts/patterns/user/
+webapps/open-notebook-main/sqlite-db/
+webapps/open-notebook-main/surreal-data/
+webapps/open-notebook-main/temp/
+webapps/open-notebook-main/todo.md
+webapps/open-notebook-main/google-credentials.json
+webapps/open-notebook-main/docs/custom_gpt/
+webapps/open-notebook-main/doc_exports/
+webapps/open-notebook-main/specs/
+webapps/open-notebook-main/claude-logs/
+webapps/open-notebook-main/.claude/
+webapps/open-notebook-main/.sisyphus/
+webapps/open-notebook-main/.playwright-mcp/
+webapps/open-notebook-main/.harness/
+webapps/open-notebook-main/.mcp.json
+webapps/open-notebook-main/.quarentena
+webapps/open-notebook-main/**/*.local.md
+webapps/open-notebook-main/*.local.yml
+
+# Python packaging / build artifacts
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+*.so
+
+# Python tooling caches / reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+cython_debug/
+
+# Python installer / packaging helpers
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Python / notebook editor state
+.ipynb_checkpoints/
+profile_default/
+ipython_config.py
+.spyderproject
+.spyproject
+.ropeproject
+site/
+
+# Local database files
+*.db
+
+# Misc local files
+*.local.yml
+**/*.local.md
+ehthumbs.db
+*~

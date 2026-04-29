@@ -49,6 +49,7 @@ def index(request: HttpRequest) -> HttpResponse:
         # middleware injected
         "login_user": getattr(request, "login_user", "") or "",
         "login_user_name": getattr(request, "login_user_name", "") or "",
+        "open_notebook_url": getattr(settings, "OPEN_NOTEBOOK_PORTAL_URL", "") or "http://127.0.0.1:8502",
     }
 
     try:

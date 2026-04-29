@@ -328,6 +328,7 @@ PORTAL_ACL = {
     "usage": ["網頁系統管理員"],
     "projectnotes": ["ALL_AUTHENTICATED"],
     "formalize": ["ALL_AUTHENTICATED"],
+    "open_notebook": ["ALL_AUTHENTICATED"],
 }
 
 # ============================================================
@@ -399,6 +400,7 @@ MOCK_DB_JSON = env_str("MOCK_DB_JSON", f"{_PROJECT_ROOT_STR}\\SQLTEST_output.jso
 # ============================================================
 TTS_API_BASE_URL = env_str("TTS_API_BASE_URL", "")
 TTS_API_TIMEOUT = env_int("TTS_API_TIMEOUT", 60)
+OPEN_NOTEBOOK_PORTAL_URL = env_str("OPEN_NOTEBOOK_PORTAL_URL", "http://127.0.0.1:8502")
 
 # ============================================================
 # Sybase query workstation whitelist
@@ -435,6 +437,7 @@ PORTAL_USAGE_CODE_MAP = [
     ("/excelproc/", "EXCELPROC"),
     ("/projectnotes/", "PROJECTNOTES"),
     ("/formalize/", "FORMALIZE"),
+    ("/open-notebook/", "OPEN_NOTEBOOK"),
 ]
 
 # ============================================================

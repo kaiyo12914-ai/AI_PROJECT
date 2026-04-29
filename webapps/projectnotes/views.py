@@ -1,16 +1,14 @@
-import json
-import math
 import re
 from urllib.parse import urlparse
-from typing import Any, Dict, List, Tuple
-from django.http import HttpRequest, JsonResponse
+from typing import Any, Dict, List
+from django.http import HttpRequest
 from django.http import HttpResponseForbidden
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Q
 from pgvector.django import L2Distance
 from webapps.portal.decorators import require_node
-from webapps.portal.acl import can_access
+from webapps.portal import decorators as portal_decorators
 from webapps.llm.llm_factory import get_chat_model
 
 from .models import (
@@ -32,33 +30,23 @@ from .retrieval_policy import (
     rerank_candidates,
 )
 from .query_rewrite import rewrite_query_for_retrieval
+from .api_helpers import (
+    api_error as _api_error,
+    is_bad_utf8_request as _is_bad_utf8_request,
+    read_json_body as _read_json_body,
+    safe_json_response as _safe_json_response,
+    safe_text as _safe_text,
+    to_int as _to_int,
+)
+from .embedding_service import mock_embedding as _mock_embedding
+from .text_processing import (
+    build_chunks as _build_chunks,
+    clean_label as _clean_label,
+    decode_text_bytes_best_effort as _decode_text_bytes_best_effort,
+    preprocess_rag_text as _preprocess_rag_text,
+)
 
 # --- UTILS ---
-
-def _safe_json_response(data: Dict[str, Any], status: int = 200) -> JsonResponse:
-    return JsonResponse(data, status=status, json_dumps_params={"ensure_ascii": False})
-
-def _api_error(message: str, error_code: str = "bad_request", status: int = 400) -> JsonResponse:
-    return _safe_json_response({"ok": False, "error": str(message), "error_code": error_code}, status=status)
-
-def _read_json_body(request: HttpRequest) -> Dict[str, Any]:
-    raw = request.body or b""
-    if not raw:
-        return {}
-    try:
-        text = raw.decode("utf-8")
-        return json.loads(text)
-    except UnicodeDecodeError:
-        setattr(request, "_bad_utf8_body", True)
-        return {}
-    except Exception:
-        return {}
-
-def _to_int(v: Any, default: int = 0) -> int:
-    try:
-        return int(str(v).strip())
-    except Exception:
-        return default
 
 def _current_user_id(request: HttpRequest) -> str:
     # Use login_user if available (from custom middleware), else request.user
@@ -71,39 +59,9 @@ def _current_user_id(request: HttpRequest) -> str:
     return ""
 
 def _can_manage_projects(request: HttpRequest) -> bool:
-    return can_access(getattr(request, "user", None), "portal")
-
-def _mock_embedding(text: str, dim: int = 1536) -> List[float]:
-    # Mocking a 1536-dimensional vector for pgvector storage/query
-    vec = [0.0] * dim
-    words = text.split()
-    if not words:
-        words = ["empty"]
-    for i, w in enumerate(words):
-        h = hash(w)
-        idx = abs(h) % dim
-        vec[idx] += 1.0
-    norm = math.sqrt(sum(x * x for x in vec))
-    if norm <= 1e-9:
-        return vec
-    return [x / norm for x in vec]
+    return portal_decorators.can_access(getattr(request, "user", None), "portal")
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9\u4e00-\u9fff]{2,}")
-_STRUCTURAL_KEYWORDS = (
-    "bbox",
-    "shape_id",
-    "placeholder",
-    "paragraphs",
-    "runs",
-    "style",
-    "font_family",
-    "font_size",
-    "alignment",
-    "bullet_type",
-    "z_index",
-    "text_frame",
-    "page_no",
-)
 
 
 def _query_tokens(text: str) -> List[str]:
@@ -239,191 +197,10 @@ def _build_citation_tail(citations: List[Dict[str, Any]]) -> str:
         except Exception:
             conf = "--"
         chunk = _to_int(c.get("chunk_index"), 0)
-        title = _safe_text(c.get("source_title")) or "未知來源"
+        title = _safe_text(c.get("source_title")) or "\u672a\u77e5\u4f86\u6e90"
         parts.append(f"{ref}({conf})#{chunk} 『{title}』#{chunk}")
     return "來源依據：" + "、".join(parts)
 
-def _build_chunks(text: str, max_chars: int = 500) -> List[str]:
-    # Extremely simplified chunker
-    chunks = []
-    for i in range(0, len(text), max_chars):
-        chunks.append(text[i:i+max_chars])
-    return chunks
-
-
-def _normalize_line_for_dedup(line: str) -> str:
-    return re.sub(r"\s+", " ", _safe_text(line)).strip(" \uFF0C\u3002\uFF1F\uFF01\uFF1B\uFF1A\u3001\uFF08\uFF09\u300C\u300D\u300E\u300F[]{}<>\"'")
-
-
-def _is_structural_noise_line(line: str) -> bool:
-    l = _safe_text(line)
-    if not l:
-        return True
-    low = l.lower()
-    if any(k in low for k in _STRUCTURAL_KEYWORDS):
-        return True
-    if re.match(r"^\s*(<[^>]+>|</[^>]+>|<\?xml|<!DOCTYPE|@media|body\s*\{|\.?[A-Za-z0-9_-]+\s*\{)", l):
-        return True
-    if re.match(r"^\s*[\{\}\[\],]+$", l):
-        return True
-    if re.match(r'^\s*"[^"]+"\s*:\s*', l):
-        return True
-    if re.match(r"^\s*[A-Za-z_][A-Za-z0-9_]*\s*:\s*", l) and ("http" not in low):
-        return True
-    if re.match(r"^\s*```", l):
-        return True
-    if re.match(r"^\s*[-=]{3,}\s*$", l):
-        return True
-    if re.match(r"^\s*[\[\(<].*[\]>\)]\s*$", l) and len(re.findall(r"[\u4e00-\u9fffA-Za-z0-9]", l)) < 6:
-        return True
-    readable = len(re.findall(r"[\u4e00-\u9fffA-Za-z0-9]", l))
-    symbols = len(re.findall(r"[^ \t\u4e00-\u9fffA-Za-z0-9]", l))
-    if readable <= 2 and symbols >= 4:
-        return True
-    if symbols > readable * 2:
-        return True
-    return False
-
-
-def _clean_text_line(line: str) -> str:
-    l = _safe_text(line)
-    if not l:
-        return ""
-    # Remove HTML/XML tags and markdown wrappers but keep text.
-    l = re.sub(r"<[^>\n]+>", " ", l)
-    l = re.sub(r"\[(.*?)\]\((.*?)\)", r"\1", l)
-    l = re.sub(r"`{1,3}", "", l)
-    l = re.sub(r"^\s{0,3}#{1,6}\s*", "", l)
-    l = re.sub(r"^\s*[-*+]\s+", "", l)
-    l = re.sub(r"^\s*>\s*", "", l)
-    l = re.sub(r"\bC\d+\(\d+(?:\.\d+)?\)", "", l, flags=re.IGNORECASE)
-    # Remove noisy container symbols while preserving meaningful CJK/Latin text.
-    l = l.replace("{", " ").replace("}", " ").replace("<", " ").replace(">", " ")
-    l = l.replace("[", " ").replace("]", " ").replace("`", " ")
-    # Keep version name like [Page 9] -> Page 9
-    l = re.sub(r"\s*Page\s*(\d+)\s*", r"Page \1 ", l, flags=re.IGNORECASE)
-    l = re.sub(r"\s+", " ", l).strip()
-    return l
-
-
-def _decoded_text_score(text: str) -> float:
-    """
-    Heuristic score to select the most plausible decoded text and avoid mojibake.
-    """
-    t = _safe_text(text)
-    if not t:
-        return 0.0
-
-    total = len(t)
-    if total <= 0:
-        return 0.0
-
-    replacement_cnt = t.count("\uFFFD")
-    control_cnt = len(re.findall(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]", t))
-    readable_cnt = len(
-        re.findall(r"[\u4e00-\u9fffA-Za-z0-9\s\.,!?:;\"'\uFF0C\u3002\uFF01\uFF1F\uFF1B\uFF1A\uFF08\uFF09\u3010\u3011\u300A\u300B\u3001_/\(\)\[\]\{\}-]", t)
-    )
-    readable_ratio = readable_cnt / max(1, total)
-
-    mojibake_hits = 0
-    for token in ("\uFFFD", "Ã", "Â", "å", "ç", "é", "æ", "¤"):
-        mojibake_hits += t.count(token)
-
-    score = readable_ratio
-    score -= (replacement_cnt * 0.08)
-    score -= (control_cnt * 0.05)
-    score -= (mojibake_hits * 0.02)
-    if (control_cnt / max(1, total)) > 0.02:
-        score -= 0.8
-    if total > 6 and readable_cnt < max(2, int(total * 0.2)):
-        score -= 0.5
-    return max(0.0, min(1.0, score))
-
-
-def _decode_text_bytes_best_effort(raw: bytes) -> Tuple[str, str]:
-    """
-    Decode bytes into text with robust encoding fallback.
-    Returns: (decoded_text, used_encoding)
-    Raises ValueError if content is unreadable as text.
-    """
-    if raw is None:
-        return "", "utf-8"
-    if len(raw) == 0:
-        return "", "utf-8"
-
-    # BOM-first handling
-    if raw.startswith(b"\xef\xbb\xbf"):
-        try:
-            return raw.decode("utf-8-sig"), "utf-8-sig"
-        except Exception:
-            pass
-    if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
-        try:
-            return raw.decode("utf-16"), "utf-16"
-        except Exception:
-            pass
-
-    candidates = [
-        "utf-8",
-        "cp950",
-        "big5",
-        "gb18030",
-        "utf-16-le",
-        "utf-16-be",
-    ]
-
-    best_text = ""
-    best_enc = ""
-    best_score = -1.0
-
-    for enc in candidates:
-        try:
-            txt = raw.decode(enc)
-        except Exception:
-            continue
-        score = _decoded_text_score(txt)
-        if score > best_score:
-            best_score = score
-            best_text = txt
-            best_enc = enc
-
-    if best_score < 0.35:
-        raise ValueError("unsupported or unreadable text encoding")
-    return best_text, (best_enc or "unknown")
-
-
-def _preprocess_rag_text(input_text: str) -> str:
-    text = (input_text or "").replace("\r\n", "\n").replace("\r", "\n")
-    # Remove fenced code blocks first.
-    text = re.sub(r"```[\s\S]*?```", "\n", text)
-    out_lines: List[str] = []
-    seen = set()
-    blank_pending = False
-    for raw_line in text.split("\n"):
-        if _is_structural_noise_line(raw_line):
-            blank_pending = True
-            continue
-        cleaned = _clean_text_line(raw_line)
-        if not cleaned or _is_structural_noise_line(cleaned):
-            blank_pending = True
-            continue
-        dedup_key = _normalize_line_for_dedup(cleaned)
-        if not dedup_key or dedup_key in seen:
-            continue
-        seen.add(dedup_key)
-        if blank_pending and out_lines:
-            out_lines.append("")
-            blank_pending = False
-        out_lines.append(cleaned)
-    # Final compact.
-    final_lines: List[str] = []
-    for ln in out_lines:
-        if ln == "":
-            if final_lines and final_lines[-1] != "":
-                final_lines.append("")
-            continue
-        final_lines.append(ln)
-    return "\n".join(final_lines).strip()
 
 
 def _llm_to_text(resp: Any) -> str:
@@ -586,11 +363,11 @@ evidence\uff1a
         if not raw:
             return ""
         rewrite_prompt = f"""
-請將下列內容改寫為繁體中文，保持原意，保留引用標記如 [C1]、[C2]。
-專有名詞可保留英文，但其餘敘述請以繁體中文呈現。
-請只輸出改寫後內容，不要額外說明。
+隢?銝??批捆?孵神?箇?擃葉??靽???嚗????冽?閮? [C1]?C2]??
+撠????臭????雿擗?餈啗?隞亦?擃葉???整?
+隢頛詨?孵神敺摰對?銝?憿?隤芣???
 
-內容：
+?批捆嚗?
 {raw}
 """.strip()
         try:
@@ -621,32 +398,6 @@ evidence\uff1a
         warnings = detect_citation_conflicts(citations)
         return {"answer": fallback_txt, "prompt": prompt, "warnings": warnings}
 
-def _safe_text(v: Any) -> str:
-    return "" if v is None else str(v).strip()
-
-def _is_bad_utf8_request(request: HttpRequest) -> bool:
-    return bool(getattr(request, "_bad_utf8_body", False))
-
-def _looks_mojibake_text(text: str) -> bool:
-    t = _safe_text(text)
-    if not t:
-        return False
-    compact = re.sub(r"\s+", "", t)
-    if not compact:
-        return False
-    if re.fullmatch(r"[?\uFFFD]+", compact):
-        return True
-    if "???" in t or "\uFFFD" in t:
-        return True
-    return False
-
-def _clean_label(raw: Any, fallback: str, max_len: int = 120) -> str:
-    t = _safe_text(raw)[:max_len]
-    if not t:
-        return fallback
-    if _looks_mojibake_text(t):
-        return fallback
-    return t
 
 def _is_http_url(url: str) -> bool:
     try:
@@ -817,7 +568,7 @@ def api_sources(request: HttpRequest):
                 word.Quit()
                 os.unlink(temp.name)
             except Exception as e:
-                # ???畾?????????荔??????Word COM ??????????????????悻?????????????
+                # ????????????????????Word COM ???????????????????湔?????????????
                 upload.seek(0)
                 try:
                     raw_text, detected_encoding = _decode_text_bytes_best_effort(upload.read())

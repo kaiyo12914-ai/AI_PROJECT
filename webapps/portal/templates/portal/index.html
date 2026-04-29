@@ -45,6 +45,7 @@
       {% allow "portal" as can_portal %}
       {% allow "vanna" as can_vanna %}
       {% allow "formalize" as can_formalize %}
+      {% allow "open_notebook" as can_open_notebook %}
 
       {% if can_translator %}
         {% url 'translator_page' as translator_href %}
@@ -69,6 +70,10 @@
       {% if can_comment %}
         {% url 'comment:page_index' as comment_href %}
         {% include "portal/_svg_card.html" with href=comment_href title="考績評語評量" subtitle="評語建議文字優化" tone="blue" icon="comment" variant=card_variant %}
+      {% endif %}
+
+      {% if can_open_notebook %}
+        {% include "portal/_svg_card.html" with href=open_notebook_url title="Open Notebook" subtitle="Notebook LM / RAG research" tone="green" icon="open_notebook" variant=card_variant new_tab=True %}
       {% endif %}
 
       {% if can_meetingreply %}
