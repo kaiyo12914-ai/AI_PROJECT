@@ -27,6 +27,10 @@
 1. HTML 禁止塞大量 inline `<script>` / `<style>`。
 2. CSS / JS 應放在 `webapps/<node>/static/<node>/`。
 3. Template 需透過 `custom_static`（或專案既有等價 helper）載入靜態資源。
+4. 內網工具頁入口腳本禁止使用 `<script type="module">`。內網受管制瀏覽器、舊版核心、代理或 static header 差異，可能導致 module 腳本完全不執行，表現為「按鈕無反應」。
+5. 工具頁入口腳本一律使用 `defer` 載入：
+   `<script defer src="{% custom_static '<node>/js/<page>.js' %}"></script>`
+6. 若確實需要模組能力，優先在一般 `defer` 腳本內使用動態 `import()`；不得以 module script 當作頁面入口。
 
 ### 2.3 DB / LLM 工廠
 1. DB 連線與查詢統一走 `DB_FACTORY`（`webapps/database/db_factory.py`）。
