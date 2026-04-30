@@ -276,3 +276,4 @@ Sprint 6：
 - 權限：ProjectNotes 內部 project membership 與 portal ACL 是不同層級，不能混用。
 - Open Notebook 差異：SurrealDB graph model 不能直接套到 PostgreSQL/pgvector，需轉成 Django ORM 與 service pattern。
 - 長任務：若不先做 job 化，大型來源處理會持續造成 request timeout。
+# 最新狀態請參考：`projectnotes參考OpenNotebook檢討修正roadmap_status.md`（已完成 / 進行中 / 未開始）

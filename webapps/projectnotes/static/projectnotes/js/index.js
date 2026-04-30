@@ -28,6 +28,7 @@
     chatStatus: document.getElementById("chatStatus"),
     confidencePanel: document.getElementById("confidencePanel"),
     conversationList: document.getElementById("conversationList"),
+    newChatBtn: document.getElementById("newChatBtn"),
 
     chatLog: document.getElementById("chatLog"),
     questionInput: document.getElementById("questionInput"),
@@ -36,6 +37,7 @@
     citationPanel: document.getElementById("citationPanel"),
     llmPromptPanel: document.getElementById("llmPromptPanel"),
     chunkLogPanel: document.getElementById("chunkLogPanel"),
+    auditLogPanel: document.getElementById("auditLogPanel"),
   };
 
   function bindCollapsibleCards() {
@@ -493,6 +495,26 @@
     });
   }
 
+    async function loadAuditLogs() {
+    if (!state.isManagePage || !els.auditLogPanel) return;
+    const resp = await fetch(url("/projectnotes/audit_logs/"));
+    const data = await parseJsonSafe(resp);
+    if (!data.ok) {
+      els.auditLogPanel.textContent = "無法讀取日誌。";
+      return;
+    }
+    const rows = Array.isArray(data.rows) ? data.rows : [];
+    if (!rows.length) {
+      els.auditLogPanel.textContent = "尚無操作日誌。";
+      return;
+    }
+    els.auditLogPanel.innerHTML = rows.map(r => {
+      const dt = r.created_at ? r.created_at.replace("T", " ").split(".")[0] : "-";
+      return `<div style="border-bottom:1px solid #eee; padding:4px 0; font-size:12px;">` +
+             `[${dt}] <b>${r.user_id}</b>: ${r.action} (${r.target_type}#${r.target_id || ""}) - ${r.status}</div>`;
+    }).join("");
+  }
+
   async function loadProjects() {
     const resp = await fetch(url("/projectnotes/projects/"));
     const data = await parseJsonSafe(resp);
@@ -519,6 +541,7 @@
       await loadOverview();
       await loadConversations(state.conversationId);
       setStatus("讀取專案清單成功", false);
+      if (state.isManagePage) loadAuditLogs();
     } else {
       state.projectId = 0;
       await loadSources();
@@ -699,12 +722,12 @@
     fd.append("title", title);
     fd.append("file", file);
 
+    setStatus("上傳中...", false);
     const resp = await fetch(url("/projectnotes/sources/"), { method: "POST", body: fd });
     const data = await parseJsonSafe(resp);
 
-    setBusy(false);
-
     if (!data.ok) {
+      setBusy(false);
       setStatus(data.error || "Upload failed.", true);
       return;
     }
@@ -712,14 +735,51 @@
     els.sourceFile.value = "";
     els.sourceTitle.value = "";
 
-    await loadSources();
-    await loadOverview();
-    await loadConversations(state.conversationId);
-
-    if (data.is_non_utf8 && data.detected_encoding) {
-      setStatus(`Upload complete. Detected encoding: ${data.detected_encoding}`, false);
+    if (data.job_id) {
+      pollJobStatus(data.job_id);
     } else {
+      setBusy(false);
+      await loadSources();
+      await loadOverview();
+      await loadConversations(state.conversationId);
       setStatus("Upload complete.", false);
+    }
+  }
+
+  async function pollJobStatus(jobId) {
+    if (!jobId) return;
+    try {
+      const resp = await fetch(url(`/projectnotes/jobs/${jobId}/`));
+      const data = await parseJsonSafe(resp);
+      
+      if (!data.ok) {
+        setBusy(false);
+        setStatus(data.error || "Failed to get job status.", true);
+        return;
+      }
+      
+      if (data.status === "failed") {
+        setBusy(false);
+        setStatus("背景處理失敗: " + data.error_message, true);
+        return;
+      }
+      
+      if (data.status === "completed") {
+        setBusy(false);
+        setStatus("處理完成！", false);
+        await loadSources();
+        await loadOverview();
+        await loadConversations(state.conversationId);
+        return;
+      }
+      
+      // Still processing
+      setStatus("處理中: " + data.progress_info, false);
+      setTimeout(() => pollJobStatus(jobId), 1500);
+      
+    } catch (e) {
+      setBusy(false);
+      setStatus("Polling error: " + e, true);
     }
   }
 
@@ -940,6 +1000,9 @@
 
   if (els.createProjectBtn) {
     els.createProjectBtn.addEventListener("click", () => createProject().catch(() => setStatus("建立失敗", true)));
+  }
+  if (els.newChatBtn) {
+    els.newChatBtn.addEventListener("click", () => newChat().catch(() => setStatus("無法建立新對話", true)));
   }
   if (els.refreshBtn) {
     els.refreshBtn.addEventListener("click", () => loadProjects().catch(() => setStatus("重新取得失敗", true)));

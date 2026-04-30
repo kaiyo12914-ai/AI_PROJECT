@@ -196,3 +196,19 @@ class ActivityLog(models.Model):
         indexes = [
             models.Index(fields=["project", "created_at"]),
         ]
+
+class ProcessingJob(models.Model):
+    """Background task tracking for ingestion/vectorization."""
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="jobs")
+    job_type = models.CharField(max_length=50) # "source_ingestion", "project_rebuild"
+    status = models.CharField(max_length=20, default="pending") # pending, processing, completed, failed
+    target_id = models.PositiveIntegerField(null=True, blank=True)
+    progress_info = models.TextField(blank=True, default="")
+    error_message = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "projectnotes"
+        db_table = "projectnotes_processing_job"

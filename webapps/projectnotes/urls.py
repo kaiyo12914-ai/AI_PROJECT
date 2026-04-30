@@ -23,4 +23,5 @@ urlpatterns = [
     path("citation_click/", views.api_citation_click, name="citation_click"),
     path("citation/", views.api_citation_context, name="citation_context"),
     path("overview/", views.api_overview, name="overview"),
+    path("jobs/<int:job_id>/", views.api_job_status, name="job_status"),
 ]

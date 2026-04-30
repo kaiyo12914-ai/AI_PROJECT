@@ -516,3 +516,46 @@ def _make_auto(temperature: float | None, timeout: int | None):
             return f"AutoFallbackChatModel(priority={priority_list}, active_keys={list(backends.keys())})"
 
     return AutoFallbackChatModel()
+
+
+def get_embedding_model(model_type: str | None = None):
+    """
+    透過工廠方法產生 Embedding 物件。
+    相容 MODEL_TYPE：GOOGLE, OPENAI, OLLAMA。
+    """
+    model_type = (model_type or os.getenv("MODEL_TYPE") or "AUTO").strip().upper()
+
+    if model_type == "GOOGLE":
+        from langchain_google_genai import GoogleGenerativeAIEmbeddings
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise RuntimeError("GEMINI_API_KEY 未設定（Google Gemini 不可用）")
+        return GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
+
+    if model_type == "OPENAI":
+        from langchain_openai import OpenAIEmbeddings
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError("OPENAI_API_KEY 未設定（OpenAI 不可用）")
+        model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+        return OpenAIEmbeddings(model=model, api_key=api_key)
+
+    if model_type == "OLLAMA" or model_type == "LM_STUDIO":
+        try:
+            from langchain_ollama import OllamaEmbeddings
+        except ImportError:
+            from langchain_community.embeddings import OllamaEmbeddings
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
+        model = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
+        return OllamaEmbeddings(model=model, base_url=base_url)
+
+    if model_type == "AUTO":
+        prio = _resolved_model_priority()
+        for p in prio:
+            try:
+                return get_embedding_model(p)
+            except Exception as e:
+                logger.warning(f"[LLM] AUTO embedding fallback: {p} failed, err={e}")
+        return get_embedding_model("OLLAMA")
+
+    raise ValueError(f"Unknown MODEL_TYPE={model_type}. Use AUTO/GOOGLE/OLLAMA/OPENAI.")
