@@ -83,7 +83,7 @@
 
       {% if can_doc %}
         {% url 'doc:doc_page' as doc_href %}
-        {% include "portal/_svg_card.html" with href=doc_href title="公文撰擬" subtitle="來文附件查詢 / 公文草稿生成" tone="blue" icon="doc" variant=card_variant %}
+        {% include "portal/_svg_card.html" with href=doc_href title="公文解析" subtitle="來文附件查詢 / 公文內容解析" tone="blue" icon="doc" variant=card_variant %}
       {% endif %}
 
       {% if can_graph %}

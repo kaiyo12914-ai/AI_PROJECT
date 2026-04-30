@@ -11,6 +11,7 @@ urlpatterns = [
     path("metrics_api/", views.api_metrics, name="metrics_api"),
     path("projects/", views.api_projects, name="projects"),
     path("digests/", views.api_digests, name="digests"),
+    path("messages/", views.api_messages, name="messages"),
     path("sources/", views.api_sources, name="sources"),
     path("sources/<int:source_id>/", views.api_source_delete, name="source_delete"),
     path("sources/versions/", views.api_source_versions, name="source_versions"),

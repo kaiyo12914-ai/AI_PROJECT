@@ -163,17 +163,20 @@
     if (dom.genMeta) dom.genMeta.textContent = "";
   }
 
-  function resetFocusPick() {
+  function resetFocusPick(opts) {
     const { dom } = _ctx();
+    const clearOutputs = !opts || opts.clearOutputs !== false;
     state.focusParsedItems = [];
     state.focusSummaryHeader = "";
     if (dom.focusPickWrap) dom.focusPickWrap.style.display = "none";
     if (dom.focusPickList) dom.focusPickList.innerHTML = "";
     if (dom.focusPickHint) dom.focusPickHint.textContent = "";
     // ✅ 新增：清空附件解析文字框與進度顯示
-    if (dom.attachmentsText) dom.attachmentsText.value = "";
-    if (dom.attachStatus) dom.attachStatus.textContent = "";
-    if (dom.promptFocusOut) dom.promptFocusOut.value = "";
+    if (clearOutputs) {
+      if (dom.attachmentsText) dom.attachmentsText.value = "";
+      if (dom.attachStatus) dom.attachStatus.textContent = "";
+      if (dom.promptFocusOut) dom.promptFocusOut.value = "";
+    }
   }
 
   function extractFocusSummaryHeader(text) {
@@ -181,9 +184,8 @@
       .split(/\r?\n/)
       .map((x) => String(x || "").trim())
       .filter(Boolean);
-    return lines
-      .filter((line) => /^(來文單位|受文者|受文單位|來文主旨)\s*[：:]/.test(line))
-      .join("\n");
+    const headerRe = /^(?:\u4f86\u6587\u6a5f\u95dc|\u53d7\u6587\u6a5f\u95dc|\u767c\u6587\u65e5\u671f|\u767c\u6587\u5b57\u865f|\u4e3b\u65e8)\s*[:\uFF1A]/;
+    return lines.filter((line) => headerRe.test(line)).join("\n");
   }
 
   function parseFocusSummaryItems(text) {
@@ -191,96 +193,102 @@
     const items = [];
     let current = null;
     let seq = 1;
+    const headerRe = /^(?:\u4f86\u6587\u6a5f\u95dc|\u53d7\u6587\u6a5f\u95dc|\u767c\u6587\u65e5\u671f|\u767c\u6587\u5b57\u865f|\u4e3b\u65e8)\s*[:\uFF1A]/;
+    const descRe = /^(?:\u8aaa\u660e)\s*(\d+)\s*[:\uFF1A]\s*(.*)$/;
+    const incomingRe = /^(?:\u4f86\u6587\u91cd\u9ede)\s*(\d+)\s*[:\uFF1A]\s*(.*)$/;
+    const fixedIncomingRe = /^(?:\u64ec\u7a3f\u8aaa\u660e\u7b2c\u4e00\u9ede\u56fa\u5b9a\u5f15\u8ff0|\u3010\u64ec\u7a3f\u8aaa\u660e\u7b2c\u4e00\u9ede\u56fa\u5b9a\u5f15\u8ff0\u3011)\s*[:\uFF1A]\s*(.*)$/;
+    const attachRe = /^(?:\u9644\u4ef6\u91cd\u9ede)\s*(\d+)\s*[:\uFF1A]\s*(.*)$/;
+    const genericRe = /^(\d+)\s*[.\)\]:\-\uFF1A]?\s*(.*)$/;
 
     function stripLeadingOrdinal(v) {
       return String(v || "")
-        .replace(/^\s*\d+\s*[\.\、\)）:：]\s*/, "")
+        .replace(/^\s*\d+\s*[.\)\]:\-\uFF1A]?\s*/, "")
         .trim();
     }
 
-    const pushCurrent = () => {
+    function pushCurrent() {
       if (!current) return;
       const body = String((current.lines || []).join("\n")).trim();
-      if (!body) {
-        current = null;
-        return;
+      if (body) {
+        items.push({
+          id: `focus_${items.length + 1}`,
+          label: current.label || `\u91cd\u9ede${items.length + 1}`,
+          text: body,
+          checked: true,
+        });
       }
-      items.push({
-        id: `focus_${items.length + 1}`,
-        label: current.label || `重點${items.length + 1}`,
-        text: body,
-        checked: true,
-      });
       current = null;
-    };
+    }
 
     for (const rawLine of lines) {
       const line = String(rawLine || "").trim();
       if (!line) continue;
+      if (headerRe.test(line)) continue;
 
-      const mDesc = line.match(/^來文說明\s*(\d+)\s*[：:]\s*(.*)$/);
+      const mDesc = line.match(descRe);
       if (mDesc) {
         pushCurrent();
         current = {
-          label: `來文說明${mDesc[1]}`,
+          label: `\u8aaa\u660e${mDesc[1]}`,
           lines: [stripLeadingOrdinal(mDesc[2])].filter(Boolean),
         };
         continue;
       }
 
-      const mIncoming = line.match(/^來文重點\s*(\d+)\s*[：:]\s*(.*)$/);
+      const mIncoming = line.match(incomingRe);
       if (mIncoming) {
         pushCurrent();
         current = {
-          label: `來文重點${mIncoming[1]}`,
+          label: `\u4f86\u6587\u91cd\u9ede${mIncoming[1]}`,
           lines: [stripLeadingOrdinal(mIncoming[2])].filter(Boolean),
         };
         continue;
       }
 
-      const mAttach = line.match(/^附件重點\s*(\d+)\s*[：:]\s*(.*)$/);
+      const mFixedIncoming = line.match(fixedIncomingRe);
+      if (mFixedIncoming) {
+        pushCurrent();
+        current = {
+          label: `\u64ec\u7a3f\u8aaa\u660e\u7b2c\u4e00\u9ede\u56fa\u5b9a\u5f15\u8ff0`,
+          lines: [stripLeadingOrdinal(mFixedIncoming[1])].filter(Boolean),
+        };
+        continue;
+      }
+
+      const mAttach = line.match(attachRe);
       if (mAttach) {
         pushCurrent();
         current = {
-          label: `附件重點${mAttach[1]}`,
+          label: `\u9644\u4ef6\u91cd\u9ede${mAttach[1]}`,
           lines: [stripLeadingOrdinal(mAttach[2])].filter(Boolean),
         };
         continue;
       }
 
-      const m1 = line.match(/^重點\s*(\d+)\s*[：:]\s*(.*)$/);
-      if (m1) {
+      const mGeneric = line.match(genericRe);
+      if (mGeneric) {
         pushCurrent();
         current = {
-          label: `重點${m1[1]}`,
-          lines: [stripLeadingOrdinal(m1[2])].filter(Boolean),
-        };
-        continue;
-      }
-
-      const m2 = line.match(/^(\d+)[\.\、]\s*(.*)$/);
-      if (m2) {
-        pushCurrent();
-        current = {
-          label: `重點${m2[1]}`,
-          lines: [stripLeadingOrdinal(m2[2])].filter(Boolean),
+          label: `\u91cd\u9ede${mGeneric[1]}`,
+          lines: [stripLeadingOrdinal(mGeneric[2])].filter(Boolean),
         };
         continue;
       }
 
       if (current) {
         current.lines.push(stripLeadingOrdinal(line));
-      } else {
-        if (/^(來文單位|受文者|受文單位|來文主旨)\s*[：:]/.test(line)) continue;
-        items.push({
-          id: `focus_${items.length + 1}`,
-          label: `重點${seq}`,
-          text: stripLeadingOrdinal(line),
-          checked: true,
-        });
-        seq += 1;
+        continue;
       }
+
+      items.push({
+        id: `focus_${items.length + 1}`,
+        label: `\u91cd\u9ede${seq}`,
+        text: stripLeadingOrdinal(line),
+        checked: true,
+      });
+      seq += 1;
     }
+
     pushCurrent();
     return items;
   }
@@ -288,7 +296,7 @@
   function selectedFocusItemsText() {
     const picked = (state.focusParsedItems || []).filter((x) => !!x.checked);
     const body = picked
-      .map((x) => `${x.label}：${x.text}`.trim())
+      .map((x) => `${x.label}\uFF1A${x.text}`.trim())
       .filter(Boolean)
       .join("\n");
     const header = String(state.focusSummaryHeader || "").trim();
@@ -298,11 +306,21 @@
   function selectedStage2Facts() {
     const picked = (state.focusParsedItems || []).filter((x) => !!x.checked);
     return picked
-      .map((x) => String(x && x.text ? x.text : "").trim())
-      .map((t) => t.replace(/^(?:重點|來文重點|來文說明|附件重點)\s*\d+\s*[:：]\s*/g, "").trim())
-      .filter(Boolean)
-      .filter((t) => !/^(擬辦|建議|請示|研處意見)\s*[:：]/.test(t))
-      .filter((t) => !/^這是.+（層級|這是.+的[令函呈]/.test(t));
+      .map((x) => {
+        const label = String(x && x.label ? x.label : "").trim();
+        const text = String(x && x.text ? x.text : "").trim();
+        if (!text) return "";
+        if (/^(?:\u64ec\u7a3f\u8aaa\u660e\u7b2c\u4e00\u9ede\u56fa\u5b9a\u5f15\u8ff0|\u3010\u64ec\u7a3f\u8aaa\u660e\u7b2c\u4e00\u9ede\u56fa\u5b9a\u5f15\u8ff0\u3011)$/.test(label)) {
+          return `\u3010\u64ec\u7a3f\u8aaa\u660e\u7b2c\u4e00\u9ede\u56fa\u5b9a\u5f15\u8ff0\u3011\uFF1A${text}`;
+        }
+        return text;
+      })
+      .map((t) =>
+        t
+          .replace(/^(?:\u91cd\u9ede|\u4f86\u6587\u91cd\u9ede|\u8aaa\u660e|\u9644\u4ef6\u91cd\u9ede)\s*\d+\s*[:\uFF1A]\s*/g, "")
+          .trim()
+      )
+      .filter(Boolean);
   }
 
   function syncDocTypeSelectors(nextValue, source) {
@@ -454,10 +472,10 @@
     } catch (e) {
       console.error(e);
       const msg = e && e.message ? e.message : String(e);
+      resetFocusPick({ clearOutputs: false });
       if (dom.attachStatus) dom.attachStatus.textContent = "❌ 解析失敗";
       if (dom.attachmentsText) dom.attachmentsText.value = "❌ 解析失敗：" + msg;
       if (dom.promptFocusOut) dom.promptFocusOut.value = "";
-      resetFocusPick();
     }
   }
 

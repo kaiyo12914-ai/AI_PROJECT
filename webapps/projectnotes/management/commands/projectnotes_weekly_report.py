@@ -6,7 +6,7 @@ from datetime import timedelta
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from webapps.projectnotes.models import ProjectNoteAuditLog
+from webapps.projectnotes.models import ActivityLog
 
 
 class Command(BaseCommand):
@@ -21,22 +21,27 @@ class Command(BaseCommand):
         project_id = int(options.get("project_id") or 0)
 
         since = timezone.now() - timedelta(days=days)
-        qs = ProjectNoteAuditLog.objects.filter(created_at__gte=since)
+        qs = ActivityLog.objects.filter(created_at__gte=since)
         if project_id > 0:
             qs = qs.filter(project_id=project_id)
 
         total_queries = qs.filter(action="chat_query").count()
-        insufficient = qs.filter(action="chat_query", status="insufficient").count()
         citation_clicks = qs.filter(action="citation_click").count()
         usage_count = qs.count()
+        insufficient = 0
 
         latency_vals = []
         for raw in qs.filter(action="chat_query").values_list("detail_json", flat=True)[:10000]:
             d = {}
             try:
-                d = json.loads(raw or "{}")
+                if isinstance(raw, dict):
+                    d = raw
+                else:
+                    d = json.loads(raw or "{}")
             except Exception:
                 d = {}
+            if str(d.get("status") or "").strip().lower() == "insufficient":
+                insufficient += 1
             try:
                 v = float(d.get("latency_ms"))
                 if v >= 0:

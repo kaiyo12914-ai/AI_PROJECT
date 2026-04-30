@@ -11,18 +11,17 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         expected: Dict[str, List[Tuple[str, ...]]] = {
-            "projectnotes_source": [
-                ("project_id", "is_enabled"),
-                ("project_id", "title"),
-            ],
-            "projectnotes_chunk": [
-                ("source_id", "chunk_index"),
+            "projectnotes_document_chunk": [
+                ("document_version_id", "chunk_index"),
             ],
             "projectnotes_conversation": [
                 ("project_id", "updated_at"),
             ],
-            "projectnotes_turn": [
+            "projectnotes_message": [
                 ("conversation_id", "created_at"),
+            ],
+            "projectnotes_activity_log": [
+                ("project_id", "created_at"),
             ],
         }
 

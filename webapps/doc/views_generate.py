@@ -36,6 +36,8 @@ from webapps.doc.views_helpers import (
 _FULL_SUBORDINATE_UNIT_RE = re.compile(
     r"(?:國防部)?軍備局(?:生產製造中心|生製中心)\s*(第[○〇０0一二三四五六七八九十\d]{1,4}廠)"
 )
+_SHORT_SUBORDINATE_UNIT_RE = re.compile(r"(第[○〇０0一二三四五六七八九十\d]{1,4}廠)")
+_FULL_SUBORDINATE_UNIT_PREFIX = "國防部軍備局生產製造中心"
 
 
 def _normalize_subordinate_unit_short_name(text: str) -> str:
@@ -52,6 +54,56 @@ def _normalize_subordinate_unit_short_name(text: str) -> str:
         t,
     )
     return t
+
+
+def _expand_subordinate_unit_full_name(text: str) -> str:
+    """
+    將簡銜（如：第401廠）展開為全銜（國防部軍備局生產製造中心第401廠）。
+    """
+    t = text or ""
+    if not t.strip():
+        return t
+    t = re.sub(
+        r"(?<!軍備局生產製造中心)(?<!軍備局生製中心)(第[○〇０0一二三四五六七八九十\d]{1,4}廠)",
+        rf"{_FULL_SUBORDINATE_UNIT_PREFIX}\1",
+        t,
+    )
+    return t
+
+
+def _normalize_explain_unit_names_by_point(explain_text: str) -> str:
+    """
+    規則：
+    - 說明第一點（依據）使用單位全銜。
+    - 說明第二點起使用單位簡銜。
+    """
+    t = (explain_text or "").strip()
+    if not t:
+        return t
+
+    rows = [ln.strip() for ln in t.splitlines() if ln.strip()]
+    pts: list[str] = []
+    for ln in rows:
+        m = re.match(r"^[一二三四五六七八九十]+、\s*(.+)$", ln)
+        if m:
+            pts.append((m.group(1) or "").strip())
+        elif pts:
+            pts[-1] = f"{pts[-1]} {ln}".strip()
+        else:
+            pts.append(ln)
+    if not pts:
+        return t
+
+    out: list[str] = []
+    for idx, body in enumerate(pts):
+        b = (body or "").strip()
+        if idx == 0:
+            out.append(_expand_subordinate_unit_full_name(b))
+        else:
+            out.append(_normalize_subordinate_unit_short_name(b))
+
+    marks = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"]
+    return "\n".join([f"{marks[i]}、{out[i]}" for i in range(min(len(out), len(marks)))]).strip()
 
 def _resolve_signer_org(request: HttpRequest, body: Dict[str, Any]) -> tuple[str, str, str]:
     explicit = normalize_doc_plant(str(body.get("plant") or "").strip(), default="") if body.get("plant") else ""
@@ -1051,7 +1103,9 @@ def _extract_fixed_quote_from_stage2_facts(facts: Any) -> str:
         line = _safe_str(x).strip()
         if not line:
             continue
-        m = re.search(r"【?】?\s*[:：]\s*(.+)$", line)
+        m = re.search(r"^(?:【?擬稿說明第一點固定引述】?)\s*[:：]\s*(.+)$", line)
+        if not m:
+            m = re.search(r"^(?:擬稿說明第一點固定引述)\s*[:：]\s*(.+)$", line)
         if m:
             return (m.group(1) or "").strip()
     return ""
@@ -1604,6 +1658,9 @@ def api_generate(request: HttpRequest):
             _safe_str(draft_sections.get("explain")),
             max_points=4,
         )
+        draft_sections["explain"] = _normalize_explain_unit_names_by_point(
+            _safe_str(draft_sections.get("explain"))
+        )
             
         # 🛡️ 硬性補足：若 LLM 漏掉擬辦段落，嘗試從全文尋找或強行補上
         if not draft_sections.get("action"):
@@ -1646,7 +1703,6 @@ def api_generate(request: HttpRequest):
         else:
             action_block = f"擬辦：\n{action_text}"
         final_text = f"主旨：{draft_sections.get('subject')}\n\n說明：\n{draft_sections.get('explain')}\n\n{action_block}"
-        final_text = _normalize_subordinate_unit_short_name(final_text)
 
         return JsonResponse({
             "ok": True,

@@ -890,23 +890,31 @@ def _format_focus_summary_v3(
     *,
     sender_org: str,
     recipient_org: str,
+    doc_date: str,
+    doc_no: str,
+    doc_subject: str,
     incoming_desc: List[str],
-    incoming_keypoints: List[str],
+    incoming_point1: str,
     attachment_points: List[str],
     max_incoming_desc: int = 8,
-    max_incoming_points: int = 10,
-    max_attach: int = 10,
+    max_attach: int = 20,
 ) -> str:
     sender = (sender_org or "").strip() or "未辨識機關"
     recipient = (recipient_org or "").strip() or "未辨識單位"
+    date_text = (doc_date or "").strip() or "未辨識"
+    no_text = (doc_no or "").strip() or "未辨識"
+    subject_text = (doc_subject or "").strip() or "未提供主旨"
     lines: List[str] = [
-        f"來文單位: {sender}",
-        f"受文者: {recipient}",
+        f"來文機關: {sender}",
+        f"受文機關: {recipient}",
+        f"發文日期: {date_text}",
+        f"發文字號: {no_text}",
+        f"主旨: {subject_text}",
     ]
     for i, p in enumerate((incoming_desc or [])[:max_incoming_desc], 1):
-        lines.append(f"來文說明{i}: {p}")
-    for i, p in enumerate((incoming_keypoints or [])[:max_incoming_points], 1):
-        lines.append(f"來文重點{i}: {p}")
+        lines.append(f"說明{i}: {p}")
+    if (incoming_point1 or "").strip():
+        lines.append(f"擬稿說明第一點固定引述: {incoming_point1.strip()}")
     for i, p in enumerate((attachment_points or [])[:max_attach], 1):
         lines.append(f"附件重點{i}: {p}")
     return "\n".join(lines)
@@ -937,7 +945,7 @@ def _inject_org_level_point(
     ref_no = re.sub(r"發文字號\s*[:：]\s*", "", (doc_no or "")).strip()
     subject_clean = _extract_doc_subject(full_text_for_search) or doc_subject or "（未提供主旨）"
     
-    verb = "遵" if level == "FROM_DIRECT_SUPERIOR" else ("奉" if level == "FROM_SUPERIOR" else "依")
+    verb = "奉" if level in ("FROM_DIRECT_SUPERIOR", "FROM_SUPERIOR") else "依"
     quote_stmt = f"{verb}{org_clean}{ref_date}{ref_no}{dt_text}辦理(如附呈)。"
     issued_title = _find_issued_title(full_text_for_search)
     if dt_text == "令" and issued_title: quote_stmt = f"{verb}{org_clean}{ref_date}{ref_no}令修頒「{issued_title}」辦理(如附呈)。"
@@ -1090,6 +1098,45 @@ def _build_inferred_debug(best_meta: Dict[str, Any], file_texts: List[Tuple[str,
             dbg["header_hits"].append({"file": name, "org": h_org, "kind": h_kind})
     return dbg
 
+def _build_fixed_incoming_point1(
+    org: str,
+    level: str,
+    doc_date: str,
+    doc_no: str,
+    doc_type: str,
+    doc_subject: str,
+    full_text_for_search: str = "",
+) -> str:
+    injected = _inject_org_level_point(
+        "",
+        org,
+        level,
+        doc_date,
+        doc_no,
+        doc_type,
+        doc_subject,
+        full_text_for_search=full_text_for_search,
+        max_points=2,
+    )
+    first_line = (injected.splitlines()[0] if injected else "").strip()
+    if not first_line:
+        return ""
+
+    # Normalize legacy numbering prefix, e.g. "重點1：".
+    first_line = re.sub(r"^\s*重點\s*\d+\s*[:：]\s*", "", first_line).strip()
+
+    # Strip fixed-marker prefix from value; marker is now used as the outer field label.
+    for prefix in (
+        "【擬稿說明第一點固定引述】：",
+        "【擬稿說明第一點固定引述】:",
+        "擬稿說明第一點固定引述：",
+        "擬稿說明第一點固定引述:",
+    ):
+        if first_line.startswith(prefix):
+            return first_line[len(prefix):].strip()
+    return first_line
+
+
 @csrf_exempt
 @require_node("doc", api=True)
 def api_parse_attachments_focus(request: HttpRequest):
@@ -1104,7 +1151,7 @@ def api_parse_attachments_focus(request: HttpRequest):
             return JsonResponse({"ok": False, "error": "no_attachments_found"}, status=400)
         
         file_texts: List[Tuple[str, str, str]] = [] 
-        for i, f in enumerate(all_files[:10], 1):
+        for i, f in enumerate(all_files[:20], 1):
             try:
                 raw_bytes = _read_file_bytes(f)
                 name = getattr(f, "name", f"file_{i}")
@@ -1139,46 +1186,45 @@ def api_parse_attachments_focus(request: HttpRequest):
         incoming_desc = [x for x in incoming_desc if not _is_address_like_text(x)]
         incoming_desc = [x for x in incoming_desc if not _is_speed_level_like_text(x)]
 
-        # 來文重點：仍保留「擬稿說明第一點固定引述」與「這是...主旨...」兩段。
-        incoming_prompt = _build_attach_focus_prompt(washed_incoming_text, extra_hint=extra_hint)
-        incoming_summary_raw = _to_text(llm.invoke(incoming_prompt)).strip()
-        incoming_summary = _ensure_focus_numbered(incoming_summary_raw, max_points=20)
-        incoming_summary = _postprocess_focus_points(incoming_summary, max_points=20)
-        injected_text = _inject_org_level_point(
-            incoming_summary, best_meta["org"], best_meta["level"],
-            best_meta["date"], best_meta["no"], best_meta["type"],
-            _extract_doc_subject(best_meta["raw_text"]),
-            full_text_for_search=best_meta["raw_text"] or combined_text,
-            max_points=20
-        )
+        # ?????????????????????????????????????????
+        # ??? LLM ???????1..n??????????????????
+        incoming_prompt = ""
 
-        incoming_keypoints = _extract_numbered_points(injected_text)
-        incoming_keypoints = _filter_points_by_anchor_doc_no(incoming_keypoints, best_meta.get("no", ""))
-        incoming_keypoints = [x for x in incoming_keypoints if not _is_address_like_text(x)]
-        incoming_keypoints = [x for x in incoming_keypoints if not _is_speed_level_like_text(x)]
 
         # 附件重點：只看附件檔，不混來文檔。
         attach_prompt, attachment_points = _extract_attachment_points(
             attachment_docs,
             llm,
             extra_hint=extra_hint,
-            max_points=10,
+            max_points=20,
         )
         attachment_points = [x for x in attachment_points if not _is_address_like_text(x)]
         attachment_points = [x for x in attachment_points if not _is_speed_level_like_text(x)]
 
         sender_org = _extract_header_org_doc_type(incoming_raw_text)[0] or _safe_inferred_org(best_meta.get("org", ""))
         recipient_org = _extract_recipient_org(incoming_raw_text)
+        incoming_point1 = _build_fixed_incoming_point1(
+            best_meta.get("org", ""),
+            best_meta.get("level", ""),
+            best_meta.get("date", ""),
+            best_meta.get("no", ""),
+            best_meta.get("type", ""),
+            _extract_doc_subject(best_meta.get("raw_text", "")) or best_meta.get("subject", ""),
+            full_text_for_search=best_meta.get("raw_text", "") or combined_text,
+        )
         summary_text = _format_focus_summary_v3(
             sender_org=sender_org,
             recipient_org=recipient_org,
+            doc_date=best_meta.get("date", ""),
+            doc_no=best_meta.get("no", ""),
+            doc_subject=_extract_doc_subject(best_meta.get("raw_text", "")) or best_meta.get("subject", ""),
             incoming_desc=incoming_desc,
-            incoming_keypoints=incoming_keypoints,
+            incoming_point1=incoming_point1,
             attachment_points=attachment_points,
             max_incoming_desc=8,
-            max_incoming_points=10,
-            max_attach=10,
+            max_attach=20,
         )
+
 
         debug_obj = _build_inferred_debug(best_meta, file_texts)
         debug_obj["incoming_files"] = [x[0] for x in incoming_docs]
@@ -1219,7 +1265,7 @@ def api_parse_attachments(request: HttpRequest):
         if not all_files: return JsonResponse({"ok": False, "error": "no_attachments"}, status=400)
         out_files = []
         combined_parts = []
-        for i, f in enumerate(all_files[:10], 1):
+        for i, f in enumerate(all_files[:20], 1):
             name = getattr(f, "name", f"file_{i}")
             try:
                 raw = _read_file_bytes(f)

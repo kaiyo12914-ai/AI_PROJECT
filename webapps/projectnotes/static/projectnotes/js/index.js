@@ -8,6 +8,7 @@
     pendingAiNode: null,
     canManageProjects: false,
     isManagePage: document.body.dataset.page === "manage",
+    conversations: [],
   };
 
   const els = {
@@ -26,6 +27,7 @@
 
     chatStatus: document.getElementById("chatStatus"),
     confidencePanel: document.getElementById("confidencePanel"),
+    conversationList: document.getElementById("conversationList"),
 
     chatLog: document.getElementById("chatLog"),
     questionInput: document.getElementById("questionInput"),
@@ -84,6 +86,30 @@
       if (btn) btn.disabled = state.busy;
     });
   }
+
+
+  async function postCitationClick(citationMeta) {
+    const meta = citationMeta || {};
+    const sourceId = Number(meta.source_id || 0);
+    if (!state.projectId || !sourceId) return;
+    try {
+      await fetch(url("/projectnotes/citation_click/"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project_id: state.projectId,
+          conversation_id: state.conversationId || 0,
+          source_id: sourceId,
+          chunk_index: Number(meta.chunk_index || 0),
+          ref: String(meta.ref || ""),
+          excerpt: String(meta.excerpt || ""),
+        }),
+      });
+    } catch (_e) {
+      // Best-effort analytics only.
+    }
+  }
+
 
   function appendPendingAi() {
     removePendingAi();
@@ -235,6 +261,11 @@
             const bubble = document.createElement("span");
             bubble.className = "citation-bubble";
             bubble.textContent = `${ref}(${confText})#${chunkText} 來自 ${sourceTitle}`;
+            bubble.style.cursor = "pointer";
+            bubble.title = "Preview citation source";
+            bubble.addEventListener("click", () => {
+              previewSourceContent(c.source_id, chunkNo, c).catch(() => {});
+            });
             line.appendChild(bubble);
             tailWrap.appendChild(line);
           });
@@ -257,6 +288,203 @@
 
     els.chatLog.appendChild(row);
     els.chatLog.scrollTop = els.chatLog.scrollHeight;
+  }
+
+  async function deleteConversation(conversationId) {
+    const cid = Number(conversationId || 0);
+    if (!cid) return;
+    const current = state.conversations.find((row) => Number(row.id) === cid);
+    const title = current && current.title ? current.title : `#${cid}`;
+    const ok = window.confirm(`Delete conversation ${title}?`);
+    if (!ok) return;
+
+    const resp = await fetch(url("/projectnotes/conversations/"), {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        conversation_id: cid,
+      }),
+    });
+    const data = await parseJsonSafe(resp);
+    if (!data.ok) {
+      setStatus(data.error || "Delete failed", true);
+      return;
+    }
+
+    state.conversations = state.conversations.filter((row) => Number(row.id) !== cid);
+    if (Number(state.conversationId) === cid) {
+      const next = state.conversations[0];
+      if (next) {
+        state.conversationId = Number(next.id || 0);
+        renderConversationList();
+        await loadConversationMessages(state.conversationId);
+      } else {
+        resetConversationUi();
+      }
+    } else {
+      renderConversationList();
+    }
+    setStatus("", false);
+  }
+
+  async function renameConversation(conversationId) {
+    const cid = Number(conversationId || 0);
+    if (!cid) return;
+    const current = state.conversations.find((row) => Number(row.id) === cid);
+    const nextTitle = window.prompt("Rename conversation", current && current.title ? current.title : "");
+    if (nextTitle === null) return;
+
+    const title = String(nextTitle || "").trim();
+    if (!title) {
+      setStatus("Title is required", true);
+      return;
+    }
+
+    const resp = await fetch(url("/projectnotes/conversations/"), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        conversation_id: cid,
+        title,
+      }),
+    });
+    const data = await parseJsonSafe(resp);
+    if (!data.ok) {
+      setStatus(data.error || "Rename failed", true);
+      return;
+    }
+
+    const target = state.conversations.find((row) => Number(row.id) === cid);
+    if (target) target.title = String((data.conversation && data.conversation.title) || title);
+    renderConversationList();
+    setStatus("", false);
+  }
+
+  function renderConversationList() {
+    if (!els.conversationList) return;
+    els.conversationList.innerHTML = "";
+
+    const rows = Array.isArray(state.conversations) ? state.conversations : [];
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "conversation-meta";
+      empty.textContent = "No conversations yet.";
+      els.conversationList.appendChild(empty);
+      return;
+    }
+
+    rows.forEach((conv) => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "conversation-item" + (Number(conv.id) === Number(state.conversationId) ? " active" : "");
+
+      const head = document.createElement("div");
+      head.className = "conversation-item-head";
+
+      const title = document.createElement("div");
+      title.className = "conversation-title";
+      title.textContent = String(conv.title || `Conversation ${conv.id}`);
+
+      const actions = document.createElement("div");
+
+      const renameBtn = document.createElement("button");
+      renameBtn.type = "button";
+      renameBtn.className = "conversation-rename";
+      renameBtn.textContent = "Edit";
+      renameBtn.title = "Rename conversation";
+      renameBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        renameConversation(conv.id).catch(() => setStatus("Rename failed", true));
+      });
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "conversation-delete";
+      deleteBtn.textContent = "Delete";
+      deleteBtn.title = "Delete conversation";
+      deleteBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        deleteConversation(conv.id).catch(() => setStatus("Delete failed", true));
+      });
+
+      actions.appendChild(renameBtn);
+      actions.appendChild(deleteBtn);
+
+      head.appendChild(title);
+      head.appendChild(actions);
+
+      const meta = document.createElement("div");
+      meta.className = "conversation-meta";
+      meta.textContent = `${Number(conv.turn_count || 0)} turns`;
+
+      item.appendChild(head);
+      item.appendChild(meta);
+      item.addEventListener("click", () => {
+        loadConversationMessages(conv.id).catch(() => setStatus("Failed to load conversation", true));
+      });
+      els.conversationList.appendChild(item);
+    });
+  }
+
+  async function loadConversations(preferredConversationId) {
+    if (!state.projectId) {
+      state.conversations = [];
+      renderConversationList();
+      return;
+    }
+
+    const resp = await fetch(url(`/projectnotes/conversations/?project_id=${state.projectId}`));
+    const data = await parseJsonSafe(resp);
+    if (!data.ok) {
+      state.conversations = [];
+      renderConversationList();
+      return;
+    }
+
+    state.conversations = Array.isArray(data.conversations) ? data.conversations : [];
+    const preferredId = Number(preferredConversationId || state.conversationId || 0);
+    if (!state.conversations.length) {
+      resetConversationUi();
+      renderConversationList();
+      return;
+    }
+
+    const selected = state.conversations.find((row) => Number(row.id) === preferredId) || state.conversations[0];
+    state.conversationId = Number(selected.id || 0);
+    renderConversationList();
+    await loadConversationMessages(state.conversationId);
+  }
+
+  async function loadConversationMessages(conversationId) {
+    const cid = Number(conversationId || 0);
+    if (!cid || !els.chatLog) return;
+
+    const resp = await fetch(url(`/projectnotes/messages/?conversation_id=${cid}`));
+    const data = await parseJsonSafe(resp);
+    if (!data.ok) {
+      setStatus(data.error || "Failed to load conversation", true);
+      return;
+    }
+
+    state.conversationId = Number((data.conversation && data.conversation.id) || cid);
+    renderConversationList();
+    els.chatLog.innerHTML = "";
+    removePendingAi();
+    clearChunkLog();
+    setLLMPrompt("");
+    setConfidence(null);
+
+    const messages = Array.isArray(data.messages) ? data.messages : [];
+    messages.forEach((msg) => {
+      const role = String(msg.sender_type || "") === "user" ? "user" : "ai";
+      addMsg(role, msg.content || "", msg.citations || [], "");
+    });
+  }
+
+  async function loadLatestConversation() {
+    await loadConversations(0);
   }
 
   function markSourcePreviewing(sourceId) {
@@ -289,11 +517,13 @@
       state.projectId = Number(els.projectSelect.value || visibleProjects[0].id || 0);
       await loadSources();
       await loadOverview();
+      await loadConversations(state.conversationId);
       setStatus("讀取專案清單成功", false);
     } else {
       state.projectId = 0;
       await loadSources();
       await loadOverview();
+      resetConversationUi();
       setStatus("尚無可用專案", false);
     }
   }
@@ -325,6 +555,7 @@
 
     await loadSources();
     await loadOverview();
+    await loadConversations(0);
     setStatus("建立專案成功", false);
   }
 
@@ -446,6 +677,7 @@
     if (els.citationPanel) els.citationPanel.textContent = "Select a source to preview.";
     await loadSources();
     await loadOverview();
+    await loadConversations(state.conversationId);
     setStatus("Source deleted.", false);
   }
 
@@ -482,6 +714,7 @@
 
     await loadSources();
     await loadOverview();
+    await loadConversations(state.conversationId);
 
     if (data.is_non_utf8 && data.detected_encoding) {
       setStatus(`Upload complete. Detected encoding: ${data.detected_encoding}`, false);
@@ -544,6 +777,7 @@
     }
 
     state.conversationId = Number(data.conversation.id || 0);
+    await loadConversations(state.conversationId);
     if (els.chatLog) els.chatLog.innerHTML = "";
     removePendingAi();
     clearChunkLog();
@@ -613,6 +847,14 @@
         answer = `${answer}\n\n警告：\n- ${warns.join("\n- ")}`;
       }
       addMsg("ai", answer, data.citations || [], citationTail);
+      const activeConv = state.conversations.find((row) => Number(row.id) === Number(state.conversationId));
+      if (activeConv && data.conversation_title) {
+        activeConv.title = String(data.conversation_title);
+      }
+      if (activeConv) {
+        activeConv.turn_count = Number(activeConv.turn_count || 0) + 1;
+        renderConversationList();
+      }
     } catch (_e) {
       removePendingAi();
       const err = "網路錯誤或超時";
@@ -624,6 +866,9 @@
   }
 
   async function previewSourceContent(sourceId, focusChunkIndex, citationMeta) {
+    if (citationMeta && citationMeta.source_id) {
+      postCitationClick(citationMeta);
+    }
     const resp = await fetch(url(`/projectnotes/sources/${sourceId}/content/`));
     const data = await parseJsonSafe(resp);
 
@@ -678,6 +923,8 @@
 
   function resetConversationUi() {
     state.conversationId = 0;
+    state.conversations = [];
+    renderConversationList();
     if (els.chatLog) els.chatLog.innerHTML = "";
     removePendingAi();
     clearChunkLog();
@@ -703,6 +950,7 @@
       resetConversationUi();
       loadSources().catch(() => setStatus("資料讀取發生錯誤", true));
       loadOverview().catch(() => {});
+      loadLatestConversation().catch(() => {});
     });
   }
   if (els.uploadSourceBtn) {
