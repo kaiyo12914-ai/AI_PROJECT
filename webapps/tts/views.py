@@ -116,6 +116,9 @@ def api_stt_transcribe(request: HttpRequest):
     f = request.FILES.get("audio")
     if not f:
         return JsonResponse({"ok": False, "error": "audio file is required"}, status=400)
+    language = (request.POST.get("language") or "auto").strip().lower()
+    if language not in {"auto", "en", "zh"}:
+        return JsonResponse({"ok": False, "error": "language must be auto, en, or zh"}, status=400)
 
     whisper_exe = Path(getattr(settings, "WHISPER_EXE", "")).resolve()
     whisper_model = Path(getattr(settings, "WHISPER_MODEL", "")).resolve()
@@ -142,9 +145,10 @@ def api_stt_transcribe(request: HttpRequest):
             "-m", str(whisper_model),
             "-f", str(tmp_path),
             "-of", str(out_prefix),
-            "-l", "zh",
-            "-otxt",
         ]
+        if language in {"en", "zh"}:
+            cmd += ["-l", language]
+        cmd += ["-otxt"]
 
         proc = subprocess.run(
             cmd,
@@ -172,7 +176,7 @@ def api_stt_transcribe(request: HttpRequest):
         except Exception:
             pass
 
-        return JsonResponse({"ok": True, "text": text, "txt_path": str(txt_path)}, status=200)
+        return JsonResponse({"ok": True, "text": text, "language": language, "txt_path": str(txt_path)}, status=200)
 
     finally:
         try:

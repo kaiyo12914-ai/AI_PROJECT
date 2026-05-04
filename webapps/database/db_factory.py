@@ -1235,6 +1235,7 @@ class OracleDB(BaseDB):
 
 class PostgreSQLDB(BaseDB):
     def __init__(self, config: Optional[DBConfig] = None, profile: str = "") -> None:
+        self.profile = (profile or "").strip()
         self.cfg = config or load_db_config("postgresql", profile=profile)
 
     def connect(self) -> Any:
@@ -1246,8 +1247,10 @@ class PostgreSQLDB(BaseDB):
         c = self.cfg
         host, port, dbname, user, password = c.pg_host, c.pg_port, c.pg_db, c.pg_user, c.pg_pass
 
-        # Prefer DATABASE_URL when present.
-        db_url = _env("DATABASE_URL", "").strip()
+        # Prefer profile-specific DATABASE_URL, then global DATABASE_URL.
+        db_url = _env_profile(self.profile, "DATABASE_URL", "").strip() if self.profile else ""
+        if not db_url:
+            db_url = _env("DATABASE_URL", "").strip()
         if db_url.startswith("postgres://") or db_url.startswith("postgresql://"):
             try:
                 import urllib.parse

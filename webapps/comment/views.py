@@ -178,8 +178,7 @@ def api_generate_comment(request: HttpRequest) -> JsonResponse:
         timeout = None
 
     try:
-        model_type="LM_STUDIO"
-        llm = get_chat_model(temperature=temperature, timeout=timeout,model_type=model_type)
+        llm = get_chat_model(temperature=temperature, timeout=timeout)
         out = llm.invoke(prompt)
 
         reply = _as_text(out).strip()
@@ -205,7 +204,7 @@ def api_generate_comment(request: HttpRequest) -> JsonResponse:
                     performance_grade=performance_grade or None,
                     comment_text=reply,
                     creator_account=request.session.get("login_user") or None,
-                    llm_provider=model_type,
+                    llm_provider=llm_provider,
                     model_name=llm.__repr__(),
                     idno=body.get("idno"),  # 新增被評價人員的帳號
                     sub_performance_grades=sub_performance_grades

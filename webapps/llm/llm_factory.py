@@ -24,16 +24,6 @@ def _i(name: str, default: int) -> int:
         return default
 
 
-def _b(name: str, default: bool = False) -> bool:
-    """
-    env bool: 1/0, true/false, yes/no, on/off
-    """
-    v = (os.getenv(name) or "").strip().lower()
-    if not v:
-        return default
-    return v in ("1", "true", "yes", "y", "on")
-
-
 # -------------------------
 # ✅ 通用（你 .env 的 MODEL_*）
 # -------------------------
@@ -43,30 +33,6 @@ def _model_temperature_default() -> float:
 
 def _model_timeout_default() -> int:
     return _i("MODEL_TIMEOUT", 120)
-
-
-def _resolved_model_priority() -> list[str]:
-    """
-    Resolve AUTO backend priority by ENV first, then MODEL_PRIORITY, then legacy fallback.
-    - ENV=INT: force OLLAMA only (intranet policy)
-    - ENV=EXT: default GOOGLE -> OPENAI -> OLLAMA
-    """
-    env_name = (os.getenv("ENV") or "").strip().upper()
-    raw_prio = (os.getenv("MODEL_PRIORITY") or "").strip()
-
-    if env_name == "INT":
-        return ["OLLAMA"]
-
-    if env_name == "EXT":
-        if raw_prio:
-            return [x.strip().upper() for x in raw_prio.split(",") if x.strip()]
-        return ["GOOGLE", "OPENAI", "OLLAMA"]
-
-    if raw_prio:
-        return [x.strip().upper() for x in raw_prio.split(",") if x.strip()]
-
-    use_ollama_first = _b("USE_OLLAMA_FIRST", True)
-    return ["OLLAMA", "OPENAI"] if use_ollama_first else ["OPENAI", "OLLAMA"]
 
 
 def _extract_host_from_base_url(base_url: str) -> str:
@@ -165,7 +131,7 @@ def get_chat_model(temperature: float | None = None, timeout: int | None = None,
      
      可參考單元測試 `tests\test_llm_factory.py`
     """
-    model_type = (os.getenv("MODEL_TYPE") or "AUTO").strip().upper()
+    model_type = (model_type or os.getenv("MODEL_TYPE") or "OLLAMA").strip().upper()
 
     if model_type == "GOOGLE":
         return _make_google(temperature=temperature, timeout=timeout)
@@ -177,12 +143,9 @@ def get_chat_model(temperature: float | None = None, timeout: int | None = None,
         return _make_openai(temperature=temperature, timeout=timeout)
     
     if model_type == "LM_STUDIO":
-        return _make_openai(temperature=temperature, timeout=timeout,model="ministral-3-14b-instruct-2512",base_url="http://mpcai.mpc.mil.tw:1234/v1")
+        return _make_lm_studio(temperature=temperature, timeout=timeout)
 
-    if model_type == "AUTO":
-        return _make_auto(temperature=temperature, timeout=timeout)
-
-    raise ValueError(f"Unknown MODEL_TYPE={model_type}. Use AUTO/GOOGLE/OLLAMA/OPENAI.")
+    raise ValueError(f"Unknown MODEL_TYPE={model_type}. Use GOOGLE/OLLAMA/OPENAI/LM_STUDIO.")
 
 
 # -------------------------
@@ -219,7 +182,7 @@ def log_llm_config():
     """
     啟動時列印 LLM 配置摘要，方便診斷。
     """
-    model_type = (os.getenv("MODEL_TYPE") or "AUTO").strip().upper()
+    model_type = (os.getenv("MODEL_TYPE") or "OLLAMA").strip().upper()
     logger.info("[LLM CONFIG] MODEL_TYPE=%s", model_type)
 
     def _mask_key(key):
@@ -239,20 +202,10 @@ def log_llm_config():
         m = os.getenv("OLLAMA_MODEL", "mistral_small_3_1_2503:latest")
         u = os.getenv("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
         logger.info("[LLM CONFIG] OLLAMA: model=%s, base_url=%s", m, u)
-    elif model_type == "AUTO":
-        prio = _resolved_model_priority()
-        logger.info("[LLM CONFIG] AUTO Priority: %s", " -> ".join(prio))
-        
-        # 檢查各後端狀態
-        status_line = []
-        for p in prio:
-            if p == "GOOGLE":
-                status_line.append(f"GOOGLE:{_mask_key(os.getenv('GEMINI_API_KEY'))}")
-            elif p == "OPENAI":
-                status_line.append(f"OPENAI:{_mask_key(os.getenv('OPENAI_API_KEY'))}")
-            elif p == "OLLAMA":
-                status_line.append(f"OLLAMA:Ready")
-        logger.info("[LLM CONFIG] Status: %s", " | ".join(status_line))
+    elif model_type == "LM_STUDIO":
+        m = os.getenv("LM_STUDIO_MODEL", "ministral-3-14b-instruct-2512")
+        u = os.getenv("LM_STUDIO_BASE_URL", "http://mpcai.mpc.mil.tw:1234/v1")
+        logger.info("[LLM CONFIG] LM_STUDIO: model=%s, base_url=%s", m, u)
     logger.info("%s", "-" * 40)
 
 
@@ -345,10 +298,14 @@ def _make_openai(temperature: float | None, timeout: int | None,model:str |None=
     from langchain_openai import ChatOpenAI
 
     api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
+    if not api_key and not base_url:
         raise RuntimeError("OPENAI_API_KEY 未設定（OpenAI 不可用）")
+    
+    # 對於本地推理 (如 LM-Studio)，若無 Key 則使用佔位符
+    if not api_key:
+        api_key = "lm-studio"
 
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
     # ✅ 改：支援 MODEL_TEMPERATURE / MODEL_TIMEOUT fallback
     t = _resolve_temperature("OPENAI_TEMPERATURE", temperature)
@@ -375,6 +332,43 @@ def _make_openai(temperature: float | None, timeout: int | None,model:str |None=
             return f"ChatOpenAI(model={model})"
 
     return LoggedOpenAI()
+
+
+def _make_lm_studio(temperature: float | None, timeout: int | None):
+    from langchain_openai import ChatOpenAI
+
+    base_url = os.getenv("LM_STUDIO_BASE_URL", "http://mpcai.mpc.mil.tw:1234/v1")
+    model = os.getenv("LM_STUDIO_MODEL", "ministral-3-14b-instruct-2512")
+    api_key = os.getenv("LM_STUDIO_API_KEY") or os.getenv("OPENAI_API_KEY") or "lm-studio"
+
+    t = _resolve_temperature("LM_STUDIO_TEMPERATURE", temperature)
+    to = _resolve_timeout("LM_STUDIO_TIMEOUT", timeout)
+
+    host = _extract_host_from_base_url(base_url)
+    if host:
+        _append_no_proxy_host(host)
+
+    llm = ChatOpenAI(
+        base_url=base_url,
+        model=model,
+        temperature=t,
+        timeout=to,
+        api_key=api_key,
+    )
+
+    class LoggedLMStudio:
+        def invoke(self, input, **kwargs):
+            _log_llm_use("LM_STUDIO", model, temperature=t, timeout=to)
+            return llm.invoke(input, **kwargs)
+
+        async def ainvoke(self, input, **kwargs):
+            _log_llm_use("LM_STUDIO", model, temperature=t, timeout=to)
+            return await llm.ainvoke(input, **kwargs)
+
+        def __repr__(self):
+            return f"LMStudioChatModel(model={model})"
+
+    return LoggedLMStudio()
 
 
 def _make_google(temperature: float | None, timeout: int | None):
@@ -450,80 +444,12 @@ def _log_llm_use(tag: str, model: str, *, temperature: float | None = None, time
     logger.info("[LLM] backend=%s model=%s%s", tag, model, suffix)
 
 
-# -------------------------
-# ✅ AUTO：尊重 USE_OLLAMA_FIRST
-# - USE_OLLAMA_FIRST=1 => 先 Ollama 後 OpenAI
-# - USE_OLLAMA_FIRST=0 => 先 OpenAI 後 Ollama
-# -------------------------
-def _make_auto(temperature: float | None, timeout: int | None):
-    # Resolve priority with ENV policy + MODEL_PRIORITY + legacy fallback.
-    priority_list = _resolved_model_priority()
-
-    # 預先初始化所有在 list 中的後端
-    backends = {}
-    init_errors = {}
-
-    for name in priority_list:
-        try:
-            if name == "GOOGLE":
-                backends[name] = _make_google(temperature, timeout)
-            elif name == "OPENAI":
-                backends[name] = _make_openai(temperature, timeout)
-            elif name == "OLLAMA":
-                backends[name] = _make_ollama(temperature, timeout)
-        except Exception as e:
-            init_errors[name] = e
-
-    class AutoFallbackChatModel:
-        def invoke(self, input, config=None, **kwargs):
-            last_err = None
-            for name in priority_list:
-                llm = backends.get(name)
-                if not llm:
-                    last_err = init_errors.get(name) or RuntimeError(f"{name} backend not inited")
-                    continue
-                
-                try:
-                    _log_llm_use(f"AUTO->({name})", os.getenv(f"{name}_MODEL", ""))
-                    return llm.invoke(input, config=config, **kwargs)
-                except Exception as e:
-                    last_err = e
-                    logger.warning("[LLM] AUTO fallback: %s failed, error=%r", name, e)
-            
-            raise RuntimeError(f"AUTO 模式所有後端皆失敗。最後錯誤: {last_err!r}")
-
-        async def ainvoke(self, input, config=None, **kwargs):
-            last_err = None
-            for name in priority_list:
-                llm = backends.get(name)
-                if not llm:
-                    last_err = init_errors.get(name) or RuntimeError(f"{name} backend not inited")
-                    continue
-                
-                try:
-                    _log_llm_use(f"AUTO->({name})", os.getenv(f"{name}_MODEL", ""))
-                    return await llm.ainvoke(input, config=config, **kwargs)
-                except Exception as e:
-                    last_err = e
-                    logger.warning("[LLM] AUTO fallback (async): %s failed, error=%r", name, e)
-            
-            raise RuntimeError(f"AUTO 模式所有後端皆失敗。最後錯誤: {last_err!r}")
-
-        def __call__(self, *args, **kwargs):
-            return self.invoke(*args, **kwargs)
-
-        def __repr__(self):
-            return f"AutoFallbackChatModel(priority={priority_list}, active_keys={list(backends.keys())})"
-
-    return AutoFallbackChatModel()
-
-
 def get_embedding_model(model_type: str | None = None):
     """
     透過工廠方法產生 Embedding 物件。
     相容 MODEL_TYPE：GOOGLE, OPENAI, OLLAMA。
     """
-    model_type = (model_type or os.getenv("MODEL_TYPE") or "AUTO").strip().upper()
+    model_type = (model_type or os.getenv("MODEL_TYPE") or "OLLAMA").strip().upper()
 
     if model_type == "GOOGLE":
         from langchain_google_genai import GoogleGenerativeAIEmbeddings
@@ -549,13 +475,4 @@ def get_embedding_model(model_type: str | None = None):
         model = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
         return OllamaEmbeddings(model=model, base_url=base_url)
 
-    if model_type == "AUTO":
-        prio = _resolved_model_priority()
-        for p in prio:
-            try:
-                return get_embedding_model(p)
-            except Exception as e:
-                logger.warning(f"[LLM] AUTO embedding fallback: {p} failed, err={e}")
-        return get_embedding_model("OLLAMA")
-
-    raise ValueError(f"Unknown MODEL_TYPE={model_type}. Use AUTO/GOOGLE/OLLAMA/OPENAI.")
+    raise ValueError(f"Unknown MODEL_TYPE={model_type}. Use GOOGLE/OLLAMA/OPENAI.")

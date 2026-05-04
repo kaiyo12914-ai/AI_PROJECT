@@ -1,0 +1,128 @@
+﻿# Django 多專案啟動（5 專案）
+
+## 架構原則
+- 每個專案各自獨立，互不共用程序及函數。
+- 每個專案以獨立 PowerShell 視窗啟動，使用自己的工作目錄與連接埠。
+- 開發共用 workspace 統一為：H:\AI\AI_TOOLS\openclaw-workspace
+
+## 共同環境原則
+- 優先使用 H:\AI\VENV3.12
+- 若 H:\AI\VENV3.12 不存在，自動相容回退到 H:\AI\venv3.12
+
+## 一鍵啟動（建議）
+Set-Location -Path "H:\AI"
+.\start-all-django.ps1
+
+## 腳本隔離設定（自動）
+- 每個子行程自動清除 PYTHONPATH，避免跨專案 import 污染。
+- 每個子行程設定：
+  - OPENCLAW_WORKSPACE=H:\AI\AI_TOOLS\openclaw-workspace
+  - PROJECT_NAME=<專案名>
+
+
+
+
+## 手動啟動（逐一）
+& 'H:\AI\VENV3.12\Scripts\Activate.ps1'
+Set-Location -Path "H:\AI\AI_TOOLS"
+H:\AI\VENV3.12\Scripts\python.exe get_Window.py
+
+& 'H:\AI\AI_TOOLS\venv\Scripts\Activate.ps1'
+Set-Location -Path "H:\AI\AI_TOOLS"
+$env:OPENCLAW_WORKSPACE="H:\AI\openclaw-workspace"
+$env:PROJECT_NAME="AI_TOOLS"
+python.exe manage.py runserver 
+
+Set-Location -Path "H:\AI\Class"
+$env:OPENCLAW_WORKSPACE="H:\AI\openclaw-workspace"
+$env:PROJECT_NAME="CLASS"
+H:\AI\VENV3.12\Scripts\python.exe manage.py runserver 127.0.0.1:8001
+
+Set-Location -Path "H:\AI\Drone"
+$env:OPENCLAW_WORKSPACE="H:\AI\openclaw-workspace"
+$env:PROJECT_NAME="DRONE"
+H:\AI\VENV3.12\Scripts\python.exe manage.py runserver 127.0.0.1:8002
+
+Set-Location -Path "H:\AI\SmartHome"
+$env:OPENCLAW_WORKSPACE="H:\AI\openclaw-workspace"
+$env:PROJECT_NAME="SMARTHOME"
+H:\AI\VENV3.12\Scripts\python.exe manage.py runserver 127.0.0.1:8003
+
+Set-Location -Path "H:\AI\STOCK"
+$env:OPENCLAW_WORKSPACE="H:\AI\openclaw-workspace"
+$env:PROJECT_NAME="STOCK"
+H:\AI\VENV3.12\Scripts\python.exe stock_analyzer\manage.py runserver 127.0.0.1:8006
+
+
+Set-Location -Path "H:\AI\kanban_system"
+$env:OPENCLAW_WORKSPACE="H:\AI\openclaw-workspace"
+$env:PROJECT_NAME="kanban_system"
+H:\AI\VENV3.12\Scripts\python.exe manage.py runserver 127.0.0.1:8005
+
+Set-Location -Path "H:\AI\GENPIC"
+$env:OPENCLAW_WORKSPACE="H:\AI\openclaw-workspace"
+$env:PROJECT_NAME="GENPIC"
+H:\AI\VENV3.12\Scripts\python.exe manage.py runserver 127.0.0.1:8007
+
+## STOCK 相容性注意
+- start-all-django.ps1 會自動嘗試：
+  1. H:\AI\STOCK\manage.py
+  2. H:\AI\STOCK\stock_analyzer\manage.py
+- 若兩者都不存在，腳本會警告並略過 STOCK，不影響其他四專案啟動。
+
+
+python manage.py collectstatic --noinput
+
+#安裝Skill
+ npx clawhub@latest install sonoscli
+
+# 搜尋
+npx clawhub@latest search "calendar"
+
+# 安裝
+npx clawhub@latest install humanizer
+
+# 查看已安裝
+npx clawhub@latest list
+
+# 更新全部已安裝 skills
+npx clawhub@latest update --all
+
+# 同步本機 skills 到 registry（發佈/備份用）
+npx clawhub@latest sync --all
+
+桌面截圖
+H:\AI\venv3.12\Scripts\python.exe H:\AI\AI_TOOLS\tools\get_Window.py
+
+
+請整理未commit內容修正重點存入workspace本日交接紀錄避免遺忘，以利後續openclaw辦理開發交接
+
+Google Cloud Run 完整部署（build → deploy → 取 URL），確認 IAM 已生效。
+
+openai 于楷祐
+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
+
+openclaw change LLM cli語法
+openclaw models set google/gemini-2.5-flash
+openclaw models set google/gemini-2-flash
+openclaw models set google/gemini-3-flash
+openclaw models set google/Gemini-3.1-Flash-Lite
+openclaw config set agents.defaults.model.primary "google/gemini-2.5-flash"
+
+openclaw config set agents.defaults.model.max_output_tokens 512
+
+openclaw 切換 gemini KEY指令
+
+openclaw gateway run --profile gemini_1   (for kaiyo12914 tier 1)
+openclaw gateway run --profile gemini_2   (for yuanlinwen Free tier)
+openclaw gateway run --profile gemini_3   (for mpcmailff2 No tier)
+
+agentmail
+kaiyo12914@agentmail.to
+$env:AGENTMAIL_API_KEY
+am_us_3030267d9173c58954dafdc10b13becd51bc93d00d389556aee09fb17b85b5d0
+
+[System.Environment]::SetEnvironmentVariable("AGENTMAIL_API_KEY", "am_us_3030267d9173c58954dafdc10b13becd51bc93d00d389556aee09fb17b85b5d0", "User")
+
+
+DisplaySwitch.exe /internal # 只用主螢幕

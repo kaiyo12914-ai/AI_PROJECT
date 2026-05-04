@@ -7,6 +7,7 @@
   <title>美語學習教室</title>
   <link rel="stylesheet" href="{% custom_static 'englishchat/css/index.css' %}">
   <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% custom_static 'englishchat/js/speech_client.js' %}"></script>
   <script defer src="{% custom_static 'englishchat/js/index.js' %}"></script>
 </head>
 <body data-base-url="{{ request.script_name }}">
@@ -43,10 +44,57 @@
     </section>
 
     <section class="panel chat">
+      <div class="mode-tabs" role="tablist" aria-label="practice modes">
+        <button id="chatModeBtn" class="mode-tab active" type="button" data-mode="chat">Conversation</button>
+        <button id="quizModeBtn" class="mode-tab" type="button" data-mode="quiz">Fill Blank</button>
+        <button id="reorderModeBtn" class="mode-tab" type="button" data-mode="reorder">Reorder</button>
+        <button id="translateModeBtn" class="mode-tab" type="button" data-mode="translate">Translate</button>
+      </div>
+      <div class="speech-tools">
+        <button id="speakBtn" type="button">Speak</button>
+        <button id="dictateBtn" type="button">Dictate</button>
+        <button id="stopSpeechBtn" type="button">Stop</button>
+        <span id="speechStatus" class="speech-status"></span>
+      </div>
       <div id="chatLog" class="chat-log" aria-live="polite"></div>
       <div id="starterBox" class="starter-box"></div>
       <div id="hintBox" class="hint-box"></div>
       <div id="correctionBox" class="correction-box"></div>
+      <div id="quizPanel" class="quiz-panel hidden" aria-live="polite">
+        <div id="quizQuestion" class="quiz-question"></div>
+        <div id="quizChoices" class="quiz-choices"></div>
+        <div id="quizResult" class="quiz-result"></div>
+        <button id="nextQuizBtn" type="button">Next question</button>
+      </div>
+      <div id="reorderPanel" class="practice-panel hidden" aria-live="polite">
+        <div id="reorderPrompt" class="practice-prompt"></div>
+        <div id="reorderAnswer" class="assembled-answer"></div>
+        <div id="reorderWords" class="word-bank"></div>
+        <div id="reorderResult" class="quiz-result"></div>
+        <div class="practice-actions">
+          <button id="clearReorderBtn" type="button">Clear</button>
+          <button id="checkReorderBtn" type="button">Check</button>
+          <button id="nextReorderBtn" type="button">Next question</button>
+        </div>
+      </div>
+      <div id="translatePanel" class="practice-panel hidden" aria-live="polite">
+        <div id="translatePrompt" class="practice-prompt"></div>
+        <textarea id="translateInput" rows="3" placeholder="Type your English translation..."></textarea>
+        <div id="translateResult" class="quiz-result"></div>
+        <div id="translatePatterns" class="starter-box"></div>
+        <div class="practice-actions">
+          <button id="checkTranslateBtn" type="button">Check</button>
+          <button id="nextTranslateBtn" type="button">Next question</button>
+        </div>
+      </div>
+      <div class="summary-panel">
+        <div class="summary-head">
+          <strong>Session progress</strong>
+          <button id="refreshSummaryBtn" type="button">Refresh</button>
+        </div>
+        <div id="summaryStats" class="summary-stats"></div>
+        <div id="summaryAdvice" class="summary-advice"></div>
+      </div>
       <div class="composer">
         <textarea id="userInput" rows="3" placeholder="輸入英文訊息..."></textarea>
         <div class="actions">
