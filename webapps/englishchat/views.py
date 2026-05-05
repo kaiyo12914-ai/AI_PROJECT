@@ -7,10 +7,9 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 
-from .services import get_db_question
+from .services import get_db_question, get_seed_question
 from webapps.llm.llm_factory import get_chat_model
 from webapps.portal.decorators import require_node
-from .topic_packs import get_topic_pack_item
 
 
 TOPIC_PRESETS = [
@@ -127,10 +126,13 @@ def _normalize_fill_blank_quiz(data: Dict[str, Any], topic: str, level: str) -> 
         choices = [_safe_text(x) for x in raw_choices if _safe_text(x)]
     if len(choices) < 2:
         choices = fallback["choices"]
-    choices = choices[:4]
     answer = _safe_text(data.get("answer")) or fallback["answer"]
     if answer not in choices:
-        answer = fallback["answer"] if fallback["answer"] in choices else choices[0]
+        choices.append(answer)
+    
+    import random
+    random.shuffle(choices)
+    
     return {
         "question_id": _safe_text(data.get("question_id")) or fallback["question_id"],
         "question": question,
@@ -142,9 +144,12 @@ def _normalize_fill_blank_quiz(data: Dict[str, Any], topic: str, level: str) -> 
 
 
 def _build_fill_blank_prompt(topic: str, level: str) -> str:
+    import random
+    seed = random.randint(1000, 9999)
     return f"""
 You are an American-English quiz writer for Taiwanese learners.
-Create one fill-in-the-blank quiz.
+Create one unique fill-in-the-blank quiz. Make sure it is DIFFERENT from typical examples.
+Random Seed: {seed}
 
 Topic: {topic}
 Level: {level}
@@ -162,6 +167,7 @@ Output JSON only:
 
 Rules:
 - Use practical American English.
+- Be creative and avoid generic sentences.
 - The answer must be one of the choices.
 - Do not output markdown.
 """.strip()
@@ -204,11 +210,16 @@ def _normalize_reorder_quiz(data: Dict[str, Any], topic: str, level: str) -> Dic
         words = [_safe_text(x) for x in raw_words if _safe_text(x)]
     if len(words) < 3:
         words = fallback["words"]
+    
+    words = words[:10]
+    import random
+    random.shuffle(words)
+
     answer = _safe_text(data.get("answer")) or fallback["answer"]
     return {
         "question_id": _safe_text(data.get("question_id")) or fallback["question_id"],
         "prompt": _safe_text(data.get("prompt")) or fallback["prompt"],
-        "words": words[:10],
+        "words": words,
         "answer": answer,
         "explanation_zh": _safe_text(data.get("explanation_zh")) or fallback["explanation_zh"],
         "pattern": _safe_text(data.get("pattern")) or fallback["pattern"],
@@ -216,9 +227,12 @@ def _normalize_reorder_quiz(data: Dict[str, Any], topic: str, level: str) -> Dic
 
 
 def _build_reorder_prompt(topic: str, level: str) -> str:
+    import random
+    seed = random.randint(1000, 9999)
     return f"""
 You are an American-English quiz writer for Taiwanese learners.
-Create one sentence reordering quiz.
+Create one unique sentence reordering quiz.
+Random Seed: {seed}
 
 Topic: {topic}
 Level: {level}
@@ -236,6 +250,7 @@ Output JSON only:
 
 Rules:
 - Use practical American English.
+- Be creative and avoid generic sentences.
 - Keep beginner sentences short.
 - The answer must use all word chips.
 - Do not output markdown.
@@ -617,10 +632,10 @@ def api_fill_blank_quiz(request):
         quiz = _normalize_fill_blank_quiz(db_item, topic, level)
         quiz.update({"ok": True, "topic": topic, "level": level, "source": "question_bank"})
         return JsonResponse(quiz)
-    pack_item = get_topic_pack_item(topic, "fill_blank", level, _seen_question_ids(body))
-    if pack_item:
-        quiz = _normalize_fill_blank_quiz(pack_item, topic, level)
-        quiz.update({"ok": True, "topic": topic, "level": level, "source": "topic_pack"})
+    seed_item = get_seed_question(topic, "fill_blank", level, _seen_question_ids(body))
+    if seed_item:
+        quiz = _normalize_fill_blank_quiz(seed_item, topic, level)
+        quiz.update({"ok": True, "topic": topic, "level": level, "source": "seed_bank"})
         return JsonResponse(quiz)
 
     prompt = _build_fill_blank_prompt(topic, level)
@@ -683,10 +698,10 @@ def api_reorder_quiz(request):
         quiz = _normalize_reorder_quiz(db_item, topic, level)
         quiz.update({"ok": True, "topic": topic, "level": level, "source": "question_bank"})
         return JsonResponse(quiz)
-    pack_item = get_topic_pack_item(topic, "reorder", level, _seen_question_ids(body))
-    if pack_item:
-        quiz = _normalize_reorder_quiz(pack_item, topic, level)
-        quiz.update({"ok": True, "topic": topic, "level": level, "source": "topic_pack"})
+    seed_item = get_seed_question(topic, "reorder", level, _seen_question_ids(body))
+    if seed_item:
+        quiz = _normalize_reorder_quiz(seed_item, topic, level)
+        quiz.update({"ok": True, "topic": topic, "level": level, "source": "seed_bank"})
         return JsonResponse(quiz)
 
     prompt = _build_reorder_prompt(topic, level)
@@ -747,10 +762,10 @@ def api_translation_quiz(request):
         quiz = _normalize_translation_quiz(db_item, topic, level)
         quiz.update({"ok": True, "topic": topic, "level": level, "source": "question_bank"})
         return JsonResponse(quiz)
-    pack_item = get_topic_pack_item(topic, "translation", level, _seen_question_ids(body))
-    if pack_item:
-        quiz = _normalize_translation_quiz(pack_item, topic, level)
-        quiz.update({"ok": True, "topic": topic, "level": level, "source": "topic_pack"})
+    seed_item = get_seed_question(topic, "translation", level, _seen_question_ids(body))
+    if seed_item:
+        quiz = _normalize_translation_quiz(seed_item, topic, level)
+        quiz.update({"ok": True, "topic": topic, "level": level, "source": "seed_bank"})
         return JsonResponse(quiz)
 
     prompt = _build_translation_prompt(topic, level)

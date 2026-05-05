@@ -45,7 +45,6 @@
       {% allow "portal" as can_portal %}
       {% allow "vanna" as can_vanna %}
       {% allow "formalize" as can_formalize %}
-      {% allow "open_notebook" as can_open_notebook %}
 
       {% if can_translator %}
         {% url 'translator_page' as translator_href %}
@@ -64,16 +63,12 @@
 
       {% if can_projectnotes %}
         {% url 'projectnotes:page' as projectnotes_href %}
-        {% include "portal/_svg_card.html" with href=projectnotes_href title="專案筆記查詢" subtitle="專案知識選界 / 引用對話" tone="green" icon="notebook" variant=card_variant %}
+        {% include "portal/_svg_card.html" with href=projectnotes_href title="專案法規查詢" subtitle="專案知識選界 / 引用對話" tone="green" icon="notebook" variant=card_variant %}
       {% endif %}
 
       {% if can_comment %}
         {% url 'comment:page_index' as comment_href %}
         {% include "portal/_svg_card.html" with href=comment_href title="考績評語評量" subtitle="評語建議文字優化" tone="blue" icon="comment" variant=card_variant %}
-      {% endif %}
-
-      {% if can_open_notebook %}
-        {% include "portal/_svg_card.html" with href=open_notebook_url title="Open Notebook" subtitle="Notebook LM / RAG research" tone="green" icon="open_notebook" variant=card_variant new_tab=True %}
       {% endif %}
 
       {% if can_meetingreply %}

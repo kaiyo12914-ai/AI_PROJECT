@@ -50,16 +50,16 @@ def _env(k: str, d: str = "") -> str:
     return (os.getenv(k) or d).strip()
 
 
-def _external_db_disabled() -> bool:
+def _external_db_disabled(db_type: DBType) -> bool:
     """
     ENV mode hard rules:
-    - EXT: always use mock JSON, never connect external DB.
+    - EXT: PostgreSQL is allowed; SQL Server / Oracle / Sybase must use mock JSON.
     - INT: always use external DB, never use mock JSON.
     - Others: default to external DB.
     """
     env_mode = (os.getenv("ENV") or "").strip().upper()
     if env_mode == "EXT":
-        return True
+        return db_type in ("sqlserver", "oracle", "sybase")
     if env_mode == "INT":
         return False
     return False
@@ -1247,10 +1247,8 @@ class PostgreSQLDB(BaseDB):
         c = self.cfg
         host, port, dbname, user, password = c.pg_host, c.pg_port, c.pg_db, c.pg_user, c.pg_pass
 
-        # Prefer profile-specific DATABASE_URL, then global DATABASE_URL.
-        db_url = _env_profile(self.profile, "DATABASE_URL", "").strip() if self.profile else ""
-        if not db_url:
-            db_url = _env("DATABASE_URL", "").strip()
+        # Prefer global DATABASE_URL. Per-profile PostgreSQL should use PG_HOST/PG_PORT/PG_DB/PG_USER/PG_PASS.
+        db_url = _env("DATABASE_URL", "").strip()
         if db_url.startswith("postgres://") or db_url.startswith("postgresql://"):
             try:
                 import urllib.parse
@@ -1437,7 +1435,7 @@ def _materialize_oracle_row(row: Any) -> Any:
 
 
 def db_query_one(db_type: DBType, sql: str, params: Params = None, *, profile: str = "") -> Any:
-    if _external_db_disabled():
+    if _external_db_disabled(db_type):
         rows = _mock_db_query_all(db_type, sql, params)
         return rows[0] if rows else None
     sql = _normalize_sql(sql)
@@ -1491,7 +1489,7 @@ def db_query_all(
     limit: int = 0,
     profile: str = "",
 ) -> List[Any]:
-    if _external_db_disabled():
+    if _external_db_disabled(db_type):
         rows = _mock_db_query_all(db_type, sql, params)
         if limit and limit > 0:
             return list(rows)[: int(limit)]
@@ -1541,7 +1539,7 @@ def db_query_all(
 
 
 def db_execute(db_type: DBType, sql: str, params: Params = None, *, profile: str = "") -> int:
-    if _external_db_disabled():
+    if _external_db_disabled(db_type):
         return 0
     conn = db_connect(db_type, profile=profile)
     cur = None

@@ -22,7 +22,7 @@
 ## ENV 規範（避免誤走 MOCK）
 
 - `ENV=INT`：**強制使用實體 DB**（即使有 `FORCE_MOCK_DB=1` 也不走 mock）
-- `ENV=EXT`：使用 mock JSON（停用外部 DB）
+- `ENV=EXT`：允許 PostgreSQL 連線；SQL Server / Oracle / Sybase 使用 mock JSON
 - `ENV=DEV/LOCAL/TEST/CI`：可用 `FORCE_MOCK_DB=1` 手動切 mock
 
 建議內網正式環境設定：

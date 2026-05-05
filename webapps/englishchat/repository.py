@@ -6,6 +6,23 @@ from webapps.repositories.base import BaseRepository
 
 
 class EnglishChatQuestionBankRepository(BaseRepository):
+    COLUMNS = [
+        "question_id",
+        "topic_key",
+        "mode",
+        "level",
+        "prompt_text",
+        "choices_json",
+        "words_json",
+        "answer_text",
+        "explanation_zh",
+        "pattern_text",
+        "zh_prompt",
+        "sample_answer",
+        "patterns_json",
+        "sort_order",
+    ]
+
     def __init__(self) -> None:
         super().__init__(db_type="postgresql")
         self.profile = "ENGLISHCHAT"
@@ -39,6 +56,13 @@ class EnglishChatQuestionBankRepository(BaseRepository):
 
     @staticmethod
     def _row_to_dict(row: Any) -> Dict[str, Any]:
+        if isinstance(row, dict):
+            return {key: row.get(key) for key in EnglishChatQuestionBankRepository.COLUMNS}
+        if isinstance(row, (list, tuple)):
+            out: Dict[str, Any] = {}
+            for index, key in enumerate(EnglishChatQuestionBankRepository.COLUMNS):
+                out[key] = row[index] if index < len(row) else None
+            return out
         return {
             "question_id": getattr(row, "question_id", None),
             "topic_key": getattr(row, "topic_key", None),

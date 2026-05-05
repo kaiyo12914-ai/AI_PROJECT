@@ -48,7 +48,7 @@
 ## 3) ENV / 執行模式（Mandatory）
 
 ### 3.1 EXT / INT DB Mode（強制）
-1. `ENV=EXT`：禁止連實體 DB，必須使用 mock 資料。
+1. `ENV=EXT`：允許連 PostgreSQL；SQL Server / Oracle / Sybase 禁止連實體 DB，必須使用 mock 資料。
 2. `ENV=INT`：必須連實體 DB，禁止 fallback 到本地/mock JSON。
 3. `ENV=INT` 查詢失敗時，必須明確回錯，不可改走 mock。
 4. EXT/INT 不可混用，不可「半 fallback」。
@@ -320,7 +320,7 @@ DEV_LOGIN_NAME=
 - 呼叫端只呼叫 service method
 
 ## 十三、DB / Mock 規範
-- `ENV=EXT`：停用外部 DB，改用 mock JSON
+- `ENV=EXT`：允許 PostgreSQL；SQL Server / Oracle / Sybase 停用外部 DB，改用 mock JSON
 - `ENV=INT`：一律使用實體 DB
 - 不得自行切換 mock 行為
 - ENV設定請避免內外網差異，請於系統中進行ENV區隔並同時滿足內外網需求
@@ -339,7 +339,7 @@ DEV_LOGIN_NAME=
 - VS Code 預設編碼請使用 `UTF-8`，不要使用 `UTF-8 with BOM`。
 
 ## ENV DB Mode Rule (Mandatory)
-- ENV=EXT: MUST NOT connect to physical DB. MUST always use MOCK DATA.
+- ENV=EXT: PostgreSQL MAY connect to a physical DB. SQL Server / Oracle / Sybase MUST use MOCK DATA and MUST NOT connect to physical DB.
 - ENV=INT: MUST always connect to physical DB. MUST NOT use MOCK DATA.
 - ENV=INT: MUST NOT fallback to local/mock JSON when DB query fails; return explicit error instead.
 - No fallback or mixed mode is allowed between EXT and INT.
