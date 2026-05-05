@@ -55,6 +55,56 @@ class EnglishChatQuestionBankRepository(BaseRepository):
         rows = self.query_all(sql, [topic_key, mode, level], profile=self.profile)
         return [self._row_to_dict(row) for row in rows]
 
+    def fetch_next_question(
+        self,
+        topic_key: str,
+        mode: str,
+        level: str,
+        exclude_ids: List[str],
+        after_question_id: str = "",
+    ) -> Dict[str, Any] | None:
+        base_sql = """
+        SELECT
+            question_id,
+            topic_key,
+            mode,
+            level,
+            prompt_text,
+            choices_json,
+            words_json,
+            answer_text,
+            explanation_zh,
+            pattern_text,
+            zh_prompt,
+            sample_answer,
+            patterns_json,
+            sort_order
+        FROM englishchat_question_bank
+        WHERE is_active = TRUE
+          AND topic_key = %s
+          AND mode = %s
+          AND level = %s
+        """
+        order_sql = "\nORDER BY sort_order ASC, question_id ASC LIMIT 1"
+        params: List[Any] = [topic_key, mode, level]
+        if exclude_ids:
+            placeholders = ", ".join(["%s"] * len(exclude_ids))
+            base_sql += f"\n  AND question_id NOT IN ({placeholders})"
+            params.extend(exclude_ids)
+
+        if after_question_id:
+            cursor_sql = (
+                " AND (sort_order, question_id) > ("
+                "COALESCE((SELECT sort_order FROM englishchat_question_bank WHERE question_id = %s), -1), %s)"
+            )
+            cursor_params = params + [after_question_id, after_question_id]
+            row = self.query_one(base_sql + cursor_sql + order_sql, cursor_params, profile=self.profile)
+            if row:
+                return self._row_to_dict(row)
+
+        row = self.query_one(base_sql + order_sql, params, profile=self.profile)
+        return self._row_to_dict(row) if row else None
+
     def upsert_question(self, item: Dict[str, Any]) -> int:
         sql = """
         INSERT INTO englishchat_question_bank (

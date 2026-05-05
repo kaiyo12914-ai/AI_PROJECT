@@ -1,6 +1,10 @@
 (function () {
   "use strict";
 
+  const MAX_SEEN_HISTORY = 12;
+  const MAX_DEBUG_LINES = 30;
+  const DEBUG_MODE = document.body.dataset.debugMode === "1";
+
   const state = {
     topic: "",
     level: "beginner",
@@ -19,6 +23,7 @@
     lastSpeakText: "",
     recognition: null,
     listening: false,
+    debugLines: [],
   };
 
   const topicSelect = document.getElementById("topicSelect");
@@ -61,10 +66,44 @@
   const summaryStats = document.getElementById("summaryStats");
   const summaryAdvice = document.getElementById("summaryAdvice");
   const composer = document.querySelector(".composer");
+  const debugPanel = document.getElementById("debugPanel");
+  const debugLog = document.getElementById("debugLog");
+  const clearDebugBtn = document.getElementById("clearDebugBtn");
+
+  if (DEBUG_MODE && debugPanel) {
+    debugPanel.classList.remove("hidden");
+  }
 
   function url(path) {
     if (typeof window.apiurl === "function") return window.apiurl(path);
     return path;
+  }
+
+  function rememberSeenQuestion(mode, questionId) {
+    if (!questionId || !state.seenQuestionIds[mode]) return;
+    const list = state.seenQuestionIds[mode];
+    const next = list.filter((item) => item !== questionId);
+    next.push(questionId);
+    state.seenQuestionIds[mode] = next.slice(-MAX_SEEN_HISTORY);
+  }
+
+  function appendDebugLine(text) {
+    if (!DEBUG_MODE || !debugLog || !text) return;
+    state.debugLines.push(text);
+    state.debugLines = state.debugLines.slice(-MAX_DEBUG_LINES);
+    debugLog.innerHTML = "";
+    state.debugLines.forEach((line) => {
+      const div = document.createElement("div");
+      div.className = "debug-line";
+      div.textContent = line;
+      debugLog.appendChild(div);
+    });
+    debugLog.scrollTop = debugLog.scrollHeight;
+  }
+
+  function logFallback(scope, data) {
+    if (!data || !data.fallback_reason) return;
+    appendDebugLine(`[${scope}] source=${data.source || "unknown"} reason=${data.fallback_reason}`);
   }
 
   function currentTopic() {
@@ -339,6 +378,8 @@
     state.translation = null;
     state.attempts = [];
     state.seenQuestionIds = { quiz: [], reorder: [], translate: [] };
+    state.debugLines = [];
+    if (debugLog) debugLog.innerHTML = "";
     chatLog.innerHTML = "";
     correctionBox.textContent = "";
     hintBox.textContent = "";
@@ -404,9 +445,7 @@
 
   function renderQuiz(quiz) {
     state.quiz = quiz;
-    if (quiz.question_id && !state.seenQuestionIds.quiz.includes(quiz.question_id)) {
-      state.seenQuestionIds.quiz.push(quiz.question_id);
-    }
+    rememberSeenQuestion("quiz", quiz.question_id);
     quizQuestion.textContent = quiz.question || "";
     rememberSpeakText(quiz.question || "");
     quizChoices.innerHTML = "";
@@ -444,6 +483,7 @@
     });
     const data = await resp.json();
     if (!data.ok) return showQuizLoadError();
+    logFallback("fill_blank", data);
     renderQuiz(data);
   }
 
@@ -490,9 +530,7 @@
 
   function renderReorder(quiz) {
     state.reorder = quiz;
-    if (quiz.question_id && !state.seenQuestionIds.reorder.includes(quiz.question_id)) {
-      state.seenQuestionIds.reorder.push(quiz.question_id);
-    }
+    rememberSeenQuestion("reorder", quiz.question_id);
     state.reorderPicked = [];
     reorderPrompt.textContent = quiz.prompt || "Put the words in order.";
     rememberSpeakText(quiz.answer || "");
@@ -533,6 +571,7 @@
     });
     const data = await resp.json();
     if (!data.ok) return showReorderLoadError();
+    logFallback("reorder", data);
     renderReorder(data);
   }
 
@@ -580,9 +619,7 @@
 
   function renderTranslation(quiz) {
     state.translation = quiz;
-    if (quiz.question_id && !state.seenQuestionIds.translate.includes(quiz.question_id)) {
-      state.seenQuestionIds.translate.push(quiz.question_id);
-    }
+    rememberSeenQuestion("translate", quiz.question_id);
     translatePrompt.textContent = quiz.zh_prompt || "";
     rememberSpeakText(quiz.sample_answer || "");
     translateInput.value = "";
@@ -617,6 +654,7 @@
     });
     const data = await resp.json();
     if (!data.ok) return showTranslateLoadError();
+    logFallback("translation", data);
     renderTranslation(data);
   }
 
@@ -681,6 +719,12 @@
   speakBtn.addEventListener("click", () => speakText(currentSpeakText()));
   dictateBtn.addEventListener("click", startDictation);
   stopSpeechBtn.addEventListener("click", stopSpeechTools);
+  if (clearDebugBtn) {
+    clearDebugBtn.addEventListener("click", () => {
+      state.debugLines = [];
+      if (debugLog) debugLog.innerHTML = "";
+    });
+  }
 
   sendBtn.addEventListener("click", () => {
     sendUserMessage(userInput.value).catch(() => addMessage("ai", "Send failed. Please retry."));

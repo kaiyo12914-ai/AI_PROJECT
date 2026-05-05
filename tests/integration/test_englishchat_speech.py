@@ -80,6 +80,21 @@ def test_englishchat_tts_wrapper_calls_tts_backend(monkeypatch):
     assert seen["json"]["text"] == "Please repeat this sentence."
 
 
+def test_englishchat_tts_wrapper_returns_502_when_backend_fails(monkeypatch):
+    monkeypatch.setattr("webapps.portal.decorators.can_access", lambda user, node: True)
+    monkeypatch.setattr(views_speech.requests, "post", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
+    request = RequestFactory().post(
+        "/englishchat/speech/tts/",
+        data=json.dumps({"text": "Please repeat this sentence."}),
+        content_type="application/json",
+        HTTP_HOST="testserver",
+    )
+    response = views_speech.api_speech_tts(_attach_user(request))
+    payload = json.loads(response.content.decode("utf-8"))
+    assert response.status_code == 502
+    assert payload["ok"] is False
+
+
 def test_tts_stt_accepts_english_language(monkeypatch, tmp_path):
     monkeypatch.setattr("webapps.portal.decorators.can_access", lambda user, node: True)
     whisper_exe = tmp_path / "whisper-cli.exe"

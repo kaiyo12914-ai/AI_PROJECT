@@ -30,6 +30,12 @@ body {
   padding: 12px;
 }
 
+.panel.chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .setup {
   display: grid;
   gap: 8px;
@@ -139,9 +145,11 @@ button {
 }
 
 .chat-log {
-  min-height: 373px;
-  max-height: 613px;
+  height: clamp(320px, 52vh, 620px);
+  min-height: 320px;
+  max-height: 620px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
@@ -308,6 +316,49 @@ button {
   line-height: 1.45;
 }
 
+.debug-panel {
+  margin-top: 12px;
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 10px;
+}
+
+.debug-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  color: #334155;
+}
+
+#clearDebugBtn {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.debug-log {
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 8px 10px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #334155;
+  white-space: pre-wrap;
+}
+
+.debug-line {
+  padding: 2px 0;
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.debug-line:last-child {
+  border-bottom: 0;
+}
+
 .starter-item {
   display: inline-block;
   margin: 4px 6px 0 0;
@@ -348,6 +399,7 @@ button {
   }
 
   .chat-log {
+    height: 42vh;
     min-height: 240px;
     max-height: 373px;
   }

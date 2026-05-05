@@ -19,8 +19,8 @@ import django
 
 django.setup()
 
+from webapps.englishchat.llm_service import EnglishChatLLMError, invoke_json_array
 from webapps.englishchat.repository import EnglishChatQuestionBankRepository
-from webapps.llm.llm_factory import get_chat_model
 
 TOPICS = ["meeting", "phone", "restaurant", "travel", "shopping", "school", "fitness", "hospital", "weather", "self_intro"]
 MODES = ["fill_blank", "reorder", "translation"]
@@ -61,61 +61,59 @@ def parse_args() -> argparse.Namespace:
 
 
 def build_prompt(topic: str, mode: str, level: str, requested_count: int) -> str:
+    beginner_translation_hint = ""
+    if mode == "translation" and level == "beginner":
+        beginner_translation_hint = """
+6. Beginner translation items must include extra hints:
+   - `patterns_json` must contain at least 3 short hints.
+   - Include:
+     1. one sentence pattern,
+     2. one key verb phrase,
+     3. one vocabulary or grammar hint.
+   - `explanation_zh` must clearly explain the subject, verb form, and one key word choice in Traditional Chinese.
+   - `sample_answer` should stay short and basic.
+"""
     return f"""
-請產生 {requested_count} 題 TOEIC 風格、結合 COCA 常見語料與實用情境的英文練習題。
+Generate {requested_count} TOEIC-style English practice items using practical daily language inspired by COCA usage.
 
-主題: {topic}
-題型: {mode} (fill_blank / reorder / translation)
-難度: {level} (beginner / intermediate / advanced)
+Topic: {topic}
+Mode: {mode} (fill_blank / reorder / translation)
+Level: {level} (beginner / intermediate / advanced)
 
-請只回傳 JSON 陣列，不要加 Markdown、說明文字或程式碼區塊。每個 item 必須包含以下欄位：
+Return a JSON array only. No markdown. No extra commentary.
 [
   {{
-    "prompt_text": "英文題目。fill_blank 必須含有 ____；reorder 可寫 Put the words in the correct order.；translation 可留空字串",
-    "choices_json": ["選項A", "選項B", "選項C"],
+    "prompt_text": "question text",
+    "choices_json": ["choice A", "choice B", "choice C"],
     "words_json": ["word1", "word2"],
-    "answer_text": "正確答案",
-    "explanation_zh": "繁體中文解析，需說明語意與用法",
-    "pattern_text": "核心句型或搭配",
-    "zh_prompt": "中文提示",
-    "sample_answer": "英文參考答案",
-    "patterns_json": ["句型1", "句型2"]
+    "answer_text": "correct answer",
+    "explanation_zh": "Traditional Chinese explanation",
+    "pattern_text": "target sentence pattern",
+    "zh_prompt": "Chinese prompt",
+    "sample_answer": "sample English answer",
+    "patterns_json": ["hint 1", "hint 2", "hint 3"]
   }}
 ]
 
-欄位規則：
+Rules:
 1. fill_blank:
-   - prompt_text 必須有且包含 ____。
-   - choices_json 至少 3 個字串。
-   - words_json 必須為 []。
-   - answer_text、explanation_zh、pattern_text 必填。
+   - `prompt_text` must contain exactly one `____`.
+   - `choices_json` must contain at least 3 choices.
+   - `words_json` must be [].
+   - `answer_text`, `explanation_zh`, and `pattern_text` are required.
 2. reorder:
-   - prompt_text 必須有內容。
-   - words_json 至少 3 個字串，順序需打亂。
-   - choices_json 必須為 []。
-   - answer_text、explanation_zh、pattern_text 必填。
+   - `prompt_text` must be present.
+   - `words_json` must contain at least 3 shuffled words or chunks.
+   - `choices_json` must be [].
+   - `answer_text`, `explanation_zh`, and `pattern_text` are required.
 3. translation:
-   - zh_prompt、sample_answer、explanation_zh 必填。
-   - patterns_json 至少 1 個字串。
-   - choices_json、words_json 可為 []。
-4. 題目不可重複，不可過於相似，內容需符合 {level} 難度。
-5. 全部字串請避免前後多餘空白。
+   - `zh_prompt`, `sample_answer`, and `explanation_zh` are required.
+   - `choices_json` and `words_json` should be [].
+   - `patterns_json` should contain useful learner hints.
+4. All items must match the requested level.
+5. Avoid duplicates and near-duplicates.
+{beginner_translation_hint}
 """.strip()
-
-
-def parse_llm_json(raw_text: str) -> List[Dict[str, Any]]:
-    cleaned = raw_text.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.removeprefix("```json").removeprefix("```JSON").removeprefix("```").strip()
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3].strip()
-    try:
-        data = json.loads(cleaned)
-    except json.JSONDecodeError as exc:
-        raise QuestionGenerationError(f"LLM response is not valid JSON: {exc}") from exc
-    if not isinstance(data, list):
-        raise QuestionGenerationError("LLM response must be a JSON array.")
-    return data
 
 
 def normalize_text(value: Any) -> str:
@@ -177,8 +175,11 @@ def validate_item(item: Any, topic: str, mode: str, level: str, sort_order: int)
     elif mode == "translation":
         if not normalized["zh_prompt"] or not normalized["sample_answer"]:
             raise QuestionGenerationError("translation requires zh_prompt and sample_answer.")
-        if len(normalized["patterns_json"]) < 1:
-            raise QuestionGenerationError("translation patterns_json must contain at least 1 pattern.")
+        required_pattern_count = 3 if level == "beginner" else 1
+        if len(normalized["patterns_json"]) < required_pattern_count:
+            raise QuestionGenerationError(
+                f"translation patterns_json must contain at least {required_pattern_count} pattern hints."
+            )
     else:
         raise QuestionGenerationError(f"Unsupported mode: {mode}")
 
@@ -220,16 +221,25 @@ def dedupe_items(items: Sequence[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]],
 
 
 def generate_combo_questions(
-    llm: Any,
     topic: str,
     mode: str,
     level: str,
     requested_count: int,
+    temperature: float,
+    timeout: int,
 ) -> Tuple[List[Dict[str, Any]], int]:
     prompt = build_prompt(topic, mode, level, requested_count)
-    response = llm.invoke(prompt)
-    raw_text = response.content if hasattr(response, "content") else str(response)
-    raw_items = parse_llm_json(raw_text)
+    try:
+        raw_items = invoke_json_array(
+            prompt,
+            purpose=f"generate_question_bank:{topic}:{mode}:{level}",
+            temperature=temperature,
+            timeout=timeout,
+            max_retries=3,
+            retry_delay=2.0,
+        )
+    except EnglishChatLLMError as exc:
+        raise QuestionGenerationError(str(exc)) from exc
 
     validated_items = []
     for index, item in enumerate(raw_items, start=1):
@@ -253,7 +263,6 @@ def write_report(report_dir: Path, summary: Dict[str, Any]) -> Path:
 
 def run_generation(args: argparse.Namespace) -> Tuple[Dict[str, Any], int]:
     repo = EnglishChatQuestionBankRepository()
-    llm = get_chat_model(temperature=args.temperature, timeout=args.timeout)
 
     topics = args.topics or TOPICS
     modes = args.modes or MODES
@@ -272,7 +281,14 @@ def run_generation(args: argparse.Namespace) -> Tuple[Dict[str, Any], int]:
                 combo_results.append(combo)
                 print(f"Generating combo topic={topic} mode={mode} level={level}")
                 try:
-                    items, skipped_duplicates = generate_combo_questions(llm, topic, mode, level, args.questions_per_combo)
+                    items, skipped_duplicates = generate_combo_questions(
+                        topic,
+                        mode,
+                        level,
+                        args.questions_per_combo,
+                        args.temperature,
+                        args.timeout,
+                    )
                     keep_ids = [item["question_id"] for item in items]
                     combo.skipped_duplicates = skipped_duplicates
 
@@ -342,7 +358,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
-
-# H:\AI\VENV3.12\Scripts\python.exe H:\AI\AI_TOOLS\webapps\englishchat\generate_toeic_coca_questions.py

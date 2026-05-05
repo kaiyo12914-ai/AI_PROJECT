@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 
 from webapps.database.db_factory import db_connect
@@ -27,30 +28,14 @@ CREATE TABLE IF NOT EXISTS englishchat_question_bank (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_englishchat_qb_topic_mode_level
     ON englishchat_question_bank (topic_key, mode, level, sort_order, question_id);
 """
 
-
 UPSERT_SQL = """
 INSERT INTO englishchat_question_bank (
-    question_id,
-    topic_key,
-    mode,
-    level,
-    prompt_text,
-    choices_json,
-    words_json,
-    answer_text,
-    explanation_zh,
-    pattern_text,
-    zh_prompt,
-    sample_answer,
-    patterns_json,
-    sort_order,
-    is_active,
-    updated_at
+    question_id, topic_key, mode, level, prompt_text, choices_json, words_json,
+    answer_text, explanation_zh, pattern_text, zh_prompt, sample_answer, patterns_json, sort_order, is_active, updated_at
 ) VALUES (
     %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s, %s, %s, %s::jsonb, %s, TRUE, NOW()
 )
@@ -73,18 +58,31 @@ ON CONFLICT (question_id) DO UPDATE SET
 """
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Initialize or refresh EnglishChat seed questions.")
+    parser.add_argument("--deactivate-missing-seeds", action="store_true")
+    parser.add_argument("--full-reset", action="store_true")
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
     conn = db_connect("postgresql", profile="ENGLISHCHAT")
     cur = conn.cursor()
     try:
         cur.execute(CREATE_SQL)
-        cur.execute("DELETE FROM englishchat_question_bank")
-        count = 0
-        for item in build_seed_questions():
+        if args.full_reset:
+            cur.execute("DELETE FROM englishchat_question_bank WHERE question_id LIKE 'seed-%'")
+
+        seed_rows = build_seed_questions()
+        seed_ids = []
+        for item in seed_rows:
+            seed_id = str(item.get("question_id") or "")
+            seed_ids.append(seed_id)
             cur.execute(
                 UPSERT_SQL,
                 [
-                    str(item.get("question_id") or ""),
+                    seed_id,
                     str(item.get("topic_key") or ""),
                     str(item.get("mode") or ""),
                     str(item.get("level") or "beginner"),
@@ -100,9 +98,20 @@ def main() -> None:
                     int(item.get("sort_order") or 0),
                 ],
             )
-            count += 1
+
+        if args.deactivate_missing_seeds:
+            placeholders = ", ".join(["%s"] * len(seed_ids))
+            cur.execute(
+                f"""
+                UPDATE englishchat_question_bank
+                SET is_active = FALSE, updated_at = NOW()
+                WHERE question_id LIKE 'seed-%'
+                  AND question_id NOT IN ({placeholders})
+                """,
+                seed_ids,
+            )
         conn.commit()
-        print(f"Initialized englishchat_question_bank with {count} questions.")
+        print(f"Upserted {len(seed_rows)} seed questions.")
     finally:
         try:
             cur.close()

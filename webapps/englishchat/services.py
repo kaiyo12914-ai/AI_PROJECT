@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import random
 from copy import deepcopy
 from typing import Any, Dict, List
 
@@ -9,112 +8,119 @@ from .question_bank_seed import build_seed_questions
 from .repository import EnglishChatQuestionBankRepository
 
 
-def _safe_text(value: Any) -> str:
+def safe_text(value: Any) -> str:
     return "" if value is None else str(value).strip()
 
 
-def _normalize_list(value: Any) -> List[str]:
+def normalize_list(value: Any) -> List[str]:
     if not isinstance(value, list):
         return []
-    return [_safe_text(item) for item in value if _safe_text(item)]
+    return [safe_text(item) for item in value if safe_text(item)]
 
 
-def _normalize_topic_key(topic: str) -> str:
-    raw = _safe_text(topic).lower()
+def normalize_topic_key(topic: str) -> str:
+    raw = safe_text(topic).lower()
     if not raw:
         return ""
-    for topic in QUESTION_TOPICS:
-        if raw == topic["key"]:
+    for item in QUESTION_TOPICS:
+        if raw == item["key"]:
             return raw
-        labels = [str(item).strip().lower() for item in topic.get("labels", []) if str(item).strip()]
+        labels = [safe_text(label).lower() for label in item.get("labels", [])]
         if any(label and (label in raw or raw in label) for label in labels):
-            return str(topic["key"])
+            return str(item["key"])
     return raw.replace(" ", "_")
 
 
 def get_db_question(topic: str, mode: str, level: str, exclude_ids: List[str] | None = None) -> Dict[str, Any] | None:
-    topic_key = _normalize_topic_key(topic)
+    topic_key = normalize_topic_key(topic)
     if not topic_key:
         return None
-
+    history = [safe_text(item) for item in (exclude_ids or []) if safe_text(item)]
     repo = EnglishChatQuestionBankRepository()
-    rows = repo.fetch_questions(topic_key, mode, level)
-    excluded = {str(item) for item in (exclude_ids or []) if str(item)}
-    available = []
-    for row in rows:
-        question_id = _safe_text(row.get("question_id"))
-        if question_id and question_id not in excluded:
-            available.append(row)
-    if available:
-        return _row_to_payload(random.choice(available), mode)
-    return None
+    row = repo.fetch_next_question(
+        topic_key,
+        mode,
+        level,
+        history,
+        after_question_id=history[-1] if history else "",
+    )
+    if not row:
+        return None
+    return row_to_payload(row, mode)
 
 
 def get_seed_question(topic: str, mode: str, level: str, exclude_ids: List[str] | None = None) -> Dict[str, Any] | None:
-    topic_key = _normalize_topic_key(topic)
+    topic_key = normalize_topic_key(topic)
     if not topic_key:
         return None
-
+    history = [safe_text(item) for item in (exclude_ids or []) if safe_text(item)]
+    excluded = set(history)
     rows = [
         row
-        for row in _seed_rows()
-        if _safe_text(row.get("topic_key")) == topic_key
-        and _safe_text(row.get("mode")) == mode
-        and _safe_text(row.get("level")) == level
+        for row in seed_rows()
+        if safe_text(row.get("topic_key")) == topic_key
+        and safe_text(row.get("mode")) == mode
+        and safe_text(row.get("level")) == level
     ]
-    excluded = {str(item) for item in (exclude_ids or []) if str(item)}
-    available = []
-    for row in rows:
-        question_id = _safe_text(row.get("question_id"))
+    if not rows:
+        return None
+    start_index = 0
+    if history:
+        last_id = history[-1]
+        for index, row in enumerate(rows):
+            if safe_text(row.get("question_id")) == last_id:
+                start_index = (index + 1) % len(rows)
+                break
+    for offset in range(len(rows)):
+        row = rows[(start_index + offset) % len(rows)]
+        question_id = safe_text(row.get("question_id"))
         if question_id and question_id not in excluded:
-            available.append(row)
-    if available:
-        return _row_to_payload(random.choice(available), mode)
+            return row_to_payload(row, mode)
     return None
 
 
 _SEED_ROWS_CACHE: List[Dict[str, Any]] | None = None
 
 
-def _seed_rows() -> List[Dict[str, Any]]:
+def seed_rows() -> List[Dict[str, Any]]:
     global _SEED_ROWS_CACHE
     if _SEED_ROWS_CACHE is None:
         _SEED_ROWS_CACHE = build_seed_questions()
     return _SEED_ROWS_CACHE
 
 
-def _row_to_payload(row: Dict[str, Any], mode: str) -> Dict[str, Any]:
-    item: Dict[str, Any] = {
-        "question_id": _safe_text(row.get("question_id")),
-        "explanation_zh": _safe_text(row.get("explanation_zh")),
+def row_to_payload(row: Dict[str, Any], mode: str) -> Dict[str, Any]:
+    base: Dict[str, Any] = {
+        "question_id": safe_text(row.get("question_id")),
+        "explanation_zh": safe_text(row.get("explanation_zh")),
     }
     if mode == "fill_blank":
-        item.update(
+        base.update(
             {
-                "question": _safe_text(row.get("prompt_text")),
-                "choices": _normalize_list(row.get("choices_json")),
-                "answer": _safe_text(row.get("answer_text")),
-                "pattern": _safe_text(row.get("pattern_text")),
+                "question": safe_text(row.get("prompt_text")),
+                "choices": normalize_list(row.get("choices_json")),
+                "answer": safe_text(row.get("answer_text")),
+                "pattern": safe_text(row.get("pattern_text")),
             }
         )
-        return item
+        return base
     if mode == "reorder":
-        item.update(
+        base.update(
             {
-                "prompt": _safe_text(row.get("prompt_text")),
-                "words": _normalize_list(row.get("words_json")),
-                "answer": _safe_text(row.get("answer_text")),
-                "pattern": _safe_text(row.get("pattern_text")),
+                "prompt": safe_text(row.get("prompt_text")),
+                "words": normalize_list(row.get("words_json")),
+                "answer": safe_text(row.get("answer_text")),
+                "pattern": safe_text(row.get("pattern_text")),
             }
         )
-        return item
+        return base
     if mode == "translation":
-        item.update(
+        base.update(
             {
-                "zh_prompt": _safe_text(row.get("zh_prompt")),
-                "sample_answer": _safe_text(row.get("sample_answer")),
-                "patterns": _normalize_list(row.get("patterns_json")),
+                "zh_prompt": safe_text(row.get("zh_prompt")),
+                "sample_answer": safe_text(row.get("sample_answer")),
+                "patterns": normalize_list(row.get("patterns_json")),
             }
         )
-        return item
-    return deepcopy(item)
+        return base
+    return deepcopy(base)

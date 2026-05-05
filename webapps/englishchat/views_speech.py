@@ -65,10 +65,10 @@ def api_speech_tts(request: HttpRequest):
         )
         data = resp.json()
     except Exception as exc:
-        return JsonResponse({"ok": False, "error": f"tts backend failed: {exc}"}, status=200)
+        return JsonResponse({"ok": False, "error": f"tts backend failed: {exc}"}, status=502)
 
     if not isinstance(data, dict):
-        return JsonResponse({"ok": False, "error": "tts backend returned invalid data"}, status=200)
+        return JsonResponse({"ok": False, "error": "tts backend returned invalid data"}, status=502)
     data["backend"] = "tts"
     return JsonResponse(data, status=200)
 
@@ -95,10 +95,10 @@ def api_speech_stt(request: HttpRequest):
         )
         data = resp.json()
     except Exception as exc:
-        return JsonResponse({"ok": False, "error": f"stt backend failed: {exc}"}, status=200)
+        return JsonResponse({"ok": False, "error": f"stt backend failed: {exc}"}, status=502)
 
     if not isinstance(data, dict):
-        return JsonResponse({"ok": False, "error": "stt backend returned invalid data"}, status=200)
+        return JsonResponse({"ok": False, "error": "stt backend returned invalid data"}, status=502)
     data["backend"] = "tts"
     data["language"] = language
     return JsonResponse(data, status=200)

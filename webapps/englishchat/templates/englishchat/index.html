@@ -13,37 +13,37 @@
   <script defer src="{% custom_static 'englishchat/js/speech_client.js' %}"></script>
   <script defer src="{% custom_static 'englishchat/js/index.js' %}"></script>
 </head>
-<body data-base-url="{{ request.script_name }}">
+<body data-base-url="{{ request.script_name }}" data-debug-mode="{% if debug_mode %}1{% else %}0{% endif %}">
   <main class="wrap">
     <header class="top">
       <h1>美語學習教室</h1>
-      <p>先選主題與程度，再和 AI 練習自然美式英文。</p>
+      <p>選擇主題與程度，開始和 AI 進行英語對話、填空、重組與翻譯練習。</p>
     </header>
 
     <section class="panel setup">
       <div class="setup-grid">
-      <div class="row">
-        <label for="topicSelect">常見主題</label>
-        <select id="topicSelect">
-          {% for t in topic_presets %}
-            <option value="{{ t }}">{{ t }}</option>
-          {% endfor %}
-        </select>
+        <div class="row">
+          <label for="topicSelect">練習主題</label>
+          <select id="topicSelect">
+            {% for t in topic_presets %}
+              <option value="{{ t }}">{{ t }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="row">
+          <label for="customTopic">自訂主題</label>
+          <input id="customTopic" type="text" placeholder="留空可使用預設主題，或自行輸入想練習的情境">
+        </div>
+        <div class="row">
+          <label for="levelSelect">程度</label>
+          <select id="levelSelect">
+            <option value="beginner">初級</option>
+            <option value="intermediate">中級</option>
+            <option value="advanced">高級</option>
+          </select>
+        </div>
       </div>
-      <div class="row">
-        <label for="customTopic">自訂主題</label>
-        <input id="customTopic" type="text" placeholder="例如：機場入境、咖啡店聊天">
-      </div>
-      <div class="row">
-        <label for="levelSelect">英文程度</label>
-        <select id="levelSelect">
-          <option value="beginner">初級</option>
-          <option value="intermediate">中級</option>
-          <option value="advanced">高級</option>
-        </select>
-      </div>
-      </div>
-      <button id="startBtn" type="button">開始聊天</button>
+      <button id="startBtn" type="button">開始練習</button>
     </section>
 
     <section class="panel chat">
@@ -97,6 +97,13 @@
         </div>
         <div id="summaryStats" class="summary-stats"></div>
         <div id="summaryAdvice" class="summary-advice"></div>
+      </div>
+      <div id="debugPanel" class="debug-panel hidden">
+        <div class="debug-head">
+          <strong>Debug log</strong>
+          <button id="clearDebugBtn" type="button">Clear</button>
+        </div>
+        <div id="debugLog" class="debug-log" aria-live="polite"></div>
       </div>
       <div class="composer">
         <textarea id="userInput" rows="3" placeholder="輸入英文訊息..."></textarea>
