@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from typing import Any, Dict, List
@@ -14,6 +15,16 @@ Use Traditional Chinese if the user writes in Chinese, otherwise reply in the us
 If the user asks for code, provide practical code and short explanation.
 Do not claim capabilities you do not have.
 """
+DEFAULT_TEMPERATURE = 0.3
+DEFAULT_TIMEOUT_SEC = 120
+MAX_SYSTEM_PROMPT_CHARS = 8000
+MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024
+MAX_ATTACHMENT_TEXT_CHARS = 12000
+MAX_ATTACHMENT_PROMPT_CHARS = 1500
+ATTACHMENT_PROMPT_LIMIT = 3
+ALLOWED_ATTACHMENT_EXTENSIONS = {
+    ".txt", ".md", ".csv", ".json", ".yaml", ".yml", ".log", ".ini", ".cfg", ".py", ".js", ".ts", ".html", ".css", ".pdf", ".docx"
+}
 
 
 def safe_text(value: Any) -> str:
@@ -55,8 +66,60 @@ def resolve_user_id(request) -> str:
     )
 
 
-def history_to_prompt(messages: List[Dict[str, Any]], latest_user_text: str) -> str:
-    lines: List[str] = [SYSTEM_PROMPT.strip(), "", "Conversation history:"]
+def normalize_temperature(value: Any, default: float = DEFAULT_TEMPERATURE) -> float:
+    try:
+        out = float(value)
+    except Exception:
+        out = default
+    if out < 0:
+        return 0.0
+    if out > 2:
+        return 2.0
+    return out
+
+
+def normalize_timeout_sec(value: Any, default: int = DEFAULT_TIMEOUT_SEC) -> int:
+    try:
+        out = int(value)
+    except Exception:
+        out = default
+    if out < 10:
+        return 10
+    if out > 600:
+        return 600
+    return out
+
+
+def normalize_system_prompt(value: Any) -> str:
+    text = str(value) if value is not None else ""
+    text = text.strip()
+    if len(text) > MAX_SYSTEM_PROMPT_CHARS:
+        text = text[:MAX_SYSTEM_PROMPT_CHARS]
+    return text
+
+
+def format_prompt_history_item(item: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": int(item.get("id") or 0),
+        "prompt_text": normalize_system_prompt(item.get("prompt_text")),
+        "created_at": safe_text(item.get("created_at")),
+    }
+
+
+def resolve_system_prompt(value: Any) -> str:
+    custom = normalize_system_prompt(value)
+    return custom or SYSTEM_PROMPT.strip()
+
+
+def history_to_prompt(
+    messages: List[Dict[str, Any]],
+    latest_user_text: str,
+    system_prompt: str,
+    attachment_context: str = "",
+) -> str:
+    lines: List[str] = [resolve_system_prompt(system_prompt), "", "Conversation history:"]
+    if attachment_context:
+        lines.extend(["", "Reference attachments:", attachment_context, ""])
     for item in messages[-12:]:
         if not isinstance(item, dict):
             continue
@@ -69,6 +132,33 @@ def history_to_prompt(messages: List[Dict[str, Any]], latest_user_text: str) -> 
     lines.append(f"User: {latest_user_text}")
     lines.append("Assistant:")
     return "\n".join(lines)
+
+
+def resolve_model_name(model_type: str) -> str:
+    mtype = safe_text(model_type).upper()
+    if mtype == "GOOGLE":
+        return safe_text(os.getenv("GOOGLE_MODEL")) or "gemini-1.5-flash"
+    if mtype == "OPENAI":
+        return safe_text(os.getenv("OPENAI_MODEL")) or "gpt-4o-mini"
+    if mtype == "LM_STUDIO":
+        return safe_text(os.getenv("LM_STUDIO_MODEL")) or "ministral-3-14b-instruct-2512"
+    if mtype == "OLLAMA":
+        return safe_text(os.getenv("OLLAMA_MODEL")) or "mistral_small_3_1_2503:latest"
+    return ""
+
+
+def normalize_filename(value: Any) -> str:
+    name = safe_text(value).replace("\\", "/").split("/")[-1]
+    return name[:200]
+
+
+def normalize_attachment_text(value: Any) -> str:
+    text = safe_text(value)
+    if not text:
+        return ""
+    if len(text) > MAX_ATTACHMENT_TEXT_CHARS:
+        return text[:MAX_ATTACHMENT_TEXT_CHARS]
+    return text
 
 
 class ChatbotUIService:
@@ -87,6 +177,12 @@ class ChatbotUIService:
                 "id": safe_text(row.get("id")),
                 "title": safe_text(row.get("title")) or "New Chat",
                 "model_type": safe_text(row.get("model_type")) or "OPENAI",
+                "model_name": safe_text(row.get("model_name")) or "",
+                "temperature": normalize_temperature(row.get("temperature")),
+                "timeout_sec": normalize_timeout_sec(row.get("timeout_sec")),
+                "system_prompt": normalize_system_prompt(row.get("system_prompt")),
+                "chat_mode": safe_text(row.get("chat_mode")) or "GENERAL",
+                "rag_source": safe_text(row.get("rag_source")) or "",
                 "updated_at": safe_text(row.get("updated_at")),
                 "preview": safe_text(row.get("last_message_preview"))[:80],
                 "message_count": int(row.get("message_count") or 0),
@@ -95,19 +191,66 @@ class ChatbotUIService:
 
     def create_conversation(self, user_id: str, title: str = "New Chat", model_type: str = "OPENAI") -> Dict[str, Any]:
         self.ensure_schema()
+        profile = self.repository.get_user_profile(user_id) or {}
+        profile_model_type = safe_text(profile.get("model_type")).upper() if profile else ""
+        chosen_model_type = safe_text(model_type).upper() or profile_model_type or "OPENAI"
+        if chosen_model_type not in {"GOOGLE", "OPENAI", "OLLAMA", "LM_STUDIO"}:
+            chosen_model_type = "OPENAI"
         conversation_id = str(uuid.uuid4())
-        self.repository.create_conversation(conversation_id, user_id, safe_text(title) or "New Chat", safe_text(model_type) or "OPENAI")
+        self.repository.create_conversation(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            title=safe_text(title) or "New Chat",
+            model_type=chosen_model_type,
+            temperature=normalize_temperature(profile.get("temperature"), DEFAULT_TEMPERATURE),
+            timeout_sec=normalize_timeout_sec(profile.get("timeout_sec"), DEFAULT_TIMEOUT_SEC),
+            system_prompt=normalize_system_prompt(profile.get("system_prompt")),
+            chat_mode=safe_text(profile.get("chat_mode")) or "GENERAL",
+            rag_source=safe_text(profile.get("rag_source")) or "",
+            model_name=safe_text(profile.get("model_name")) or resolve_model_name(chosen_model_type),
+        )
         return self.get_conversation_detail(user_id, conversation_id)
+
+    def _conversation_config(self, conversation: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "temperature": normalize_temperature(conversation.get("temperature")),
+            "timeout_sec": normalize_timeout_sec(conversation.get("timeout_sec")),
+            "system_prompt": normalize_system_prompt(conversation.get("system_prompt")),
+            "chat_mode": safe_text(conversation.get("chat_mode")) or "GENERAL",
+            "rag_source": safe_text(conversation.get("rag_source")) or "",
+        }
 
     def get_conversation_detail(self, user_id: str, conversation_id: str) -> Dict[str, Any]:
         self.ensure_schema()
         conversation = self.repository.get_conversation(user_id, conversation_id)
         if not conversation:
             return {}
+        profile = self.repository.get_user_profile(user_id) or {}
+        config = self._conversation_config(conversation)
+        config_source = "conversation_override"
+        if profile:
+            same = (
+                safe_text(conversation.get("model_type")) == safe_text(profile.get("model_type")) and
+                safe_text(conversation.get("model_name")) == safe_text(profile.get("model_name")) and
+                normalize_temperature(conversation.get("temperature")) == normalize_temperature(profile.get("temperature")) and
+                normalize_timeout_sec(conversation.get("timeout_sec")) == normalize_timeout_sec(profile.get("timeout_sec")) and
+                normalize_system_prompt(conversation.get("system_prompt")) == normalize_system_prompt(profile.get("system_prompt")) and
+                (safe_text(conversation.get("chat_mode")) or "GENERAL") == (safe_text(profile.get("chat_mode")) or "GENERAL") and
+                safe_text(conversation.get("rag_source")) == safe_text(profile.get("rag_source"))
+            )
+            if same:
+                config_source = "profile"
         return {
             "id": safe_text(conversation.get("id")),
             "title": safe_text(conversation.get("title")) or "New Chat",
             "model_type": safe_text(conversation.get("model_type")) or "OPENAI",
+            "model_name": safe_text(conversation.get("model_name")) or "",
+            "temperature": config["temperature"],
+            "timeout_sec": config["timeout_sec"],
+            "system_prompt": config["system_prompt"],
+            "chat_mode": config["chat_mode"],
+            "rag_source": config["rag_source"],
+            "config_source": config_source,
             "messages": [
                 {
                     "id": int(item.get("id") or 0),
@@ -118,7 +261,125 @@ class ChatbotUIService:
                 }
                 for item in self.repository.list_messages(conversation_id)
             ],
+            "attachments": self.list_attachments(user_id, conversation_id, limit=20),
         }
+
+    def _format_attachment_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        content_text = normalize_attachment_text(item.get("content_text"))
+        return {
+            "id": int(item.get("id") or 0),
+            "filename": normalize_filename(item.get("filename")),
+            "mime_type": safe_text(item.get("mime_type")),
+            "size_bytes": int(item.get("size_bytes") or 0),
+            "content_preview": content_text[:240],
+            "created_at": safe_text(item.get("created_at")),
+        }
+
+    def list_attachments(self, user_id: str, conversation_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        self.ensure_schema()
+        conversation = self.repository.get_conversation(user_id, conversation_id)
+        if not conversation:
+            return []
+        normalized_limit = int(limit or 20)
+        if normalized_limit < 1:
+            normalized_limit = 1
+        if normalized_limit > 100:
+            normalized_limit = 100
+        rows = self.repository.list_attachments(user_id=user_id, conversation_id=conversation_id, limit=normalized_limit)
+        return [self._format_attachment_item(row) for row in rows]
+
+    def upload_attachment(
+        self,
+        user_id: str,
+        conversation_id: str,
+        filename: str,
+        mime_type: str,
+        content_bytes: bytes,
+    ) -> Dict[str, Any]:
+        self.ensure_schema()
+        conversation = self.repository.get_conversation(user_id, conversation_id)
+        if not conversation:
+            return {}
+
+        safe_name = normalize_filename(filename)
+        if not safe_name:
+            raise RuntimeError("filename is required")
+        ext = os.path.splitext(safe_name)[1].lower()
+        if ext not in ALLOWED_ATTACHMENT_EXTENSIONS:
+            raise RuntimeError("unsupported file type")
+
+        raw = content_bytes or b""
+        size_bytes = len(raw)
+        if size_bytes <= 0:
+            raise RuntimeError("empty file")
+        if size_bytes > MAX_ATTACHMENT_BYTES:
+            raise RuntimeError("file too large")
+
+        text = ""
+        if ext == ".pdf":
+            from webapps.pdf.views import _extract_pdf_text_auto
+            class FakeUpload:
+                def __init__(self, content):
+                    self.content = content
+                def read(self):
+                    return self.content
+                def seek(self, *args):
+                    pass
+            text, _ = _extract_pdf_text_auto(FakeUpload(raw))
+        elif ext == ".docx":
+            import docx
+            import io
+            d = docx.Document(io.BytesIO(raw))
+            text = "\n".join([p.text for p in d.paragraphs])
+        else:
+            text = raw.decode("utf-8", errors="replace")
+
+        text = text.replace("\x00", "").replace("\u0000", "")
+        normalized_text = normalize_attachment_text(text)
+        if not normalized_text:
+            raise RuntimeError("empty attachment text")
+
+        self.repository.add_attachment(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            filename=safe_name,
+            mime_type=safe_text(mime_type) or "text/plain",
+            size_bytes=size_bytes,
+            content_text=normalized_text,
+        )
+        latest = self.repository.list_attachments(user_id=user_id, conversation_id=conversation_id, limit=1)
+        if not latest:
+            raise RuntimeError("attachment upload failed")
+        self.repository.touch_conversation(conversation_id)
+        return self._format_attachment_item(latest[0])
+
+    def delete_attachment(self, user_id: str, conversation_id: str, attachment_id: int) -> bool:
+        self.ensure_schema()
+        conversation = self.repository.get_conversation(user_id, conversation_id)
+        if not conversation:
+            return False
+        deleted = self.repository.delete_attachment(user_id, conversation_id, attachment_id)
+        if deleted > 0:
+            self.repository.touch_conversation(conversation_id)
+            return True
+        return False
+
+    def _build_attachment_context(self, user_id: str, conversation_id: str) -> str:
+        rows = self.repository.list_attachments_for_prompt(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            limit=ATTACHMENT_PROMPT_LIMIT,
+        )
+        if not rows:
+            return ""
+        lines: List[str] = []
+        for item in rows:
+            name = normalize_filename(item.get("filename")) or "attachment"
+            excerpt = normalize_attachment_text(item.get("content_text"))[:MAX_ATTACHMENT_PROMPT_CHARS]
+            if not excerpt:
+                continue
+            lines.append(f"- {name}:\n{excerpt}")
+        return "\n".join(lines).strip()
 
     def clear_conversation(self, user_id: str, conversation_id: str) -> bool:
         self.ensure_schema()
@@ -134,6 +395,367 @@ class ChatbotUIService:
         self.ensure_schema()
         return self.repository.archive_conversation(user_id, conversation_id) > 0
 
+    def rename_conversation(self, user_id: str, conversation_id: str, title: str) -> Dict[str, Any]:
+        self.ensure_schema()
+        conversation = self.repository.get_conversation(user_id, conversation_id)
+        if not conversation:
+            return {}
+        normalized_title = " ".join(safe_text(title).split())[:80] or "New Chat"
+        self.repository.rename_conversation(user_id, conversation_id, normalized_title)
+        refreshed = self.repository.get_conversation(user_id, conversation_id) or {}
+        config = self._conversation_config(refreshed)
+        return {
+            "id": safe_text(refreshed.get("id")),
+            "title": safe_text(refreshed.get("title")) or "New Chat",
+            "model_type": safe_text(refreshed.get("model_type")) or "OPENAI",
+            "temperature": config["temperature"],
+            "timeout_sec": config["timeout_sec"],
+            "system_prompt": config["system_prompt"],
+        }
+
+    def update_conversation_model(self, user_id: str, conversation_id: str, model_type: str, model_name: str = "") -> Dict[str, Any]:
+        self.ensure_schema()
+        conversation = self.repository.get_conversation(user_id, conversation_id)
+        if not conversation:
+            return {}
+        normalized = safe_text(model_type).upper()
+        if normalized not in {"GOOGLE", "OPENAI", "OLLAMA", "LM_STUDIO"}:
+            raise RuntimeError("unsupported model_type")
+        self.repository.set_model_type(user_id, conversation_id, normalized, safe_text(model_name))
+        config = self._conversation_config(conversation)
+        self.repository.upsert_user_profile(
+            user_id=user_id,
+            model_type=normalized,
+            model_name=safe_text(model_name),
+            temperature=config["temperature"],
+            timeout_sec=config["timeout_sec"],
+            system_prompt=config["system_prompt"],
+            chat_mode=config["chat_mode"],
+            rag_source=config["rag_source"],
+        )
+        self.repository.touch_conversation(conversation_id)
+        return {
+            "id": safe_text(conversation.get("id")),
+            "title": safe_text(conversation.get("title")) or "New Chat",
+            "model_type": normalized,
+            "model_name": safe_text(model_name) or resolve_model_name(normalized),
+            "temperature": config["temperature"],
+            "timeout_sec": config["timeout_sec"],
+            "system_prompt": config["system_prompt"],
+        }
+
+    def update_conversation_config(
+        self,
+        user_id: str,
+        conversation_id: str,
+        temperature: Any,
+        timeout_sec: Any,
+        system_prompt: Any,
+        chat_mode: Any = None,
+        rag_source: Any = None,
+    ) -> Dict[str, Any]:
+        self.ensure_schema()
+        conversation = self.repository.get_conversation(user_id, conversation_id)
+        if not conversation:
+            return {}
+
+        next_temperature = normalize_temperature(
+            conversation.get("temperature") if temperature is None else temperature
+        )
+        next_timeout = normalize_timeout_sec(
+            conversation.get("timeout_sec") if timeout_sec is None else timeout_sec
+        )
+        next_system_prompt = normalize_system_prompt(
+            conversation.get("system_prompt") if system_prompt is None else system_prompt
+        )
+        prev_system_prompt = normalize_system_prompt(conversation.get("system_prompt"))
+
+        next_chat_mode = safe_text(conversation.get("chat_mode") if chat_mode is None else chat_mode) or "GENERAL"
+        next_rag_source = safe_text(conversation.get("rag_source") if rag_source is None else rag_source)
+
+        self.repository.set_conversation_config(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            temperature=next_temperature,
+            timeout_sec=next_timeout,
+            system_prompt=next_system_prompt,
+            chat_mode=next_chat_mode,
+            rag_source=next_rag_source,
+        )
+        model_type = safe_text(conversation.get("model_type")) or "OPENAI"
+        self.repository.upsert_user_profile(
+            user_id=user_id,
+            model_type=model_type,
+            model_name=safe_text(conversation.get("model_name")) or resolve_model_name(model_type),
+            temperature=next_temperature,
+            timeout_sec=next_timeout,
+            system_prompt=next_system_prompt,
+            chat_mode=next_chat_mode,
+            rag_source=next_rag_source,
+        )
+        if system_prompt is not None and next_system_prompt != prev_system_prompt:
+            self.repository.add_prompt_history(
+                conversation_id=conversation_id,
+                user_id=user_id,
+                prompt_text=next_system_prompt,
+            )
+
+        refreshed = self.repository.get_conversation(user_id, conversation_id) or {}
+        config = self._conversation_config(refreshed)
+        model_type = safe_text(refreshed.get("model_type")) or "OPENAI"
+        return {
+            "id": safe_text(refreshed.get("id")),
+            "title": safe_text(refreshed.get("title")) or "New Chat",
+            "model_type": model_type,
+            "model_name": resolve_model_name(model_type),
+            "temperature": config["temperature"],
+            "timeout_sec": config["timeout_sec"],
+            "system_prompt": config["system_prompt"],
+            "chat_mode": config["chat_mode"],
+            "rag_source": config["rag_source"],
+            "config_source": "conversation_override",
+        }
+
+    def reset_conversation_config_from_profile(self, user_id: str, conversation_id: str) -> Dict[str, Any]:
+        self.ensure_schema()
+        conversation = self.repository.get_conversation(user_id, conversation_id)
+        if not conversation:
+            return {}
+        profile = self.repository.get_user_profile(user_id) or {}
+        if not profile:
+            raise RuntimeError("user profile not found")
+
+        model_type = safe_text(profile.get("model_type")).upper() or "OPENAI"
+        if model_type not in {"GOOGLE", "OPENAI", "OLLAMA", "LM_STUDIO"}:
+            model_type = "OPENAI"
+        model_name = safe_text(profile.get("model_name")) or resolve_model_name(model_type)
+        next_temperature = normalize_temperature(profile.get("temperature"), DEFAULT_TEMPERATURE)
+        next_timeout = normalize_timeout_sec(profile.get("timeout_sec"), DEFAULT_TIMEOUT_SEC)
+        next_system_prompt = normalize_system_prompt(profile.get("system_prompt"))
+        next_chat_mode = safe_text(profile.get("chat_mode")) or "GENERAL"
+        next_rag_source = safe_text(profile.get("rag_source"))
+
+        self.repository.set_model_type(user_id, conversation_id, model_type, model_name)
+        self.repository.set_conversation_config(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            temperature=next_temperature,
+            timeout_sec=next_timeout,
+            system_prompt=next_system_prompt,
+            chat_mode=next_chat_mode,
+            rag_source=next_rag_source,
+        )
+        self.repository.touch_conversation(conversation_id)
+
+        refreshed = self.repository.get_conversation(user_id, conversation_id) or {}
+        config = self._conversation_config(refreshed)
+        return {
+            "id": safe_text(refreshed.get("id")),
+            "title": safe_text(refreshed.get("title")) or "New Chat",
+            "model_type": safe_text(refreshed.get("model_type")) or model_type,
+            "model_name": safe_text(refreshed.get("model_name")) or model_name,
+            "temperature": config["temperature"],
+            "timeout_sec": config["timeout_sec"],
+            "system_prompt": config["system_prompt"],
+            "chat_mode": config["chat_mode"],
+            "rag_source": config["rag_source"],
+            "config_source": "profile",
+        }
+
+    def list_prompt_history(self, user_id: str, conversation_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        self.ensure_schema()
+        conversation = self.repository.get_conversation(user_id, conversation_id)
+        if not conversation:
+            return []
+        normalized_limit = int(limit or 20)
+        if normalized_limit < 1:
+            normalized_limit = 1
+        if normalized_limit > 50:
+            normalized_limit = 50
+        rows = self.repository.list_prompt_history(user_id=user_id, conversation_id=conversation_id, limit=normalized_limit)
+        return [format_prompt_history_item(row) for row in rows]
+
+    def restore_prompt_history(self, user_id: str, conversation_id: str, history_id: int) -> Dict[str, Any]:
+        self.ensure_schema()
+        conversation = self.repository.get_conversation(user_id, conversation_id)
+        if not conversation:
+            return {}
+        item = self.repository.get_prompt_history_item(user_id=user_id, conversation_id=conversation_id, history_id=history_id)
+        if not item:
+            raise RuntimeError("prompt history not found")
+        prompt_text = normalize_system_prompt(item.get("prompt_text"))
+        return self.update_conversation_config(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            temperature=None,
+            timeout_sec=None,
+            system_prompt=prompt_text,
+        )
+
+    def _invoke_reply(
+        self,
+        messages: List[Dict[str, Any]],
+        user_text: str,
+        model_type: str,
+        temperature: float,
+        timeout_sec: int,
+        system_prompt: str,
+        attachment_context: str,
+        chat_mode: str = "GENERAL",
+        rag_source: str = "",
+    ) -> Dict[str, Any]:
+        if chat_mode == "RAG_PROJECTNOTES" and rag_source:
+            try:
+                project_id = int(rag_source)
+                from .chatbotui_rag_service import query_projectnotes_rag
+                return query_projectnotes_rag(
+                    project_id=project_id,
+                    query=user_text,
+                    history_messages=messages,
+                    model_type=model_type,
+                    temperature=temperature,
+                    timeout_sec=timeout_sec,
+                    system_prompt=system_prompt,
+                )
+            except Exception as e:
+                pass
+
+        prompt = history_to_prompt(messages, user_text, system_prompt, attachment_context)
+        started = time.perf_counter()
+        llm = get_chat_model(temperature=temperature, timeout=timeout_sec, model_type=model_type)
+        result = llm.invoke(prompt)
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        answer = extract_message_text(getattr(result, "content", result))
+        if not answer:
+            raise RuntimeError("empty llm response")
+        return {"answer": answer, "latency_ms": latency_ms}
+
+    def regenerate_last_reply(self, user_id: str, conversation_id: str, model_type: str) -> Dict[str, Any]:
+        self.ensure_schema()
+        conversation = self.repository.get_conversation(user_id, conversation_id)
+        if not conversation:
+            return {}
+
+        all_messages = self.repository.list_messages(conversation_id)
+        if not all_messages:
+            raise RuntimeError("no messages to regenerate")
+
+        target_user_idx = -1
+        for idx in range(len(all_messages) - 1, -1, -1):
+            role = safe_text(all_messages[idx].get("role")).lower()
+            if role == "user":
+                target_user_idx = idx
+                break
+        if target_user_idx < 0:
+            raise RuntimeError("no user message found")
+
+        latest_user_text = safe_text(all_messages[target_user_idx].get("content"))
+        if not latest_user_text:
+            raise RuntimeError("last user message is empty")
+
+        # Keep only messages before the target user message for context rebuild.
+        history_messages = all_messages[:target_user_idx]
+
+        model_type = safe_text(model_type) or safe_text(conversation.get("model_type")) or "OPENAI"
+        config = self._conversation_config(conversation)
+        attachment_context = self._build_attachment_context(user_id, conversation_id)
+        generated = self._invoke_reply(
+            history_messages,
+            latest_user_text,
+            model_type,
+            config["temperature"],
+            config["timeout_sec"],
+            config["system_prompt"],
+            attachment_context,
+            config["chat_mode"],
+            config["rag_source"],
+        )
+        answer = generated["answer"]
+        latency_ms = generated["latency_ms"]
+
+        start_message_id = int(all_messages[target_user_idx].get("id") or 0)
+        if start_message_id <= 0:
+            raise RuntimeError("invalid target message id")
+        self.repository.delete_messages_from(conversation_id, start_message_id)
+
+        self.repository.set_model_type(user_id, conversation_id, model_type)
+        self.repository.add_message(conversation_id, "user", latest_user_text, model_type, 0)
+        self.repository.add_message(conversation_id, "assistant", answer, model_type, latency_ms)
+        self.repository.touch_conversation(conversation_id)
+        return {
+            "reply": answer,
+            "conversation_title": safe_text(conversation.get("title")) or "New Chat",
+            "latency_ms": latency_ms,
+            "model_type": model_type,
+            "model_name": resolve_model_name(model_type),
+            "temperature": config["temperature"],
+            "timeout_sec": config["timeout_sec"],
+            "user_message": latest_user_text,
+        }
+
+    def resend_from_user_message(
+        self,
+        user_id: str,
+        conversation_id: str,
+        target_message_id: int,
+        user_text: str,
+        model_type: str,
+    ) -> Dict[str, Any]:
+        self.ensure_schema()
+        conversation = self.repository.get_conversation(user_id, conversation_id)
+        if not conversation:
+            return {}
+
+        all_messages = self.repository.list_messages(conversation_id)
+        if not all_messages:
+            raise RuntimeError("no messages found")
+
+        target_idx = -1
+        for idx, item in enumerate(all_messages):
+            message_id = int(item.get("id") or 0)
+            role = safe_text(item.get("role")).lower()
+            if message_id == target_message_id and role == "user":
+                target_idx = idx
+                break
+        if target_idx < 0:
+            raise RuntimeError("target user message not found")
+
+        normalized_user_text = " ".join(safe_text(user_text).split())
+        if not normalized_user_text:
+            raise RuntimeError("message is required")
+
+        history_messages = all_messages[:target_idx]
+        model_type = safe_text(model_type) or safe_text(conversation.get("model_type")) or "OPENAI"
+        config = self._conversation_config(conversation)
+        attachment_context = self._build_attachment_context(user_id, conversation_id)
+        generated = self._invoke_reply(
+            history_messages,
+            normalized_user_text,
+            model_type,
+            config["temperature"],
+            config["timeout_sec"],
+            config["system_prompt"],
+            attachment_context,
+            config["chat_mode"],
+            config["rag_source"],
+        )
+
+        self.repository.delete_messages_from(conversation_id, target_message_id)
+        self.repository.set_model_type(user_id, conversation_id, model_type)
+        self.repository.add_message(conversation_id, "user", normalized_user_text, model_type, 0)
+        self.repository.add_message(conversation_id, "assistant", generated["answer"], model_type, generated["latency_ms"])
+        self.repository.touch_conversation(conversation_id)
+        return {
+            "reply": generated["answer"],
+            "conversation_title": safe_text(conversation.get("title")) or "New Chat",
+            "latency_ms": generated["latency_ms"],
+            "model_type": model_type,
+            "model_name": resolve_model_name(model_type),
+            "temperature": config["temperature"],
+            "timeout_sec": config["timeout_sec"],
+            "user_message": normalized_user_text,
+        }
+
     def chat(self, user_id: str, conversation_id: str, user_text: str, model_type: str) -> Dict[str, Any]:
         self.ensure_schema()
         conversation = self.repository.get_conversation(user_id, conversation_id)
@@ -142,15 +764,21 @@ class ChatbotUIService:
 
         model_type = safe_text(model_type) or safe_text(conversation.get("model_type")) or "OPENAI"
         current_messages = self.repository.list_messages(conversation_id)
-        prompt = history_to_prompt(current_messages, user_text)
-
-        started = time.perf_counter()
-        llm = get_chat_model(temperature=0.3, timeout=120, model_type=model_type)
-        result = llm.invoke(prompt)
-        latency_ms = int((time.perf_counter() - started) * 1000)
-        answer = extract_message_text(getattr(result, "content", result))
-        if not answer:
-            raise RuntimeError("empty llm response")
+        config = self._conversation_config(conversation)
+        attachment_context = self._build_attachment_context(user_id, conversation_id)
+        generated = self._invoke_reply(
+            current_messages,
+            user_text,
+            model_type,
+            config["temperature"],
+            config["timeout_sec"],
+            config["system_prompt"],
+            attachment_context,
+            config["chat_mode"],
+            config["rag_source"],
+        )
+        answer = generated["answer"]
+        latency_ms = generated["latency_ms"]
 
         if not current_messages:
             self.repository.rename_conversation(user_id, conversation_id, infer_title(user_text))
@@ -163,5 +791,7 @@ class ChatbotUIService:
             "conversation_title": infer_title(user_text) if not current_messages else safe_text(conversation.get("title")) or "New Chat",
             "latency_ms": latency_ms,
             "model_type": model_type,
+            "model_name": resolve_model_name(model_type),
+            "temperature": config["temperature"],
+            "timeout_sec": config["timeout_sec"],
         }
-

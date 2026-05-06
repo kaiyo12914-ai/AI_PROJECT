@@ -315,3 +315,26 @@
 - 對話歷史可保存、搜尋、整理
 - 後端能追蹤模型、錯誤、延遲
 - 後續要接 RAG、附件、多模型時，不需要推倒重做
+
+---
+
+## 精進現況（2026-05-06）
+
+### 已完成
+- 修正 webapps/llm/llm_factory.py 縮排問題，排除 IndentationError，get_chat_model() 可正常載入。
+- 修正設定 API 參數不一致：ChatbotUIService.update_conversation_config() 已補上 chat_mode、ag_source。
+- 修正附件刪除後仍被引用風險：
+  - 後端附件提示查詢改為綁定 user_id + conversation_id + is_archived + is_deleted。
+  - 前端刪除附件後改為重新向後端拉取清單，避免 UI 與 DB 狀態不同步。
+- 新增 PostgreSQL 使用者個人化設定表 chatbotui_user_profile（user_id 為 PK）。
+- 已串接個人化設定流程：
+  - 建立新對話時套用使用者預設。
+  - 儲存設定/切換模型時同步回寫使用者預設。
+
+### 進行中
+- 明確區分「使用者預設設定（profile）」與「單一對話覆寫設定（conversation）」的展示與行為。
+
+### 下一步
+1. 補 chatbotui_user_profile 的 repository/service 整合測試（含 upsert、建立新對話套用）。
+2. API 增加設定來源標記（profile / conversation_override）。
+3. UI 增加「恢復個人預設」操作與提示。

@@ -10,55 +10,133 @@
   <link rel="shortcut icon" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
   <link rel="stylesheet" href="{% custom_static 'chatbotui/css/index.css' %}">
   <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% custom_static 'chatbotui/js/markdown_renderer.js' %}"></script>
   <script defer src="{% custom_static 'chatbotui/js/index.js' %}"></script>
 </head>
-<body data-base-url="{{ request.script_name }}" data-debug-mode="{% if debug_mode %}1{% else %}0{% endif %}" data-model-type="{{ default_model_type }}">
+<body
+  data-base-url="{{ request.script_name }}"
+  data-debug-mode="{% if debug_mode %}1{% else %}0{% endif %}"
+  data-model-type="{{ default_model_type }}"
+  data-model-name="{{ default_model_name }}"
+  data-model-google="{{ google_model_name }}"
+  data-model-openai="{{ openai_model_name }}"
+  data-model-ollama="{{ ollama_model_name }}"
+  data-model-lmstudio="{{ lm_studio_model_name }}"
+  data-default-temperature="{{ default_temperature }}"
+  data-default-timeout-sec="{{ default_timeout_sec }}"
+>
   <main class="shell">
     <aside class="sidebar">
       <div class="sidebar-head">
         <div>
-          <div class="eyebrow">Portal AI</div>
+          <div class="eyebrow">入口 AI</div>
           <h1>AI 對話助手</h1>
         </div>
-        <button id="newChatBtn" type="button">New Chat</button>
+        <button id="newChatBtn" type="button">新對話</button>
       </div>
       <div class="sidebar-note">
         類似 Open WebUI 的入口，適合快速問答、草稿整理與一般對話。
       </div>
-      <div id="conversationList" class="conversation-list" aria-label="conversation list"></div>
+      <div id="conversationList" class="conversation-list" aria-label="對話清單"></div>
     </aside>
 
     <section class="workspace">
       <header class="workspace-head">
         <div>
-          <div class="eyebrow">Workspace</div>
-          <h2 id="chatTitle">New Chat</h2>
+          <div class="eyebrow">工作區</div>
+          <h2 id="chatTitle" title="可雙擊重新命名">新對話</h2>
         </div>
         <div class="workspace-meta">
-          <span id="modelBadge" class="model-badge">{{ default_model_type }}</span>
-          <button id="clearChatBtn" type="button">Clear</button>
+          <span id="envModelBadge" class="model-badge model-badge-muted">環境 {{ default_model_type }} · {{ default_model_name }}</span>
+          <span id="modelBadge" class="model-badge">目前 {{ default_model_type }}</span>
+          <button id="regenBtn" type="button">重新生成</button>
+          <button id="clearChatBtn" type="button">刪除</button>
         </div>
       </header>
 
+      <section id="conversationConfig" class="conversation-config">
+        <div class="config-head">
+          <strong>對話設定</strong>
+          <button id="toggleConfigBtn" type="button" class="config-toggle-btn" aria-expanded="true">收合</button>
+        </div>
+        <div id="configBody" class="config-body">
+          <div class="config-row">
+            <label for="modelTypeSelect">模型</label>
+            <select id="modelTypeSelect" class="model-select" aria-label="模型類型">
+              <option value="OLLAMA">OLLAMA</option>
+              <option value="GOOGLE">GOOGLE</option>
+              <option value="OPENAI">OPENAI</option>
+              <option value="LM_STUDIO">LM_STUDIO</option>
+            </select>
+            <select id="modelNameSelect" class="model-select" aria-label="模型名稱" style="display:none; max-width: 150px; text-overflow: ellipsis;">
+            </select>
+            <label for="temperatureInput">溫度</label>
+            <input id="temperatureInput" type="number" min="0" max="2" step="0.1">
+            <label for="timeoutInput">逾時(秒)</label>
+            <input id="timeoutInput" type="number" min="10" max="600" step="1">
+            <button id="saveConfigBtn" type="button">儲存設定</button>
+            <button id="resetProfileConfigBtn" type="button">恢復個人預設</button>
+            <span id="configSaveStatus" class="config-save-status"></span>
+          </div>
+          <div class="config-row">
+            <label for="chatModeSelect">對話模式</label>
+            <select id="chatModeSelect" class="model-select">
+              <option value="GENERAL">一般聊天 (GENERAL)</option>
+              <option value="RAG_PROJECTNOTES">知識庫查詢 (RAG_PROJECTNOTES)</option>
+            </select>
+            <label for="ragSourceSelect">知識庫來源</label>
+            <select id="ragSourceSelect" class="model-select">
+              <option value="">無</option>
+              {% for p in project_options %}
+              <option value="{{ p.id }}">{{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <label for="systemPromptInput">系統提示詞（每個對話）</label>
+          <textarea id="systemPromptInput" rows="3" placeholder="留空可使用預設系統提示詞"></textarea>
+          <div class="prompt-history">
+            <div class="prompt-history-head">
+              <strong>提示詞歷史</strong>
+              <button id="refreshPromptHistoryBtn" type="button">重新整理</button>
+            </div>
+            <div id="promptHistoryList" class="prompt-history-list"></div>
+          </div>
+        </div>
+      </section>
+
       <div id="messageLog" class="message-log" aria-live="polite"></div>
 
-      <div id="debugPanel" class="debug-panel hidden">
-        <div class="debug-head">
-          <strong>Debug</strong>
-          <button id="clearDebugBtn" type="button">Clear</button>
-        </div>
-        <div id="debugLog" class="debug-log"></div>
-      </div>
 
       <footer class="composer">
+        <div class="attachment-tools">
+          <input id="attachmentInput" type="file" accept=".txt,.md,.csv,.json,.yaml,.yml,.log,.ini,.cfg,.py,.js,.ts,.html,.css,.pdf,.docx" hidden>
+          <button id="attachmentUploadBtn" type="button">附加檔案</button>
+          <span id="attachmentStatus" class="attachment-status"></span>
+        </div>
+        <div id="attachmentList" class="attachment-list"></div>
         <textarea id="messageInput" rows="4" placeholder="輸入問題、需求或程式任務..."></textarea>
         <div class="composer-actions">
           <span class="composer-tip">Enter 送出，Shift+Enter 換行</span>
-          <button id="sendBtn" type="button">Send</button>
+          <button id="sendBtn" type="button">送出</button>
         </div>
       </footer>
+
+      <div id="debugPanel" class="debug-panel hidden is-collapsed">
+        <div class="debug-head">
+          <strong>除錯資訊</strong>
+          <div>
+            <button id="toggleDebugBtn" type="button" class="config-toggle-btn">展開</button>
+            <button id="clearDebugBtn" type="button">清除</button>
+          </div>
+        </div>
+        <div id="debugLog" class="debug-log" style="display: none;"></div>
+      </div>
     </section>
   </main>
+
+  <div id="conversationContextMenu" class="context-menu hidden" role="menu" aria-label="對話選單">
+    <button type="button" data-action="rename">重新命名</button>
+    <button type="button" data-action="delete">刪除</button>
+  </div>
 </body>
 </html>
-

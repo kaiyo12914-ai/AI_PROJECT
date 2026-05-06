@@ -120,8 +120,31 @@ def _should_try_ollama_fallback(err: Exception) -> bool:
         or "responseerror" in s
     )
 
+def _resolve_provider_fallback(primary: str) -> str:
+    explicit = (os.getenv("MISSING_PROVIDER_FALLBACK") or "").strip().upper()
+    if explicit in {"GOOGLE", "OPENAI", "OLLAMA", "LM_STUDIO"}:
+        return explicit
+    if primary == "GOOGLE":
+        return "LM_STUDIO"
+    return "OPENAI"
 
-def get_chat_model(temperature: float | None = None, timeout: int | None = None,model_type:str | None = None):
+
+def _is_openai_quota_error(err: Exception) -> bool:
+    s = str(err or "").lower()
+    return (
+        "insufficient_quota" in s
+        or "you exceeded your current quota" in s
+    )
+
+
+def _resolve_openai_runtime_fallback() -> str:
+    fallback = (os.getenv("OPENAI_RUNTIME_FALLBACK") or "").strip().upper()
+    if fallback in {"GOOGLE", "OLLAMA", "LM_STUDIO"}:
+        return fallback
+    return ""
+
+
+def get_chat_model(temperature: float | None = None, timeout: int | None = None, model_type: str | None = None, model_name: str | None = None):
     """
     透過工廠方法產生llm物件
 
@@ -134,10 +157,26 @@ def get_chat_model(temperature: float | None = None, timeout: int | None = None,
     model_type = (model_type or os.getenv("MODEL_TYPE") or "OLLAMA").strip().upper()
 
     if model_type == "GOOGLE":
-        return _make_google(temperature=temperature, timeout=timeout)
+        try:
+            return _make_google(temperature=temperature, timeout=timeout)
+        except ModuleNotFoundError as exc:
+            if "langchain_google_genai" not in str(exc):
+                raise
+            fallback = _resolve_provider_fallback("GOOGLE")
+            if fallback == "GOOGLE":
+                raise RuntimeError(
+                    "MODEL_TYPE=GOOGLE requires 'langchain_google_genai'. "
+                    "Install package or set MISSING_PROVIDER_FALLBACK=LM_STUDIO/OPENAI/OLLAMA."
+                ) from exc
+            logger.warning("[LLM] GOOGLE provider missing (%s); fallback=%s", exc, fallback)
+            if fallback == "LM_STUDIO":
+                return _make_lm_studio(temperature=temperature, timeout=timeout)
+            if fallback == "OPENAI":
+                return _make_openai(temperature=temperature, timeout=timeout)
+            return _make_ollama(temperature=temperature, timeout=timeout, model_name=model_name)
 
     if model_type == "OLLAMA":
-        return _make_ollama(temperature=temperature, timeout=timeout)
+        return _make_ollama(temperature=temperature, timeout=timeout, model_name=model_name)
 
     if model_type == "OPENAI":
         return _make_openai(temperature=temperature, timeout=timeout)
@@ -197,7 +236,8 @@ def log_llm_config():
     elif model_type == "OPENAI":
         m = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         k = os.getenv("OPENAI_API_KEY")
-        logger.info("[LLM CONFIG] OPENAI: model=%s, api_key=%s", m, _mask_key(k))
+        fb = (os.getenv("OPENAI_RUNTIME_FALLBACK") or "").strip().upper()
+        logger.info("[LLM CONFIG] OPENAI: model=%s, api_key=%s, runtime_fallback=%s", m, _mask_key(k), fb or "NONE")
     elif model_type == "OLLAMA":
         m = os.getenv("OLLAMA_MODEL", "mistral_small_3_1_2503:latest")
         u = os.getenv("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
@@ -208,47 +248,42 @@ def log_llm_config():
         logger.info("[LLM CONFIG] LM_STUDIO: model=%s, base_url=%s", m, u)
     logger.info("%s", "-" * 40)
 
-
-def _make_ollama(temperature: float | None, timeout: int | None):
-    # Prefer new package; fallback to deprecated path for compatibility.
-    _new_pkg = True
-    try:
-        from langchain_ollama import OllamaLLM  # type: ignore
-    except Exception:
-        from langchain_community.llms.ollama import Ollama as OllamaLLM  # type: ignore
-        _new_pkg = False
-
+def _make_ollama(temperature: float | None, timeout: int | None, model_name: str | None = None):
+    model = model_name or os.getenv("OLLAMA_MODEL", "mistral_small_3_1_2503:latest")
     base_url = os.getenv("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
-    model = os.getenv("OLLAMA_MODEL", "mistral_small_3_1_2503:latest")
 
-    # ✅ 改：支援 MODEL_TEMPERATURE / MODEL_TIMEOUT fallback
     t = _resolve_temperature("OLLAMA_TEMPERATURE", temperature)
     to = _resolve_timeout("OLLAMA_TIMEOUT", timeout)
 
-    # ✅ 自動把 base_url 的 host 加進 NO_PROXY/no_proxy
     host = _extract_host_from_base_url(base_url)
     if host:
         _append_no_proxy_host(host)
 
-    # ✅ timeout：不同版本參數名稱不一樣，安全嘗試塞入（不支援就略過）
-    ollama_kwargs = {
-        "base_url": base_url,
-        "temperature": t,
-    }
+    _new_pkg = False
     try:
-        sig = inspect.signature(OllamaLLM.__init__)
-        params = set(sig.parameters.keys())
-        if "request_timeout" in params:
-            ollama_kwargs["request_timeout"] = to
-        elif "timeout" in params:
-            ollama_kwargs["timeout"] = to
-    except Exception:
-        pass
+        from langchain_ollama import OllamaLLM
+        _new_pkg = True
 
-    def _build_ollama(model_name: str):
-        kwargs = dict(ollama_kwargs)
-        kwargs["model"] = model_name
-        return OllamaLLM(**kwargs)
+        def _build_ollama(m: str):
+            kwargs = {"model": m, "base_url": base_url}
+            sig = inspect.signature(OllamaLLM.__init__)
+            if "temperature" in sig.parameters:
+                kwargs["temperature"] = t
+            if "timeout" in sig.parameters:
+                kwargs["timeout"] = to
+            return OllamaLLM(**kwargs)
+
+    except ImportError:
+        from langchain_community.llms import Ollama
+
+        def _build_ollama(m: str):
+            kwargs = {"model": m, "base_url": base_url}
+            sig = inspect.signature(Ollama.__init__)
+            if "temperature" in sig.parameters:
+                kwargs["temperature"] = t
+            if "timeout" in sig.parameters:
+                kwargs["timeout"] = to
+            return Ollama(**kwargs)
 
     llm = _build_ollama(model)
 
@@ -318,15 +353,46 @@ def _make_openai(temperature: float | None, timeout: int | None,model:str |None=
         timeout=to,
         api_key=api_key,
     )
+    runtime_fallback = _resolve_openai_runtime_fallback()
+
+    def _invoke_fallback(input, kwargs):
+        if runtime_fallback == "GOOGLE":
+            return _make_google(temperature=t, timeout=to).invoke(input, **kwargs)
+        if runtime_fallback == "OLLAMA":
+            return _make_ollama(temperature=t, timeout=to).invoke(input, **kwargs)
+        if runtime_fallback == "LM_STUDIO":
+            return _make_lm_studio(temperature=t, timeout=to).invoke(input, **kwargs)
+        raise RuntimeError("no fallback configured")
+
+    async def _ainvoke_fallback(input, kwargs):
+        if runtime_fallback == "GOOGLE":
+            return await _make_google(temperature=t, timeout=to).ainvoke(input, **kwargs)
+        if runtime_fallback == "OLLAMA":
+            return await _make_ollama(temperature=t, timeout=to).ainvoke(input, **kwargs)
+        if runtime_fallback == "LM_STUDIO":
+            return await _make_lm_studio(temperature=t, timeout=to).ainvoke(input, **kwargs)
+        raise RuntimeError("no fallback configured")
 
     class LoggedOpenAI:
         def invoke(self, input, **kwargs):
             _log_llm_use("OPENAI", model, temperature=t, timeout=to)
-            return llm.invoke(input, **kwargs)
+            try:
+                return llm.invoke(input, **kwargs)
+            except Exception as e:
+                if runtime_fallback and _is_openai_quota_error(e):
+                    logger.warning("[LLM] OPENAI quota exceeded; runtime fallback=%s", runtime_fallback)
+                    return _invoke_fallback(input, kwargs)
+                raise
 
         async def ainvoke(self, input, **kwargs):
             _log_llm_use("OPENAI", model, temperature=t, timeout=to)
-            return await llm.ainvoke(input, **kwargs)
+            try:
+                return await llm.ainvoke(input, **kwargs)
+            except Exception as e:
+                if runtime_fallback and _is_openai_quota_error(e):
+                    logger.warning("[LLM] OPENAI quota exceeded (async); runtime fallback=%s", runtime_fallback)
+                    return await _ainvoke_fallback(input, kwargs)
+                raise
 
         def __repr__(self):
             return f"ChatOpenAI(model={model})"
@@ -450,6 +516,28 @@ def get_embedding_model(model_type: str | None = None):
     相容 MODEL_TYPE：GOOGLE, OPENAI, OLLAMA。
     """
     model_type = (model_type or os.getenv("MODEL_TYPE") or "OLLAMA").strip().upper()
+
+    if model_type == "GOOGLE":
+        import importlib.util
+
+        if importlib.util.find_spec("langchain_google_genai") is None:
+            fallback = _resolve_provider_fallback("GOOGLE")
+            logger.warning("[LLM] GOOGLE embedding provider missing; fallback=%s", fallback)
+            if fallback in {"LM_STUDIO", "OLLAMA"}:
+                try:
+                    from langchain_ollama import OllamaEmbeddings
+                except ImportError:
+                    from langchain_community.embeddings import OllamaEmbeddings
+                base_url = os.getenv("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
+                model = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
+                return OllamaEmbeddings(model=model, base_url=base_url)
+            if fallback == "OPENAI":
+                from langchain_openai import OpenAIEmbeddings
+                api_key = os.getenv("OPENAI_API_KEY")
+                if not api_key:
+                    raise RuntimeError("OPENAI_API_KEY is required for OpenAI embedding fallback.")
+                model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+                return OpenAIEmbeddings(model=model, api_key=api_key)
 
     if model_type == "GOOGLE":
         from langchain_google_genai import GoogleGenerativeAIEmbeddings
