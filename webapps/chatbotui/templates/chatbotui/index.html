@@ -1,0 +1,64 @@
+{% load custom_tags %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI 對話助手</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="icon" type="image/svg+xml" href="{% custom_static 'portal/img/favicon-ai.svg' %}?v=3">
+  <link rel="shortcut icon" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="stylesheet" href="{% custom_static 'chatbotui/css/index.css' %}">
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% custom_static 'chatbotui/js/index.js' %}"></script>
+</head>
+<body data-base-url="{{ request.script_name }}" data-debug-mode="{% if debug_mode %}1{% else %}0{% endif %}" data-model-type="{{ default_model_type }}">
+  <main class="shell">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <div>
+          <div class="eyebrow">Portal AI</div>
+          <h1>AI 對話助手</h1>
+        </div>
+        <button id="newChatBtn" type="button">New Chat</button>
+      </div>
+      <div class="sidebar-note">
+        類似 Open WebUI 的入口，適合快速問答、草稿整理與一般對話。
+      </div>
+      <div id="conversationList" class="conversation-list" aria-label="conversation list"></div>
+    </aside>
+
+    <section class="workspace">
+      <header class="workspace-head">
+        <div>
+          <div class="eyebrow">Workspace</div>
+          <h2 id="chatTitle">New Chat</h2>
+        </div>
+        <div class="workspace-meta">
+          <span id="modelBadge" class="model-badge">{{ default_model_type }}</span>
+          <button id="clearChatBtn" type="button">Clear</button>
+        </div>
+      </header>
+
+      <div id="messageLog" class="message-log" aria-live="polite"></div>
+
+      <div id="debugPanel" class="debug-panel hidden">
+        <div class="debug-head">
+          <strong>Debug</strong>
+          <button id="clearDebugBtn" type="button">Clear</button>
+        </div>
+        <div id="debugLog" class="debug-log"></div>
+      </div>
+
+      <footer class="composer">
+        <textarea id="messageInput" rows="4" placeholder="輸入問題、需求或程式任務..."></textarea>
+        <div class="composer-actions">
+          <span class="composer-tip">Enter 送出，Shift+Enter 換行</span>
+          <button id="sendBtn" type="button">Send</button>
+        </div>
+      </footer>
+    </section>
+  </main>
+</body>
+</html>
+

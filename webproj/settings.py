@@ -294,6 +294,7 @@ PORTAL_ACL = {
     "student": ["PUBLIC"],
     "translator": ["ALL_AUTHENTICATED"],
     "englishchat": ["ALL_AUTHENTICATED"],
+    "chatbotui": ["ALL_AUTHENTICATED"],
     "todo": ["ALL_AUTHENTICATED"],
     "comment": [
         "ALL_AUTHENTICATED",
@@ -426,6 +427,7 @@ PORTAL_USAGE_CODE_MAP = [
     ("/", "PORTAL"),
     ("/translator/", "TRANSLATOR"),
     ("/englishchat/", "ENGLISHCHAT"),
+    ("/chatbotui/", "CHATBOTUI"),
     ("/comment/", "COMMENT"),
     ("/doc/", "DOC"),
     ("/meetingreply/", "MEETINGREPLY"),
@@ -466,6 +468,7 @@ INSTALLED_APPS = [
     "webapps.portal.apps.PortalConfig",
     "webapps.translator.apps.TranslatorConfig",
     "webapps.englishchat.apps.EnglishchatConfig",
+    "webapps.chatbotui.apps.ChatbotuiConfig",
     "webapps.todo.apps.TodoConfig",
     "webapps.comment.apps.CommentConfig",
     "webapps.student.apps.StudentConfig",

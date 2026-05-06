@@ -37,6 +37,7 @@ urlpatterns = [
     path("rag/", include("webapps.rag_oracle.urls")),
     path("excelproc/", include("webapps.excelproc.urls")),
     path("englishchat/", include("webapps.englishchat.urls")),
+    path("chatbotui/", include("webapps.chatbotui.urls")),
     path("projectnotes/", include("webapps.projectnotes.urls")),
     path("formalize/", include("webapps.document_formalize.urls")),
 

@@ -1,13 +1,11 @@
 {% load static %}
 {% load custom_tags %}
-{# webapps/portal/templates/portal/index.html #}
 {% load portal_extras %}
-{% load custom_tags %}
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
-  <title>AI（雛形）輔助系統入口</title>
+  <title>AI 輔助系統功能入口</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
   <link rel="icon" type="image/svg+xml" href="{% custom_static 'portal/img/favicon-ai.svg' %}?v=3">
@@ -20,19 +18,20 @@
   data-base-url="{{ request.script_name }}"
   class="portal-home {% if request.GET.bg_variant|default:'a'|lower == 'b' %}bg-enhanced{% else %}bg-conservative{% endif %} {% if request.GET.bg_anim == '0' %}bg-anim-off{% endif %}"
 >
-{% with card_variant=request.GET.card_variant|default:'a'|lower bg_variant=request.GET.bg_variant|default:'a'|lower panel_variant=request.GET.panel_variant|default:'a'|lower %}
+{% with card_variant=request.GET.card_variant|default:'a'|lower panel_variant=request.GET.panel_variant|default:'a'|lower %}
   <div class="container {% if panel_variant == 'b' %}container--glass{% else %}container--soft{% endif %}">
-    <h1>AI（雛形）輔助系統入口</h1>
-    <div class="subtitle">請選擇欲使用之系統功能</div>
+    <h1>AI 輔助系統功能入口</h1>
+    <div class="subtitle">選擇需要的工具，快速進入各項 AI 工作介面。</div>
 
     <div class="loginbar">
-      <span>歡迎：</span>
-      <span class="pill">{% if request.login_user_name %}{{ request.login_user_name }}{% else %}未取得姓名{% endif %}</span>
+      <span>目前使用者</span>
+      <span class="pill">{% if request.login_user_name %}{{ request.login_user_name }}{% else %}尚未登入{% endif %}</span>
     </div>
 
     <div class="menu {% if card_variant == 'b' %}menu--b{% else %}menu--a{% endif %}">
       {% allow "translator" as can_translator %}
       {% allow "englishchat" as can_englishchat %}
+      {% allow "chatbotui" as can_chatbotui %}
       {% allow "projectnotes" as can_projectnotes %}
       {% allow "comment" as can_comment %}
       {% allow "doc" as can_doc %}
@@ -56,6 +55,11 @@
         {% include "portal/_svg_card.html" with href=englishchat_href title="美語學習教室" subtitle="主題對話 / 口語陪練" tone="blue" icon="chat" variant=card_variant %}
       {% endif %}
 
+      {% if can_chatbotui %}
+        {% url 'chatbotui:page' as chatbotui_href %}
+        {% include "portal/_svg_card.html" with href=chatbotui_href title="AI 對話助手" subtitle="類 Open WebUI 對話入口" tone="cyan" icon="chat" variant=card_variant %}
+      {% endif %}
+
       {% if can_formalize %}
         {% url 'document_formalize:page' as formalize_href %}
         {% include "portal/_svg_card.html" with href=formalize_href title="文件公文化" subtitle="口語改正式公文" tone="gray" icon="formalize" variant=card_variant %}
@@ -63,7 +67,7 @@
 
       {% if can_projectnotes %}
         {% url 'projectnotes:page' as projectnotes_href %}
-        {% include "portal/_svg_card.html" with href=projectnotes_href title="專案法規查詢" subtitle="專案知識選界 / 引用對話" tone="green" icon="notebook" variant=card_variant %}
+        {% include "portal/_svg_card.html" with href=projectnotes_href title="專案法規查詢" subtitle="專案知識選取 / 引用對話" tone="green" icon="notebook" variant=card_variant %}
       {% endif %}
 
       {% if can_comment %}
@@ -116,7 +120,7 @@
       {% endif %}
     </div>
 
-    <footer>© {% now "Y" %} 內部系統服務平台</footer>
+    <footer>© {% now "Y" %} AI 輔助系統平台</footer>
   </div>
 {% endwith %}
 </body>

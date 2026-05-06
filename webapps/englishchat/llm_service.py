@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import logging
 import time
@@ -18,8 +19,66 @@ def safe_text(value: Any) -> str:
     return "" if value is None else str(value).strip()
 
 
+def coerce_llm_text(value: Any) -> str:
+    if value is None:
+        return ""
+
+    content = value.content if hasattr(value, "content") else value
+
+    if isinstance(content, str):
+        stripped = content.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            try:
+                parsed = ast.literal_eval(stripped)
+                if isinstance(parsed, list):
+                    content = parsed
+            except Exception:
+                pass
+        elif stripped.startswith("{") and stripped.endswith("}"):
+            try:
+                parsed = ast.literal_eval(stripped)
+                if isinstance(parsed, dict):
+                    content = parsed
+            except Exception:
+                pass
+
+    if isinstance(content, list):
+        parts: List[str] = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append(part)
+            elif isinstance(part, dict):
+                if "text" in part:
+                    parts.append(str(part.get("text") or ""))
+                elif "content" in part:
+                    parts.append(str(part.get("content") or ""))
+                else:
+                    parts.append(str(part))
+            else:
+                parts.append(str(part))
+        return "".join(parts).strip()
+
+    if isinstance(content, dict):
+        if "content" in content:
+            return str(content.get("content") or "").strip()
+        if "text" in content:
+            return str(content.get("text") or "").strip()
+
+    return safe_text(content)
+
+
+def strip_json_fence(text: str) -> str:
+    stripped = safe_text(text)
+    if not stripped.startswith("```"):
+        return stripped
+    lines = stripped.splitlines()
+    if len(lines) >= 2 and lines[0].startswith("```") and lines[-1].strip() == "```":
+        return "\n".join(lines[1:-1]).strip()
+    return stripped
+
+
 def extract_json_object(raw: str) -> Dict[str, Any]:
-    text = safe_text(raw)
+    text = strip_json_fence(coerce_llm_text(raw))
     if not text:
         return {}
     try:
@@ -39,7 +98,7 @@ def extract_json_object(raw: str) -> Dict[str, Any]:
 
 
 def extract_json_array(raw: str) -> List[Dict[str, Any]]:
-    text = safe_text(raw)
+    text = strip_json_fence(coerce_llm_text(raw))
     if not text:
         return []
     try:
@@ -73,8 +132,7 @@ def invoke_json(
         try:
             started = time.time()
             out = llm.invoke(prompt)
-            raw = out.content if hasattr(out, "content") else str(out)
-            parsed = extract_json_object(raw)
+            parsed = extract_json_object(out)
             if parsed:
                 logger.info(
                     "englishchat llm success purpose=%s attempt=%s duration_ms=%s",
@@ -108,8 +166,7 @@ def invoke_json_array(
         try:
             started = time.time()
             out = llm.invoke(prompt)
-            raw = out.content if hasattr(out, "content") else str(out)
-            parsed = extract_json_array(raw)
+            parsed = extract_json_array(out)
             if parsed:
                 logger.info(
                     "englishchat llm array success purpose=%s attempt=%s duration_ms=%s",
