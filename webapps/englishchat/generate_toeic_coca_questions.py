@@ -62,6 +62,21 @@ def parse_args() -> argparse.Namespace:
 
 def build_prompt(topic: str, mode: str, level: str, requested_count: int) -> str:
     beginner_translation_hint = ""
+    beginner_level_hint = ""
+    if level == "beginner":
+        beginner_level_hint = """
+beginner 題目請額外遵守以下簡化規則：
+- 難度請對齊 CEFR A1/A2。
+- 字彙優先參考 Oxford 3000、NGSL 高頻字、GEPT 初級、國中基礎英文常見用字。
+- 題型風格可參考 GEPT 初級、國中英文、初級 ESL 練習題。
+- 保留 TOEIC/生活情境，但句子必須改寫成初學者也能理解的簡單英文。
+- 優先使用日常高頻動詞，例如 `be`, `have`, `go`, `like`, `want`, `need`, `work`, `call`, `eat`, `come`。
+- 句子盡量短，避免複句、被動語態、假設語氣、關係子句、分詞構句與過度商務化字彙。
+- 一題只考一個重點，不要同時考多個文法或多層語意推理。
+- fill_blank 盡量以單字或短片語為答案。
+- reorder 盡量控制在 4 到 6 個 words/chunks。
+- translation 只出單句，句意要直接、清楚、自然。
+"""
     if mode == "translation" and level == "beginner":
         beginner_translation_hint = """
 6. beginner 的 translation 題型必須提供額外提示：
@@ -81,8 +96,13 @@ def build_prompt(topic: str, mode: str, level: str, requested_count: int) -> str
 難度：{level}（beginner / intermediate / advanced）
 
 只能回傳 JSON array。
+第一個字必須是 `[`，最後一個字必須是 `]`。
 不要使用 markdown。
-不要加入任何額外說明、前言、結語或註解。
+不要加入任何額外說明、前言、結語、註解或 code fence。
+不要輸出 ```json 或 ```。
+每一題都必須保留所有 key，不可以省略欄位。
+若某欄位該題型不使用，請填 `""` 或 `[]`，不要填 null。
+除了 JSON array 之外，不要輸出任何文字。
 [
   {{
     "prompt_text": "題目文字",
@@ -115,6 +135,10 @@ def build_prompt(topic: str, mode: str, level: str, requested_count: int) -> str
 4. 每一題都必須符合指定難度。
 5. 避免重複題與近似題。
 6. 題目內容必須自然、可用於真實情境，不要出現奇怪或生硬的英文。
+7. `requested_count` 是 {requested_count}，請輸出剛好 {requested_count} 個 array 元素，不多也不少。
+8. 若你差點想輸出說明文字，請刪除，只保留合法 JSON array。
+9. 若 level 是 beginner，請優先以初級英文教材風格出題，而不是標準 TOEIC 中高難度句型。
+{beginner_level_hint}
 {beginner_translation_hint}
 """.strip()
 

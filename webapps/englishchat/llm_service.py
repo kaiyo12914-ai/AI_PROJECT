@@ -9,10 +9,26 @@ from typing import Any, Dict, List
 from webapps.llm.llm_factory import get_chat_model
 
 logger = logging.getLogger(__name__)
+RAW_LOG_LIMIT = 1200
 
 
 class EnglishChatLLMError(Exception):
     pass
+
+
+def is_non_retryable_llm_error(exc: Exception) -> bool:
+    text = safe_text(exc).lower()
+    return any(
+        token in text
+        for token in [
+            "insufficient_quota",
+            "you exceeded your current quota",
+            "invalid_api_key",
+            "incorrect api key",
+            "authenticationerror",
+            "permission denied",
+        ]
+    )
 
 
 def safe_text(value: Any) -> str:
@@ -75,6 +91,52 @@ def strip_json_fence(text: str) -> str:
     if len(lines) >= 2 and lines[0].startswith("```") and lines[-1].strip() == "```":
         return "\n".join(lines[1:-1]).strip()
     return stripped
+
+
+def summarize_for_log(value: Any, limit: int = RAW_LOG_LIMIT) -> str:
+    text = safe_text(value)
+    if not text:
+        return ""
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "...(truncated)"
+
+
+def log_parse_diagnostics(kind: str, purpose: str, attempt: int, out: Any) -> None:
+    raw_content = out.content if hasattr(out, "content") else out
+    coerced_text = coerce_llm_text(out)
+    logger.warning(
+        (
+            "englishchat llm %s parse diagnostics purpose=%s attempt=%s "
+            "response_type=%s content_type=%s raw_excerpt=%r normalized_excerpt=%r"
+        ),
+        kind,
+        purpose,
+        attempt,
+        type(out).__name__,
+        type(raw_content).__name__,
+        summarize_for_log(raw_content),
+        summarize_for_log(coerced_text),
+    )
+
+
+def build_array_repair_prompt(raw_text: str) -> str:
+    excerpt = summarize_for_log(raw_text, limit=4000)
+    return f"""
+你是一個 JSON 修復器。
+
+請把下面內容修正成「合法的 JSON array」後直接輸出。
+限制：
+1. 只能輸出 JSON array。
+2. 第一個字必須是 `[`，最後一個字必須是 `]`。
+3. 不要輸出 markdown、```、說明文字、註解、前言或結語。
+4. 若原內容看起來是題目清單，請盡量保留原意，只修正 JSON 格式。
+5. 若欄位缺值，請保留 key，並用 `""` 或 `[]` 補空值。
+6. 不要新增原本不存在的外層包裝物件。
+
+待修復內容：
+{excerpt}
+""".strip()
 
 
 def extract_json_object(raw: str) -> Dict[str, Any]:
@@ -143,9 +205,12 @@ def invoke_json(
                 return parsed
             last_error = EnglishChatLLMError("empty_or_invalid_json")
             logger.warning("englishchat llm parse failure purpose=%s attempt=%s", purpose, attempt)
+            log_parse_diagnostics("object", purpose, attempt, out)
         except Exception as exc:
             last_error = exc
             logger.warning("englishchat llm request failure purpose=%s attempt=%s error=%s", purpose, attempt, exc)
+            if is_non_retryable_llm_error(exc):
+                raise EnglishChatLLMError(f"{purpose} non_retryable_error: {exc}") from exc
         if attempt <= max_retries:
             time.sleep(retry_delay * attempt)
     raise EnglishChatLLMError(f"{purpose} failed after retries: {last_error}")
@@ -177,9 +242,36 @@ def invoke_json_array(
                 return parsed
             last_error = EnglishChatLLMError("empty_or_invalid_json_array")
             logger.warning("englishchat llm array parse failure purpose=%s attempt=%s", purpose, attempt)
+            log_parse_diagnostics("array", purpose, attempt, out)
+            repaired_raw = coerce_llm_text(out)
+            if repaired_raw:
+                try:
+                    repair_started = time.time()
+                    repair_prompt = build_array_repair_prompt(repaired_raw)
+                    repair_out = llm.invoke(repair_prompt)
+                    repaired = extract_json_array(repair_out)
+                    if repaired:
+                        logger.info(
+                            "englishchat llm array repair success purpose=%s attempt=%s duration_ms=%s",
+                            purpose,
+                            attempt,
+                            round((time.time() - repair_started) * 1000),
+                        )
+                        return repaired
+                    logger.warning("englishchat llm array repair parse failure purpose=%s attempt=%s", purpose, attempt)
+                    log_parse_diagnostics("array_repair", purpose, attempt, repair_out)
+                except Exception as repair_exc:
+                    logger.warning(
+                        "englishchat llm array repair request failure purpose=%s attempt=%s error=%s",
+                        purpose,
+                        attempt,
+                        repair_exc,
+                    )
         except Exception as exc:
             last_error = exc
             logger.warning("englishchat llm array request failure purpose=%s attempt=%s error=%s", purpose, attempt, exc)
+            if is_non_retryable_llm_error(exc):
+                raise EnglishChatLLMError(f"{purpose} non_retryable_error: {exc}") from exc
         if attempt <= max_retries:
             time.sleep(retry_delay * attempt)
     raise EnglishChatLLMError(f"{purpose} failed after retries: {last_error}")
