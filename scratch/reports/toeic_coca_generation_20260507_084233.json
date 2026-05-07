@@ -1,0 +1,915 @@
+{
+  "generated_at": "2026-05-07T08:42:33.778861",
+  "dry_run": false,
+  "questions_per_combo": 1,
+  "totals": {
+    "combos": 90,
+    "upserts": 90,
+    "deactivated": 188,
+    "skipped_duplicates": 0,
+    "failures": 0
+  },
+  "combo_results": [
+    {
+      "topic": "meeting",
+      "mode": "fill_blank",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 4,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "meeting",
+      "mode": "fill_blank",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 4,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "meeting",
+      "mode": "fill_blank",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 3,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "meeting",
+      "mode": "reorder",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 3,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "meeting",
+      "mode": "reorder",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 3,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "meeting",
+      "mode": "reorder",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 3,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "meeting",
+      "mode": "translation",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "meeting",
+      "mode": "translation",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "meeting",
+      "mode": "translation",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "phone",
+      "mode": "fill_blank",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "phone",
+      "mode": "fill_blank",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "phone",
+      "mode": "fill_blank",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "phone",
+      "mode": "reorder",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "phone",
+      "mode": "reorder",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "phone",
+      "mode": "reorder",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "phone",
+      "mode": "translation",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "phone",
+      "mode": "translation",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "phone",
+      "mode": "translation",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "restaurant",
+      "mode": "fill_blank",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "restaurant",
+      "mode": "fill_blank",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "restaurant",
+      "mode": "fill_blank",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "restaurant",
+      "mode": "reorder",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "restaurant",
+      "mode": "reorder",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "restaurant",
+      "mode": "reorder",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "restaurant",
+      "mode": "translation",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "restaurant",
+      "mode": "translation",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "restaurant",
+      "mode": "translation",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "travel",
+      "mode": "fill_blank",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "travel",
+      "mode": "fill_blank",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "travel",
+      "mode": "fill_blank",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "travel",
+      "mode": "reorder",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "travel",
+      "mode": "reorder",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "travel",
+      "mode": "reorder",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "travel",
+      "mode": "translation",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "travel",
+      "mode": "translation",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "travel",
+      "mode": "translation",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "shopping",
+      "mode": "fill_blank",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "shopping",
+      "mode": "fill_blank",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "shopping",
+      "mode": "fill_blank",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "shopping",
+      "mode": "reorder",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "shopping",
+      "mode": "reorder",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "shopping",
+      "mode": "reorder",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "shopping",
+      "mode": "translation",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "shopping",
+      "mode": "translation",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "shopping",
+      "mode": "translation",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "school",
+      "mode": "fill_blank",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "school",
+      "mode": "fill_blank",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "school",
+      "mode": "fill_blank",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "school",
+      "mode": "reorder",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "school",
+      "mode": "reorder",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "school",
+      "mode": "reorder",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "school",
+      "mode": "translation",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "school",
+      "mode": "translation",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "school",
+      "mode": "translation",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "fitness",
+      "mode": "fill_blank",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "fitness",
+      "mode": "fill_blank",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "fitness",
+      "mode": "fill_blank",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "fitness",
+      "mode": "reorder",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "fitness",
+      "mode": "reorder",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "fitness",
+      "mode": "reorder",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "fitness",
+      "mode": "translation",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "fitness",
+      "mode": "translation",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "fitness",
+      "mode": "translation",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "hospital",
+      "mode": "fill_blank",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "hospital",
+      "mode": "fill_blank",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "hospital",
+      "mode": "fill_blank",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "hospital",
+      "mode": "reorder",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "hospital",
+      "mode": "reorder",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "hospital",
+      "mode": "reorder",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "hospital",
+      "mode": "translation",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "hospital",
+      "mode": "translation",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "hospital",
+      "mode": "translation",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "weather",
+      "mode": "fill_blank",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "weather",
+      "mode": "fill_blank",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "weather",
+      "mode": "fill_blank",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "weather",
+      "mode": "reorder",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "weather",
+      "mode": "reorder",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "weather",
+      "mode": "reorder",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "weather",
+      "mode": "translation",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "weather",
+      "mode": "translation",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "weather",
+      "mode": "translation",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "self_intro",
+      "mode": "fill_blank",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "self_intro",
+      "mode": "fill_blank",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "self_intro",
+      "mode": "fill_blank",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "self_intro",
+      "mode": "reorder",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "self_intro",
+      "mode": "reorder",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "self_intro",
+      "mode": "reorder",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "self_intro",
+      "mode": "translation",
+      "level": "beginner",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "self_intro",
+      "mode": "translation",
+      "level": "intermediate",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    },
+    {
+      "topic": "self_intro",
+      "mode": "translation",
+      "level": "advanced",
+      "requested_count": 1,
+      "inserted_or_updated": 1,
+      "deactivated": 2,
+      "skipped_duplicates": 0,
+      "failures": 0
+    }
+  ],
+  "failures": []
+}

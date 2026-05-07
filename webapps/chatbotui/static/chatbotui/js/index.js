@@ -541,7 +541,24 @@
     if (message.model_type) parts.push(message.model_type);
     if (message.model_name) parts.push(message.model_name);
     if (message.latency_ms) parts.push(`${message.latency_ms} ms`);
+    if (message.attachment_used || Number(message.attachment_count || 0) > 0) parts.push(`附件 ${Number(message.attachment_count || 0)}`);
+    if (message.rag_used) parts.push(`RAG 引用 ${Number(message.citation_count || 0)}`);
+    else if (String(message.rag_reason || "") === "rag_error") parts.push("RAG 錯誤");
     return parts.join(" | ");
+  }
+
+  function applyUsageMetaToLatestAssistant(conversation, meta) {
+    if (!conversation || !Array.isArray(conversation.messages) || !meta) return;
+    for (let i = conversation.messages.length - 1; i >= 0; i -= 1) {
+      const msg = conversation.messages[i];
+      if (String(msg.role || "").toLowerCase() !== "assistant") continue;
+      msg.attachment_used = Boolean(meta.attachment_used);
+      msg.attachment_count = Number(meta.attachment_count || 0);
+      msg.rag_used = Boolean(meta.rag_used);
+      msg.citation_count = Number(meta.citation_count || 0);
+      msg.rag_reason = String(meta.rag_reason || "");
+      break;
+    }
   }
 
   function renderMessages() {
@@ -777,6 +794,7 @@
       current.temperature = normalizeTemperature(data.meta && data.meta.temperature);
       current.timeout_sec = normalizeTimeout(data.meta && data.meta.timeout_sec);
       await loadConversationDetail(current.id);
+      applyUsageMetaToLatestAssistant(current, data.meta || {});
       render();
       pushDebug(`[回應成功] 模型=${current.model_type} 延遲毫秒=${data.meta && data.meta.latency_ms ? data.meta.latency_ms : 0}`);
     } catch (error) {
@@ -818,6 +836,7 @@
       current.temperature = normalizeTemperature(data.meta && data.meta.temperature);
       current.timeout_sec = normalizeTimeout(data.meta && data.meta.timeout_sec);
       await loadConversationDetail(current.id);
+      applyUsageMetaToLatestAssistant(current, data.meta || {});
       render();
       pushDebug(`[重新生成成功] 模型=${current.model_type} 延遲毫秒=${data.meta && data.meta.latency_ms ? data.meta.latency_ms : 0}`);
     } catch (error) {
@@ -862,6 +881,7 @@
       current.temperature = normalizeTemperature(data.meta && data.meta.temperature);
       current.timeout_sec = normalizeTimeout(data.meta && data.meta.timeout_sec);
       await loadConversationDetail(current.id);
+      applyUsageMetaToLatestAssistant(current, data.meta || {});
       render();
       pushDebug(`[重送成功] 模型=${current.model_type} 延遲毫秒=${data.meta && data.meta.latency_ms ? data.meta.latency_ms : 0}`);
     } catch (error) {

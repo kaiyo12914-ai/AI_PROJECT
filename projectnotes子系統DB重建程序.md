@@ -378,11 +378,7 @@ psql -h 192.168.0.137 -p 5432 -U projectnotes_user -d projectnotes -c "\d englis
 如果內網端已經有相同 schema，最穩定的是只匯資料，不帶建表語句。
 
 ```powershell
-pg_dump -h 192.168.0.137 -p 5432 -U projectnotes_user -d projectnotes ^
-  -t englishchat_question_bank ^
-  --data-only ^
-  --inserts ^
-  -f englishchat_question_bank_data.sql
+pg_dump -h 192.168.0.137 -p 5432 -U projectnotes_user -d projectnotes   -t englishchat_question_bank  --data-only   --inserts   -f englishchat_question_bank_data.sql
 ```
 
 說明：

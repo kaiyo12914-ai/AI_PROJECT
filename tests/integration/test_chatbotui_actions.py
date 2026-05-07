@@ -68,6 +68,11 @@ def test_chat_regenerate_success(monkeypatch):
             "latency_ms": 88,
             "model_type": model_type,
             "user_message": "hello",
+            "attachment_used": True,
+            "attachment_count": 1,
+            "rag_used": False,
+            "citation_count": 0,
+            "rag_reason": "rag_disabled",
         },
     )
     response = views.api_chat_regenerate(
@@ -82,6 +87,11 @@ def test_chat_regenerate_success(monkeypatch):
     assert payload["ok"] is True
     assert payload["reply"] == "Regenerated answer"
     assert payload["meta"]["latency_ms"] == 88
+    assert payload["meta"]["attachment_used"] is True
+    assert payload["meta"]["attachment_count"] == 1
+    assert payload["meta"]["rag_used"] is False
+    assert payload["meta"]["citation_count"] == 0
+    assert payload["meta"]["rag_reason"] == "rag_disabled"
 
 
 def test_chat_regenerate_missing_conversation_id(monkeypatch):
@@ -103,6 +113,11 @@ def test_chat_resend_success(monkeypatch):
             "latency_ms": 91,
             "model_type": model_type,
             "user_message": user_text,
+            "attachment_used": False,
+            "attachment_count": 0,
+            "rag_used": True,
+            "citation_count": 2,
+            "rag_reason": "rag_hit",
         },
     )
     response = views.api_chat_resend(
@@ -117,6 +132,9 @@ def test_chat_resend_success(monkeypatch):
     assert payload["ok"] is True
     assert payload["reply"] == "Updated answer"
     assert payload["meta"]["latency_ms"] == 91
+    assert payload["meta"]["rag_used"] is True
+    assert payload["meta"]["citation_count"] == 2
+    assert payload["meta"]["rag_reason"] == "rag_hit"
 
 
 def test_conversation_model_update_success(monkeypatch):
@@ -124,7 +142,7 @@ def test_conversation_model_update_success(monkeypatch):
     monkeypatch.setattr(
         views.service,
         "update_conversation_model",
-        lambda user_id, conversation_id, model_type: {
+        lambda user_id, conversation_id, model_type, model_name="": {
             "id": conversation_id,
             "title": "Chat A",
             "model_type": model_type,
@@ -146,7 +164,7 @@ def test_conversation_config_update_success(monkeypatch):
     monkeypatch.setattr(
         views.service,
         "update_conversation_config",
-        lambda user_id, conversation_id, temperature, timeout_sec, system_prompt: {
+        lambda user_id, conversation_id, temperature, timeout_sec, system_prompt, chat_mode=None, rag_source=None: {
             "id": conversation_id,
             "title": "Chat A",
             "model_type": "OLLAMA",
@@ -169,6 +187,40 @@ def test_conversation_config_update_success(monkeypatch):
     assert payload["ok"] is True
     assert payload["conversation"]["temperature"] == 0.2
     assert payload["conversation"]["timeout_sec"] == 180
+
+
+def test_chat_meta_fields_success(monkeypatch):
+    monkeypatch.setattr("webapps.portal.decorators.can_access", lambda user, node: True)
+    monkeypatch.setattr(views.service, "update_conversation_model", lambda user_id, conversation_id, model_type, model_name="": {})
+    monkeypatch.setattr(
+        views.service,
+        "chat",
+        lambda user_id, conversation_id, user_text, model_type: {
+            "reply": "ok",
+            "conversation_title": "Chat A",
+            "latency_ms": 55,
+            "model_type": model_type,
+            "model_name": "gemma3:4b",
+            "temperature": 0.3,
+            "timeout_sec": 120,
+            "attachment_used": True,
+            "attachment_count": 2,
+            "rag_used": True,
+            "citation_count": 3,
+            "rag_reason": "rag_hit",
+        },
+    )
+    response = views.api_chat(
+        _request("POST", "/chatbotui/chat/", {"conversation_id": "c1", "message": "hello", "model_type": "OLLAMA"})
+    )
+    payload = json.loads(response.content.decode("utf-8"))
+    assert response.status_code == 200
+    assert payload["ok"] is True
+    assert payload["meta"]["attachment_used"] is True
+    assert payload["meta"]["attachment_count"] == 2
+    assert payload["meta"]["rag_used"] is True
+    assert payload["meta"]["citation_count"] == 3
+    assert payload["meta"]["rag_reason"] == "rag_hit"
 
 
 def test_conversation_config_update_requires_field(monkeypatch):

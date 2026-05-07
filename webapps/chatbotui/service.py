@@ -161,6 +161,17 @@ def normalize_attachment_text(value: Any) -> str:
     return text
 
 
+def _attachment_count_from_context(attachment_context: str) -> int:
+    text = safe_text(attachment_context)
+    if not text:
+        return 0
+    count = 0
+    for line in text.splitlines():
+        if line.startswith("- "):
+            count += 1
+    return count
+
+
 class ChatbotUIService:
     def __init__(self, repository: ChatbotUIRepository | None = None) -> None:
         self.repository = repository or ChatbotUIRepository()
@@ -604,11 +615,13 @@ class ChatbotUIService:
         chat_mode: str = "GENERAL",
         rag_source: str = "",
     ) -> Dict[str, Any]:
+        attachment_used = bool(safe_text(attachment_context))
+        attachment_count = _attachment_count_from_context(attachment_context)
         if chat_mode == "RAG_PROJECTNOTES" and rag_source:
             try:
                 project_id = int(rag_source)
                 from .chatbotui_rag_service import query_projectnotes_rag
-                return query_projectnotes_rag(
+                rag_result = query_projectnotes_rag(
                     project_id=project_id,
                     query=user_text,
                     history_messages=messages,
@@ -617,8 +630,17 @@ class ChatbotUIService:
                     timeout_sec=timeout_sec,
                     system_prompt=system_prompt,
                 )
+                rag_result["attachment_used"] = attachment_used
+                rag_result["attachment_count"] = attachment_count
+                rag_result["rag_used"] = True
+                rag_result["citation_count"] = len(rag_result.get("citations") or [])
+                rag_result["rag_reason"] = "rag_hit"
+                return rag_result
             except Exception as e:
-                pass
+                # fallback to normal chat path when RAG fails
+                rag_reason = "rag_error"
+        else:
+            rag_reason = "rag_disabled"
 
         prompt = history_to_prompt(messages, user_text, system_prompt, attachment_context)
         started = time.perf_counter()
@@ -628,7 +650,15 @@ class ChatbotUIService:
         answer = extract_message_text(getattr(result, "content", result))
         if not answer:
             raise RuntimeError("empty llm response")
-        return {"answer": answer, "latency_ms": latency_ms}
+        return {
+            "answer": answer,
+            "latency_ms": latency_ms,
+            "attachment_used": attachment_used,
+            "attachment_count": attachment_count,
+            "rag_used": False,
+            "citation_count": 0,
+            "rag_reason": rag_reason,
+        }
 
     def regenerate_last_reply(self, user_id: str, conversation_id: str, model_type: str) -> Dict[str, Any]:
         self.ensure_schema()
@@ -691,6 +721,11 @@ class ChatbotUIService:
             "temperature": config["temperature"],
             "timeout_sec": config["timeout_sec"],
             "user_message": latest_user_text,
+            "attachment_used": bool(generated.get("attachment_used")),
+            "attachment_count": int(generated.get("attachment_count") or 0),
+            "rag_used": bool(generated.get("rag_used")),
+            "citation_count": int(generated.get("citation_count") or 0),
+            "rag_reason": safe_text(generated.get("rag_reason")),
         }
 
     def resend_from_user_message(
@@ -754,6 +789,11 @@ class ChatbotUIService:
             "temperature": config["temperature"],
             "timeout_sec": config["timeout_sec"],
             "user_message": normalized_user_text,
+            "attachment_used": bool(generated.get("attachment_used")),
+            "attachment_count": int(generated.get("attachment_count") or 0),
+            "rag_used": bool(generated.get("rag_used")),
+            "citation_count": int(generated.get("citation_count") or 0),
+            "rag_reason": safe_text(generated.get("rag_reason")),
         }
 
     def chat(self, user_id: str, conversation_id: str, user_text: str, model_type: str) -> Dict[str, Any]:
@@ -794,4 +834,9 @@ class ChatbotUIService:
             "model_name": resolve_model_name(model_type),
             "temperature": config["temperature"],
             "timeout_sec": config["timeout_sec"],
+            "attachment_used": bool(generated.get("attachment_used")),
+            "attachment_count": int(generated.get("attachment_count") or 0),
+            "rag_used": bool(generated.get("rag_used")),
+            "citation_count": int(generated.get("citation_count") or 0),
+            "rag_reason": safe_text(generated.get("rag_reason")),
         }

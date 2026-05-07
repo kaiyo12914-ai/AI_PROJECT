@@ -338,3 +338,27 @@
 1. 補 chatbotui_user_profile 的 repository/service 整合測試（含 upsert、建立新對話套用）。
 2. API 增加設定來源標記（profile / conversation_override）。
 3. UI 增加「恢復個人預設」操作與提示。
+## 精進現況更新（2026-05-07）
+
+### Phase 3：大致完成，持續開發
+- 已完成：對話主區互動、重送/重生、訊息區主要功能可用。
+- 新增：前端訊息 meta 顯示可帶出附件/RAG 用量欄位（attachment_count、citation_count、rag_reason）。
+- 待完成：訊息操作 UX 細節（例如 toast/複製回饋一致性）與更多前端互動測試覆蓋。
+
+### Phase 5：核心已完成
+- 已完成：附件上傳/刪除/提示注入流程可用。
+- 已修復：附件刪除一致性問題（前端刪除後回補後端清單，後端列表查詢加上 user/conversation/is_deleted/is_archived 條件）。
+- 持續精進：附件錯誤提示文案與大檔案/異常類型細緻化。
+
+### Phase 6：部分完成，持續精進
+- 已完成：RAG 入口與 chatbotui_rag_service.py 接入。
+- 已完成：API meta 回傳 ttachment_used、ttachment_count、ag_used、citation_count、ag_reason。
+- 已完成：前端已將上述 usage meta 套用到最新 assistant 訊息顯示。
+- 待完成：citation 明細展示 UI、RAG 來源可視化與更多檢索品質測試。
+
+### 本次驗證
+- 
+ode --check webapps/chatbotui/static/chatbotui/js/index.js：通過。
+- 
+ode --test tests/unit/test_chatbotui_ui_hooks.mjs：2 passed。
+- pytest -q tests/integration/test_chatbotui_actions.py：12 passed。
