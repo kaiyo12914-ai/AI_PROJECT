@@ -610,3 +610,29 @@ button {
     padding: 18px;
   }
 }
+
+.message-citations {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-top: 1px dashed rgba(132, 158, 196, 0.35);
+  font-size: 12px;
+  color: #9fb3cb;
+}
+
+.message-citations-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.message-citation-item {
+  line-height: 1.5;
+}
+
+.message-citation-item a {
+  color: #8ec8ff;
+  text-decoration: none;
+}
+
+.message-citation-item a:hover {
+  text-decoration: underline;
+}

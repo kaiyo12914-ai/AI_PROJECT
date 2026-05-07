@@ -172,6 +172,25 @@ def _attachment_count_from_context(attachment_context: str) -> int:
     return count
 
 
+def _normalize_citations(citations: Any) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    if not isinstance(citations, list):
+        return rows
+    for item in citations:
+        if not isinstance(item, dict):
+            continue
+        rows.append(
+            {
+                "ref": safe_text(item.get("ref")) or "",
+                "source_title": safe_text(item.get("source_title")) or "",
+                "source_url": safe_text(item.get("source_url")) or "",
+                "confidence": float(item.get("confidence") or 0),
+                "excerpt": safe_text(item.get("excerpt"))[:240],
+            }
+        )
+    return rows
+
+
 class ChatbotUIService:
     def __init__(self, repository: ChatbotUIRepository | None = None) -> None:
         self.repository = repository or ChatbotUIRepository()
@@ -726,6 +745,7 @@ class ChatbotUIService:
             "rag_used": bool(generated.get("rag_used")),
             "citation_count": int(generated.get("citation_count") or 0),
             "rag_reason": safe_text(generated.get("rag_reason")),
+            "citations": _normalize_citations(generated.get("citations")),
         }
 
     def resend_from_user_message(
@@ -794,6 +814,7 @@ class ChatbotUIService:
             "rag_used": bool(generated.get("rag_used")),
             "citation_count": int(generated.get("citation_count") or 0),
             "rag_reason": safe_text(generated.get("rag_reason")),
+            "citations": _normalize_citations(generated.get("citations")),
         }
 
     def chat(self, user_id: str, conversation_id: str, user_text: str, model_type: str) -> Dict[str, Any]:
@@ -839,4 +860,5 @@ class ChatbotUIService:
             "rag_used": bool(generated.get("rag_used")),
             "citation_count": int(generated.get("citation_count") or 0),
             "rag_reason": safe_text(generated.get("rag_reason")),
+            "citations": _normalize_citations(generated.get("citations")),
         }

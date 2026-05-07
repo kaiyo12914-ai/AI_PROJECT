@@ -73,6 +73,7 @@ def test_chat_regenerate_success(monkeypatch):
             "rag_used": False,
             "citation_count": 0,
             "rag_reason": "rag_disabled",
+            "citations": [],
         },
     )
     response = views.api_chat_regenerate(
@@ -92,6 +93,7 @@ def test_chat_regenerate_success(monkeypatch):
     assert payload["meta"]["rag_used"] is False
     assert payload["meta"]["citation_count"] == 0
     assert payload["meta"]["rag_reason"] == "rag_disabled"
+    assert payload["meta"]["citations"] == []
 
 
 def test_chat_regenerate_missing_conversation_id(monkeypatch):
@@ -118,6 +120,7 @@ def test_chat_resend_success(monkeypatch):
             "rag_used": True,
             "citation_count": 2,
             "rag_reason": "rag_hit",
+            "citations": [{"ref": "C1", "source_title": "DocA", "source_url": "", "confidence": 0.8, "excerpt": "x"}],
         },
     )
     response = views.api_chat_resend(
@@ -135,6 +138,7 @@ def test_chat_resend_success(monkeypatch):
     assert payload["meta"]["rag_used"] is True
     assert payload["meta"]["citation_count"] == 2
     assert payload["meta"]["rag_reason"] == "rag_hit"
+    assert payload["meta"]["citations"][0]["ref"] == "C1"
 
 
 def test_conversation_model_update_success(monkeypatch):
@@ -208,6 +212,7 @@ def test_chat_meta_fields_success(monkeypatch):
             "rag_used": True,
             "citation_count": 3,
             "rag_reason": "rag_hit",
+            "citations": [{"ref": "C2", "source_title": "DocB", "source_url": "https://example.com", "confidence": 0.9, "excerpt": "y"}],
         },
     )
     response = views.api_chat(
@@ -221,6 +226,7 @@ def test_chat_meta_fields_success(monkeypatch):
     assert payload["meta"]["rag_used"] is True
     assert payload["meta"]["citation_count"] == 3
     assert payload["meta"]["rag_reason"] == "rag_hit"
+    assert payload["meta"]["citations"][0]["source_title"] == "DocB"
 
 
 def test_conversation_config_update_requires_field(monkeypatch):

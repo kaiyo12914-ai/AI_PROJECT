@@ -362,3 +362,7 @@ ode --check webapps/chatbotui/static/chatbotui/js/index.js：通過。
 - 
 ode --test tests/unit/test_chatbotui_ui_hooks.mjs：2 passed。
 - pytest -q tests/integration/test_chatbotui_actions.py：12 passed。
+### 2026-05-07 追加（Phase 6 持續精進）
+- 已完成：API meta 新增 citations 陣列回傳（chat/regenerate/resend）。
+- 已完成：前端 assistant 訊息區新增 citation 明細區塊（來源標題、信心分數、可點連結）。
+- 已完成：單元/整合測試補強 citations 欄位驗證。

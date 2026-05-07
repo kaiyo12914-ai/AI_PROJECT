@@ -390,6 +390,7 @@ def api_chat(request):
                     "rag_used": bool(result.get("rag_used")),
                     "citation_count": int(result.get("citation_count") or 0),
                     "rag_reason": safe_text(result.get("rag_reason")),
+                    "citations": result.get("citations") if isinstance(result.get("citations"), list) else [],
                     "debug": bool(getattr(settings, "DEBUG", False)),
                 },
             }
@@ -444,6 +445,7 @@ def api_chat_regenerate(request):
                     "rag_used": bool(result.get("rag_used")),
                     "citation_count": int(result.get("citation_count") or 0),
                     "rag_reason": safe_text(result.get("rag_reason")),
+                    "citations": result.get("citations") if isinstance(result.get("citations"), list) else [],
                     "debug": bool(getattr(settings, "DEBUG", False)),
                 },
             }
@@ -510,6 +512,7 @@ def api_chat_resend(request):
                     "rag_used": bool(result.get("rag_used")),
                     "citation_count": int(result.get("citation_count") or 0),
                     "rag_reason": safe_text(result.get("rag_reason")),
+                    "citations": result.get("citations") if isinstance(result.get("citations"), list) else [],
                     "debug": bool(getattr(settings, "DEBUG", False)),
                 },
             }

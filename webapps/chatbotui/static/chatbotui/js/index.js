@@ -557,8 +557,41 @@
       msg.rag_used = Boolean(meta.rag_used);
       msg.citation_count = Number(meta.citation_count || 0);
       msg.rag_reason = String(meta.rag_reason || "");
+      msg.citations = Array.isArray(meta.citations) ? meta.citations : [];
       break;
     }
+  }
+
+  function renderCitationList(message) {
+    const citations = Array.isArray(message.citations) ? message.citations : [];
+    if (!citations.length) return null;
+    const wrap = document.createElement("div");
+    wrap.className = "message-citations";
+    const title = document.createElement("div");
+    title.className = "message-citations-title";
+    title.textContent = "引用來源";
+    wrap.appendChild(title);
+    citations.forEach(function (c, idx) {
+      const row = document.createElement("div");
+      row.className = "message-citation-item";
+      const ref = String(c.ref || `C${idx + 1}`);
+      const sourceTitle = String(c.source_title || "來源");
+      const confidence = Number(c.confidence || 0);
+      const score = confidence > 0 ? ` (${Math.round(confidence * 100)}%)` : "";
+      const url = String(c.source_url || "").trim();
+      if (url) {
+        const link = document.createElement("a");
+        link.href = url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = `${ref} ${sourceTitle}${score}`;
+        row.appendChild(link);
+      } else {
+        row.textContent = `${ref} ${sourceTitle}${score}`;
+      }
+      wrap.appendChild(row);
+    });
+    return wrap;
   }
 
   function renderMessages() {
@@ -608,6 +641,8 @@
 
       block.appendChild(header);
       block.appendChild(body);
+      const citationsNode = renderCitationList(message);
+      if (citationsNode) block.appendChild(citationsNode);
       elements.messageLog.appendChild(block);
     });
 

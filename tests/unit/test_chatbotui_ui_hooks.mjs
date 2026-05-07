@@ -11,6 +11,8 @@ test("chatbotui renders usage meta from response", () => {
   assert.match(js, /citation_count/);
   assert.match(js, /rag_reason/);
   assert.match(js, /applyUsageMetaToLatestAssistant/);
+  assert.match(js, /renderCitationList/);
+  assert.match(js, /message-citations/);
 });
 
 test("chatbotui has reset profile config button", () => {
