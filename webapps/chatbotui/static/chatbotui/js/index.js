@@ -150,8 +150,8 @@
       elements.conversationConfig.classList.toggle("is-collapsed", state.configCollapsed);
     }
     if (elements.toggleConfigBtn) {
-      elements.toggleConfigBtn.textContent = state.configCollapsed ? "展開" : "收合";
       elements.toggleConfigBtn.setAttribute("aria-expanded", state.configCollapsed ? "false" : "true");
+      elements.toggleConfigBtn.setAttribute("title", state.configCollapsed ? "Open settings" : "Close settings");
     }
     try {
       localStorage.setItem(CONFIG_COLLAPSE_KEY, state.configCollapsed ? "1" : "0");
@@ -353,30 +353,80 @@
   }
 
   let ollamaModels = [];
+  let lmStudioModels = [];
+  const googleModels = String(document.body.dataset.modelGoogleOptions || "")
+    .split("|")
+    .map((x) => String(x || "").trim())
+    .filter(Boolean);
+  const openaiModels = String(document.body.dataset.modelOpenaiOptions || "")
+    .split("|")
+    .map((x) => String(x || "").trim())
+    .filter(Boolean);
+
+  function supportsModelNameSelection(modelType) {
+    const t = String(modelType || "").toUpperCase();
+    return t === "OLLAMA" || t === "LM_STUDIO" || t === "GOOGLE" || t === "OPENAI";
+  }
+
+  function fillModelNameSelect(models, selectedValue) {
+    if (!elements.modelNameSelect) return;
+    const list = Array.isArray(models) ? models.filter(Boolean) : [];
+    elements.modelNameSelect.innerHTML = "";
+    list.forEach(function (m) {
+      const opt = document.createElement("option");
+      opt.value = m;
+      opt.textContent = m;
+      elements.modelNameSelect.appendChild(opt);
+    });
+    if (list.includes(selectedValue)) {
+      elements.modelNameSelect.value = selectedValue;
+    } else if (list.length > 0) {
+      elements.modelNameSelect.value = list[0];
+    } else {
+      elements.modelNameSelect.value = "";
+    }
+  }
+
   async function loadOllamaModels() {
     try {
       const data = await apiFetch(`/chatbotui/ollama/tags/`, { method: "GET" });
       if (data && data.models) {
         ollamaModels = data.models;
-        if (elements.modelNameSelect) {
-          const currentVal = elements.modelNameSelect.value;
-          elements.modelNameSelect.innerHTML = "";
-          ollamaModels.forEach(m => {
-            const opt = document.createElement("option");
-            opt.value = m;
-            opt.textContent = m;
-            elements.modelNameSelect.appendChild(opt);
-          });
-          if (ollamaModels.includes(currentVal)) {
-            elements.modelNameSelect.value = currentVal;
-          } else if (ollamaModels.length > 0) {
-            elements.modelNameSelect.value = ollamaModels[0];
-          }
-        }
       }
     } catch (e) {
       console.warn("Failed to load OLLAMA models", e);
     }
+  }
+
+  async function loadLmStudioModels() {
+    try {
+      const data = await apiFetch(`/chatbotui/lmstudio/models/`, { method: "GET" });
+      if (data && data.models) {
+        lmStudioModels = data.models;
+      }
+    } catch (e) {
+      console.warn("Failed to load LM_STUDIO models", e);
+    }
+  }
+
+  async function ensureModelOptionsForType(modelType) {
+    const t = String(modelType || "").toUpperCase();
+    const fallback = resolveModelName(t);
+    if (t === "GOOGLE") {
+      return googleModels.length ? googleModels : (fallback ? [fallback] : []);
+    }
+    if (t === "OPENAI") {
+      return openaiModels.length ? openaiModels : (fallback ? [fallback] : []);
+    }
+    if (t === "OLLAMA") {
+      if (!ollamaModels.length) await loadOllamaModels();
+      return ollamaModels.length ? ollamaModels : (fallback ? [fallback] : []);
+    }
+    if (t === "LM_STUDIO") {
+      if (!lmStudioModels.length) await loadLmStudioModels();
+      return lmStudioModels.length ? lmStudioModels : (fallback ? [fallback] : []);
+    }
+    return [];
   }
 
   async function saveConversationConfig(options) {
@@ -727,9 +777,17 @@
       elements.modelTypeSelect.disabled = state.sending;
     }
     if (elements.modelNameSelect) {
-      if (current && current.model_type === "OLLAMA") {
+      if (current && supportsModelNameSelection(current.model_type)) {
         elements.modelNameSelect.style.display = "inline-block";
-        elements.modelNameSelect.value = current.model_name || "";
+        const mt = String(current.model_type).toUpperCase();
+        const sourceModels = mt === "LM_STUDIO"
+          ? lmStudioModels
+          : mt === "OLLAMA"
+            ? ollamaModels
+            : mt === "GOOGLE"
+              ? googleModels
+              : openaiModels;
+        fillModelNameSelect(sourceModels, current.model_name || resolveModelName(current.model_type));
       } else {
         elements.modelNameSelect.style.display = "none";
       }
@@ -945,11 +1003,13 @@
     regenerateReply().catch(handleUiError);
   });
   if (elements.modelTypeSelect) {
-    elements.modelTypeSelect.addEventListener("change", function () {
+    elements.modelTypeSelect.addEventListener("change", async function () {
       const selectedType = elements.modelTypeSelect.value;
       let selectedName = "";
-      if (selectedType === "OLLAMA") {
+      if (supportsModelNameSelection(selectedType)) {
+        const options = await ensureModelOptionsForType(selectedType);
         elements.modelNameSelect.style.display = "inline-block";
+        fillModelNameSelect(options, resolveModelName(selectedType));
         selectedName = elements.modelNameSelect.value;
       } else {
         elements.modelNameSelect.style.display = "none";
@@ -1093,9 +1153,10 @@
 
   async function bootstrap() {
     try {
-      state.configCollapsed = localStorage.getItem(CONFIG_COLLAPSE_KEY) === "1";
+      const stored = localStorage.getItem(CONFIG_COLLAPSE_KEY);
+      state.configCollapsed = stored === null ? true : stored === "1";
     } catch (_err) {
-      state.configCollapsed = false;
+      state.configCollapsed = true;
     }
     setConfigCollapsed(state.configCollapsed);
 
@@ -1108,6 +1169,7 @@
     await loadPromptHistory(state.activeId);
     await loadConversationAttachments(state.activeId);
     await loadOllamaModels();
+    await loadLmStudioModels();
     render();
   }
 

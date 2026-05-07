@@ -20,6 +20,8 @@
   data-model-name="{{ default_model_name }}"
   data-model-google="{{ google_model_name }}"
   data-model-openai="{{ openai_model_name }}"
+  data-model-google-options="{{ google_model_options }}"
+  data-model-openai-options="{{ openai_model_options }}"
   data-model-ollama="{{ ollama_model_name }}"
   data-model-lmstudio="{{ lm_studio_model_name }}"
   data-default-temperature="{{ default_temperature }}"
@@ -51,13 +53,13 @@
           <span id="modelBadge" class="model-badge">目前 {{ default_model_type }}</span>
           <button id="regenBtn" type="button">重新生成</button>
           <button id="clearChatBtn" type="button">刪除</button>
+          <button id="toggleConfigBtn" type="button" class="config-icon-btn" aria-expanded="false" aria-controls="configBody" aria-label="Settings" title="Settings">&#9881;</button>
         </div>
       </header>
 
-      <section id="conversationConfig" class="conversation-config">
+      <section id="conversationConfig" class="conversation-config is-collapsed">
         <div class="config-head">
           <strong>對話設定</strong>
-          <button id="toggleConfigBtn" type="button" class="config-toggle-btn" aria-expanded="true">收合</button>
         </div>
         <div id="configBody" class="config-body">
           <div class="config-row">

@@ -118,6 +118,7 @@ body {
   flex-direction: column;
   min-width: 0;
   padding: 24px;
+  position: relative;
 }
 
 .workspace-meta {
@@ -132,10 +133,32 @@ body {
   padding: 12px 14px;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(14, 26, 44, 0.98);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
   display: flex;
   flex-direction: column;
   gap: 8px;
+  position: absolute;
+  right: 24px;
+  top: 76px;
+  z-index: 15;
+  width: min(760px, calc(100% - 48px));
+  max-height: calc(100vh - 220px);
+  overflow: auto;
+}
+
+.config-icon-btn {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 2px;
 }
 
 .config-head {
@@ -216,6 +239,10 @@ body {
 }
 
 .is-collapsed .config-body {
+  display: none;
+}
+
+.conversation-config.is-collapsed {
   display: none;
 }
 
@@ -608,6 +635,17 @@ button {
 
   .workspace {
     padding: 18px;
+  }
+
+  .config-icon-btn {
+    margin-left: 0;
+  }
+
+  .conversation-config {
+    right: 18px;
+    top: 68px;
+    width: calc(100% - 36px);
+    max-height: calc(100vh - 180px);
   }
 }
 

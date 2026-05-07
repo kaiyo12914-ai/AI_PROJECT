@@ -30,6 +30,15 @@ logger = logging.getLogger(__name__)
 service = ChatbotUIService()
 
 
+def _split_model_options(raw: str, defaults: list[str]) -> list[str]:
+    text = safe_text(raw)
+    if not text:
+        return defaults
+    items = [safe_text(x) for x in text.split(",")]
+    values = [x for x in items if x]
+    return values or defaults
+
+
 def _read_json_body(request) -> Dict[str, Any] | None:
     try:
         payload = json.loads(request.body.decode("utf-8"))
@@ -41,6 +50,20 @@ def _read_json_body(request) -> Dict[str, Any] | None:
 @require_node("chatbotui")
 def index(request):
     default_model_type = safe_text(getattr(settings, "MODEL_TYPE", "OPENAI")) or "OPENAI"
+    google_default = safe_text(os.getenv("GOOGLE_MODEL")) or "gemini-3-flash-preview"
+    openai_default = safe_text(os.getenv("OPENAI_MODEL")) or "gpt-4o-mini"
+    google_options = _split_model_options(
+        os.getenv("GOOGLE_MODEL_OPTIONS", ""),
+        [google_default, "gemini-2.5-flash", "gemini-2.5-pro"],
+    )
+    if google_default not in google_options:
+        google_options.insert(0, google_default)
+    openai_options = _split_model_options(
+        os.getenv("OPENAI_MODEL_OPTIONS", ""),
+        [openai_default, "gpt-4.1-mini", "gpt-4o"],
+    )
+    if openai_default not in openai_options:
+        openai_options.insert(0, openai_default)
     return render(
         request,
         "chatbotui/index.html",
@@ -48,8 +71,10 @@ def index(request):
             "debug_mode": bool(getattr(settings, "DEBUG", False)),
             "default_model_type": default_model_type,
             "default_model_name": resolve_model_name(default_model_type),
-            "google_model_name": safe_text(os.getenv("GOOGLE_MODEL")) or "gemini-1.5-flash",
-            "openai_model_name": safe_text(os.getenv("OPENAI_MODEL")) or "gpt-4o-mini",
+            "google_model_name": google_default,
+            "openai_model_name": openai_default,
+            "google_model_options": "|".join(google_options),
+            "openai_model_options": "|".join(openai_options),
             "ollama_model_name": safe_text(os.getenv("OLLAMA_MODEL")) or "mistral_small_3_1_2503:latest",
             "lm_studio_model_name": safe_text(os.getenv("LM_STUDIO_MODEL")) or "ministral-3-14b-instruct-2512",
             "default_temperature": DEFAULT_TEMPERATURE,
@@ -551,3 +576,34 @@ def api_ollama_tags(request):
     except Exception as exc:
         logger.warning(f"chatbotui api_ollama_tags failed: {exc}")
         return JsonResponse({"ok": True, "models": ["mistral_small_3_1_2503:latest", "gemma3:4b"]})
+
+
+@csrf_exempt
+@require_node("chatbotui", api=True)
+def api_lm_studio_models(request):
+    if request.method != "GET":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    fallback_model = safe_text(os.getenv("LM_STUDIO_MODEL")) or "ministral-3-14b-instruct-2512"
+    try:
+        base_url = os.getenv("LM_STUDIO_BASE_URL", "http://mpcai.mpc.mil.tw:1234/v1")
+        if not base_url.startswith("http"):
+            base_url = "http://" + base_url
+        base_url = base_url.rstrip("/")
+
+        if base_url.endswith("/v1"):
+            models_url = f"{base_url}/models"
+        else:
+            models_url = f"{base_url}/v1/models"
+
+        resp = requests.get(models_url, timeout=5)
+        resp.raise_for_status()
+        data = resp.json() if resp.content else {}
+        rows = data.get("data") if isinstance(data, dict) else []
+        models = [safe_text(item.get("id")) for item in rows if isinstance(item, dict) and safe_text(item.get("id"))]
+        if fallback_model not in models:
+            models.append(fallback_model)
+        return JsonResponse({"ok": True, "models": models})
+    except Exception as exc:
+        logger.warning(f"chatbotui api_lm_studio_models failed: {exc}")
+        return JsonResponse({"ok": True, "models": [fallback_model]})

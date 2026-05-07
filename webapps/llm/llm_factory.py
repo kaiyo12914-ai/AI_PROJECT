@@ -9,6 +9,9 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+def _is_int_env() -> bool:
+    return (os.getenv("ENV") or "").strip().upper() == "INT"
+
 
 def _f(name: str, default: float) -> float:
     try:
@@ -122,11 +125,22 @@ def _should_try_ollama_fallback(err: Exception) -> bool:
 
 def _resolve_provider_fallback(primary: str) -> str:
     explicit = (os.getenv("MISSING_PROVIDER_FALLBACK") or "").strip().upper()
-    if explicit in {"GOOGLE", "OPENAI", "OLLAMA", "LM_STUDIO"}:
-        return explicit
+    if _is_int_env():
+        if explicit in {"LM_STUDIO", "OLLAMA"}:
+            return explicit
+        if explicit in {"GOOGLE", "OPENAI"}:
+            logger.warning("[LLM] Ignore external fallback=%s under ENV=INT", explicit)
+    else:
+        if explicit in {"GOOGLE", "OPENAI", "OLLAMA", "LM_STUDIO"}:
+            return explicit
+    # Prefer internal providers by default.
+    if os.getenv("LM_STUDIO_BASE_URL"):
+        return "LM_STUDIO"
+    if os.getenv("OLLAMA_BASE_URL"):
+        return "OLLAMA"
     if primary == "GOOGLE":
         return "LM_STUDIO"
-    return "OPENAI"
+    return "OLLAMA"
 
 
 def _is_openai_quota_error(err: Exception) -> bool:
@@ -139,6 +153,13 @@ def _is_openai_quota_error(err: Exception) -> bool:
 
 def _resolve_openai_runtime_fallback() -> str:
     fallback = (os.getenv("OPENAI_RUNTIME_FALLBACK") or "").strip().upper()
+    if _is_int_env():
+        if fallback in {"OPENAI", "GOOGLE"}:
+            logger.warning("[LLM] Ignore OPENAI_RUNTIME_FALLBACK=%s under ENV=INT", fallback)
+            return ""
+        if fallback in {"OLLAMA", "LM_STUDIO"}:
+            return fallback
+        return ""
     if fallback in {"GOOGLE", "OLLAMA", "LM_STUDIO"}:
         return fallback
     return ""

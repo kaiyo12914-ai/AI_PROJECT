@@ -19,4 +19,5 @@ urlpatterns = [
     path("chat/regenerate/", views.api_chat_regenerate, name="chat_regenerate"),
     path("chat/resend/", views.api_chat_resend, name="chat_resend"),
     path("ollama/tags/", views.api_ollama_tags, name="ollama_tags"),
+    path("lmstudio/models/", views.api_lm_studio_models, name="lm_studio_models"),
 ]
