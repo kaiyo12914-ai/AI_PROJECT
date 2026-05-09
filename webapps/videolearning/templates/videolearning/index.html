@@ -1,0 +1,100 @@
+{% load custom_tags %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>教學影片中心</title>
+  <link rel="stylesheet" href="{% custom_static 'videolearning/css/videolearning.css' %}">
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
+  <script defer src="{% custom_static 'videolearning/js/videolearning.js' %}"></script>
+</head>
+<body data-base-url="{{ request.script_name }}" data-is-admin="{% if request.user.is_staff %}1{% else %}0{% endif %}">
+  <main class="vl-shell">
+    <h1>教學影片中心</h1>
+    <p class="vl-subtitle">AI 教學影片管理</p>
+
+    <nav class="vl-tabs" aria-label="功能切換">
+      <a href="{% url 'videolearning:page' %}" class="vl-tab {% if active_tab == 'query' %}is-active{% endif %}" data-tab-target="query">查詢影片</a>
+      <a href="{% url 'videolearning:import_page' %}" class="vl-tab {% if active_tab == 'import' %}is-active{% endif %}" data-tab-target="import">匯入影片</a>
+      <a href="{% url 'videolearning:transcode_page' %}" class="vl-tab {% if active_tab == 'transcode' %}is-active{% endif %}" data-tab-target="transcode">YouTube 轉檔</a>
+    </nav>
+
+    <section class="vl-panel {% if active_tab == 'query' %}is-active{% endif %}" data-tab-panel="query">
+      <section class="vl-card">
+        <h2>影片清單</h2>
+        <div id="category-filter" class="vl-filter-bar"></div>
+        <div class="vl-actions">
+          <button id="refresh-list" type="button">重新整理</button>
+        </div>
+        <div id="video-list-text">載入中...</div>
+        <ul id="video-list" class="vl-video-grid"></ul>
+      </section>
+    </section>
+
+    <dialog id="video-edit-dialog" class="vl-dialog">
+      <form id="video-edit-form" class="vl-form" method="dialog" novalidate>
+        {% csrf_token %}
+        <input type="hidden" id="e-video-id">
+        <h3>編輯影片</h3>
+        <label class="vl-field"><span>標題</span><input id="e-title" type="text" maxlength="255" required></label>
+        <div class="vl-grid-2">
+          <label class="vl-field"><span>分類</span><input id="e-category" type="text" maxlength="100"></label>
+          <label class="vl-field"><span>標籤（逗號分隔）</span><input id="e-tags" type="text"></label>
+        </div>
+        <div class="vl-grid-2">
+          <label class="vl-field"><span>可見範圍</span><select id="e-visibility"><option value="private">private</option><option value="department">department</option><option value="public">public</option></select></label>
+          <label class="vl-field"><span>狀態</span><select id="e-status"><option value="draft">draft</option><option value="processing">processing</option><option value="ready">ready</option><option value="failed">failed</option><option value="archived">archived</option></select></label>
+        </div>
+        <div class="vl-actions">
+          <button id="e-save" type="submit">儲存</button>
+          <button id="e-delete" type="button" class="vl-danger">刪除影片</button>
+          <button id="e-cancel" type="button">取消</button>
+          <span id="edit-message" class="vl-message" aria-live="polite"></span>
+        </div>
+      </form>
+    </dialog>
+
+    <section class="vl-panel {% if active_tab == 'import' %}is-active{% endif %}" data-tab-panel="import">
+      <section class="vl-card">
+        <h2>匯入影片</h2>
+        <form id="create-video-form" class="vl-form" novalidate>
+          {% csrf_token %}
+          <label class="vl-field"><span>標題</span><input id="f-title" name="title" type="text" maxlength="255" required></label>
+          <label class="vl-field"><span>影片檔案（mp4/webm/ogg/mov/m4v）</span><input id="f-video-file" name="video_file" type="file" accept="video/mp4,video/webm,video/ogg,video/quicktime,.m4v"></label>
+          <div class="vl-actions"><button id="f-upload" type="button">上傳檔案</button><span id="upload-message" class="vl-message" aria-live="polite"></span></div>
+          <label class="vl-field"><span>影片路徑</span><input id="f-file-path" name="file_path" type="text" maxlength="1024" required placeholder="/media/videolearning/.../video.mp4"></label>
+          <label class="vl-field"><span>描述</span><textarea id="f-description" name="description" rows="3"></textarea></label>
+          <div class="vl-grid-2">
+            <label class="vl-field"><span>分類</span><input id="f-category" name="category_name" type="text" maxlength="100" placeholder="AI 教材"></label>
+            <label class="vl-field"><span>標籤（逗號分隔）</span><input id="f-tags" name="tag_names" type="text" placeholder="教學, AI"></label>
+          </div>
+          <div class="vl-grid-3">
+            <label class="vl-field"><span>時長（秒）</span><input id="f-duration" name="duration_seconds" type="number" min="0" step="1" value="0"></label>
+            <label class="vl-field"><span>可見範圍</span><select id="f-visibility" name="visibility"><option value="private">private</option><option value="department">department</option><option value="public">public</option></select></label>
+            <label class="vl-field"><span>狀態</span><select id="f-status" name="status"><option value="draft">draft</option><option value="processing">processing</option><option value="ready">ready</option><option value="failed">failed</option><option value="archived">archived</option></select></label>
+          </div>
+          <div class="vl-actions"><button id="f-submit" type="submit">建立</button><span id="form-message" class="vl-message" aria-live="polite"></span></div>
+        </form>
+      </section>
+    </section>
+
+    <section class="vl-panel {% if active_tab == 'transcode' %}is-active{% endif %}" data-tab-panel="transcode">
+      <section class="vl-card">
+        <h2>YouTube 匯入</h2>
+        <form id="youtube-import-form" class="vl-form" novalidate>
+          {% csrf_token %}
+          <label class="vl-field"><span>YouTube 網址</span><input id="y-url" name="youtube_url" type="url" placeholder="https://www.youtube.com/watch?v=..." required></label>
+          <label class="vl-field"><span>標題（可選）</span><input id="y-title" name="title" type="text" maxlength="255"></label>
+          <div class="vl-grid-2">
+            <label class="vl-field"><span>分類</span><input id="y-category" name="category_name" type="text" maxlength="100" placeholder="YouTube 教材"></label>
+            <label class="vl-field"><span>標籤（逗號分隔）</span><input id="y-tags" name="tag_names" type="text" placeholder="youtube, ai"></label>
+          </div>
+          <div class="vl-actions"><button id="y-submit" type="submit">開始匯入</button><span id="youtube-message" class="vl-message" aria-live="polite"></span></div>
+        </form>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

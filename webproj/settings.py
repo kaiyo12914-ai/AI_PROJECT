@@ -329,6 +329,7 @@ PORTAL_ACL = {
     "usage": ["網頁系統管理員"],
     "projectnotes": ["ALL_AUTHENTICATED"],
     "formalize": ["ALL_AUTHENTICATED"],
+    "videolearning": ["ALL_AUTHENTICATED"],
     "open_notebook": ["ALL_AUTHENTICATED"],
 }
 
@@ -477,6 +478,7 @@ INSTALLED_APPS = [
     "webapps.rag_oracle.apps.RagOracleConfig",
     "webapps.projectnotes.apps.ProjectnotesConfig",
     "webapps.document_formalize.apps.DocumentFormalizeConfig",
+    "webapps.videolearning.apps.VideolearningConfig",
     "pgvector.django",
     "django.contrib.postgres",
 ]
@@ -548,7 +550,7 @@ DATABASES = {
 
 if DB_URL:
     url = urlparse(DB_URL)
-    DATABASES["projectnotes_db"] = {
+    _pg_config = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": url.path[1:],
         "USER": url.username,
@@ -556,6 +558,10 @@ if DB_URL:
         "HOST": url.hostname,
         "PORT": url.port or "5432",
     }
+    # Mandatory policy: application tables must use PostgreSQL.
+    DATABASES["default"] = dict(_pg_config)
+    # Keep compatibility for existing ProjectNotes router.
+    DATABASES["projectnotes_db"] = dict(_pg_config)
 
 DATABASE_ROUTERS = ["webapps.projectnotes.router.ProjectNotesRouter"]
 

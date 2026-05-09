@@ -351,4 +351,23 @@ DEV_LOGIN_NAME=
   - `[System.IO.File]::WriteAllText(path, text, (New-Object System.Text.UTF8Encoding($false)))`
   - In PowerShell 7+, prefer `-Encoding utf8NoBOM`.
 - VS Code default encoding must be UTF-8 (without BOM).
+
+## Factory and Connection Rules (Mandatory)
+- Model construction logic MUST use `Strategy + Registry`.
+- Factory responsibilities are strictly limited to: select strategy, pass context, return model.
+- Provider-specific differences MUST be implemented only in provider strategy classes.
+- Provider fallback policy MUST be centralized; do not scatter fallback branches across unrelated modules.
+- Database connections MUST go through `webapps/database/db_factory.py` only.
+- LLM connections MUST go through `webapps/llm/llm_factory.py` only.
+- Other modules MUST NOT create DB/LLM connections directly.
+
+## Database Table Rule (Mandatory)
+- Any newly introduced application tables MUST be created in PostgreSQL.
+- New feature schemas/migrations MUST target PostgreSQL first and be validated there.
+- New tables MUST be managed via Django migrations; do not create ad-hoc tables directly from feature code.
+- Any table-creation requirement MUST be documented in this `/.codex/rules.md` as project policy.
+
+## PostgreSQL Default Policy (Mandatory)
+- `webapps/videolearning` MUST use PostgreSQL (via Django `DATABASES["default"]` when `DATABASE_URL` is set).
+- Going forward, all newly added app tables in this repository MUST be created in PostgreSQL, not SQLite.
 ```
