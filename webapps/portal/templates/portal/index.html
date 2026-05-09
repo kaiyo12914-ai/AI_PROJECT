@@ -44,6 +44,7 @@
       {% allow "portal" as can_portal %}
       {% allow "vanna" as can_vanna %}
       {% allow "formalize" as can_formalize %}
+      {% allow "videolearning" as can_videolearning %}
 
       {% if can_translator %}
         {% url 'translator_page' as translator_href %}
@@ -65,6 +66,10 @@
         {% include "portal/_svg_card.html" with href=formalize_href title="文件公文化" subtitle="口語改正式公文" tone="gray" icon="formalize" variant=card_variant %}
       {% endif %}
 
+      {% if can_videolearning %}
+        {% url 'videolearning:page' as videolearning_href %}
+        {% include "portal/_svg_card.html" with href=videolearning_href title="教學影片中心" subtitle="影片知識庫 / 章節檢索 / 問答" tone="green" icon="notebook" variant=card_variant %}
+      {% endif %}
       {% if can_projectnotes %}
         {% url 'projectnotes:page' as projectnotes_href %}
         {% include "portal/_svg_card.html" with href=projectnotes_href title="專案法規查詢" subtitle="專案知識選取 / 引用對話" tone="green" icon="notebook" variant=card_variant %}

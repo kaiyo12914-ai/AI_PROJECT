@@ -5,6 +5,13 @@ import logging
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
+from webapps.llm.strategies import (
+    ChatBuildContext,
+    ChatStrategyDeps,
+    EmbeddingStrategyDeps,
+    build_chat_registry,
+    build_embedding_registry,
+)
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -165,48 +172,51 @@ def _resolve_openai_runtime_fallback() -> str:
     return ""
 
 
+def _normalize_provider_for_env(provider: str) -> str:
+    p = (provider or "").strip().upper()
+    if not _is_int_env():
+        return p
+    if p in {"GOOGLE", "OPENAI"}:
+        internal = _resolve_provider_fallback(p)
+        if internal not in {"OLLAMA", "LM_STUDIO"}:
+            internal = "LM_STUDIO" if os.getenv("LM_STUDIO_BASE_URL") else "OLLAMA"
+        logger.warning("[LLM] ENV=INT remap provider %s -> %s", p, internal)
+        return internal
+    return p
+
+
+_CHAT_STRATEGY_REGISTRY = None
+_EMBEDDING_STRATEGY_REGISTRY = None
+
+
+def _get_chat_strategy_registry():
+    global _CHAT_STRATEGY_REGISTRY
+    if _CHAT_STRATEGY_REGISTRY is None:
+        deps = ChatStrategyDeps(
+            make_google=_make_google,
+            make_ollama=_make_ollama,
+            make_openai=_make_openai,
+            make_lm_studio=_make_lm_studio,
+            resolve_provider_fallback=_resolve_provider_fallback,
+            logger=logger,
+        )
+        _CHAT_STRATEGY_REGISTRY = build_chat_registry(deps)
+    return _CHAT_STRATEGY_REGISTRY
+
+
 def get_chat_model(temperature: float | None = None, timeout: int | None = None, model_type: str | None = None, model_name: str | None = None):
-    """
-    透過工廠方法產生llm物件
-
-    # 範例
-     - 若需要使用LM-Studio的新模型時：
-     llm = get_chat_model(0.7,30,"LM_STUDIO")
-     
-     可參考單元測試 `tests\test_llm_factory.py`
-    """
-    model_type = (model_type or os.getenv("MODEL_TYPE") or "OLLAMA").strip().upper()
-
-    if model_type == "GOOGLE":
-        try:
-            return _make_google(temperature=temperature, timeout=timeout)
-        except ModuleNotFoundError as exc:
-            if "langchain_google_genai" not in str(exc):
-                raise
-            fallback = _resolve_provider_fallback("GOOGLE")
-            if fallback == "GOOGLE":
-                raise RuntimeError(
-                    "MODEL_TYPE=GOOGLE requires 'langchain_google_genai'. "
-                    "Install package or set MISSING_PROVIDER_FALLBACK=LM_STUDIO/OPENAI/OLLAMA."
-                ) from exc
-            logger.warning("[LLM] GOOGLE provider missing (%s); fallback=%s", exc, fallback)
-            if fallback == "LM_STUDIO":
-                return _make_lm_studio(temperature=temperature, timeout=timeout)
-            if fallback == "OPENAI":
-                return _make_openai(temperature=temperature, timeout=timeout)
-            return _make_ollama(temperature=temperature, timeout=timeout, model_name=model_name)
-
-    if model_type == "OLLAMA":
-        return _make_ollama(temperature=temperature, timeout=timeout, model_name=model_name)
-
-    if model_type == "OPENAI":
-        return _make_openai(temperature=temperature, timeout=timeout)
-    
-    if model_type == "LM_STUDIO":
-        return _make_lm_studio(temperature=temperature, timeout=timeout)
-
-    raise ValueError(f"Unknown MODEL_TYPE={model_type}. Use GOOGLE/OLLAMA/OPENAI/LM_STUDIO.")
-
+    """Create chat LLM instance by MODEL_TYPE with provider fallback support."""
+    provider = _normalize_provider_for_env((model_type or os.getenv("MODEL_TYPE") or "OLLAMA"))
+    strategy = _get_chat_strategy_registry().get(provider)
+    if not strategy:
+        raise ValueError(f"Unknown MODEL_TYPE={provider}. Use GOOGLE/OLLAMA/OPENAI/LM_STUDIO.")
+    return strategy.build(
+        ChatBuildContext(
+            temperature=temperature,
+            timeout=timeout,
+            model_name=model_name,
+        )
+    )
 
 # -------------------------
 # ✅ 依你 .env：MODEL_TIMEOUT / MODEL_TEMPERATURE fallback
@@ -355,7 +365,15 @@ def _make_openai(temperature: float | None, timeout: int | None,model:str |None=
 
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key and not base_url:
-        raise RuntimeError("OPENAI_API_KEY 未設定（OpenAI 不可用）")
+        # Compatibility path for intranet LM_STUDIO deployments:
+        # if caller accidentally routes into OpenAI factory while MODEL_TYPE=LM_STUDIO,
+        # transparently use LM Studio endpoint instead of hard-failing on OPENAI_API_KEY.
+        env_model_type = (os.getenv("MODEL_TYPE") or "").strip().upper()
+        if env_model_type == "LM_STUDIO":
+            base_url = os.getenv("LM_STUDIO_BASE_URL", "http://mpcai.mpc.mil.tw:1234/v1")
+            model = model or os.getenv("LM_STUDIO_MODEL", "ministral-3-14b-instruct-2512")
+        else:
+            raise RuntimeError("OPENAI_API_KEY 未設定（OpenAI 不可用）")
     
     # 對於本地推理 (如 LM-Studio)，若無 Key 則使用佔位符
     if not api_key:
@@ -531,57 +549,21 @@ def _log_llm_use(tag: str, model: str, *, temperature: float | None = None, time
     logger.info("[LLM] backend=%s model=%s%s", tag, model, suffix)
 
 
+def _get_embedding_strategy_registry():
+    global _EMBEDDING_STRATEGY_REGISTRY
+    if _EMBEDDING_STRATEGY_REGISTRY is None:
+        deps = EmbeddingStrategyDeps(
+            resolve_provider_fallback=_resolve_provider_fallback,
+            logger=logger,
+        )
+        _EMBEDDING_STRATEGY_REGISTRY = build_embedding_registry(deps)
+    return _EMBEDDING_STRATEGY_REGISTRY
+
+
 def get_embedding_model(model_type: str | None = None):
-    """
-    透過工廠方法產生 Embedding 物件。
-    相容 MODEL_TYPE：GOOGLE, OPENAI, OLLAMA。
-    """
-    model_type = (model_type or os.getenv("MODEL_TYPE") or "OLLAMA").strip().upper()
-
-    if model_type == "GOOGLE":
-        import importlib.util
-
-        if importlib.util.find_spec("langchain_google_genai") is None:
-            fallback = _resolve_provider_fallback("GOOGLE")
-            logger.warning("[LLM] GOOGLE embedding provider missing; fallback=%s", fallback)
-            if fallback in {"LM_STUDIO", "OLLAMA"}:
-                try:
-                    from langchain_ollama import OllamaEmbeddings
-                except ImportError:
-                    from langchain_community.embeddings import OllamaEmbeddings
-                base_url = os.getenv("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
-                model = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
-                return OllamaEmbeddings(model=model, base_url=base_url)
-            if fallback == "OPENAI":
-                from langchain_openai import OpenAIEmbeddings
-                api_key = os.getenv("OPENAI_API_KEY")
-                if not api_key:
-                    raise RuntimeError("OPENAI_API_KEY is required for OpenAI embedding fallback.")
-                model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
-                return OpenAIEmbeddings(model=model, api_key=api_key)
-
-    if model_type == "GOOGLE":
-        from langchain_google_genai import GoogleGenerativeAIEmbeddings
-        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-        if not api_key:
-            raise RuntimeError("GEMINI_API_KEY 未設定（Google Gemini 不可用）")
-        return GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
-
-    if model_type == "OPENAI":
-        from langchain_openai import OpenAIEmbeddings
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise RuntimeError("OPENAI_API_KEY 未設定（OpenAI 不可用）")
-        model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
-        return OpenAIEmbeddings(model=model, api_key=api_key)
-
-    if model_type == "OLLAMA" or model_type == "LM_STUDIO":
-        try:
-            from langchain_ollama import OllamaEmbeddings
-        except ImportError:
-            from langchain_community.embeddings import OllamaEmbeddings
-        base_url = os.getenv("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
-        model = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
-        return OllamaEmbeddings(model=model, base_url=base_url)
-
-    raise ValueError(f"Unknown MODEL_TYPE={model_type}. Use GOOGLE/OLLAMA/OPENAI.")
+    """Create embedding model instance by MODEL_TYPE."""
+    provider = _normalize_provider_for_env((model_type or os.getenv("MODEL_TYPE") or "OLLAMA"))
+    strategy = _get_embedding_strategy_registry().get(provider)
+    if not strategy:
+        raise ValueError(f"Unknown MODEL_TYPE={provider}. Use GOOGLE/OLLAMA/OPENAI.")
+    return strategy.build()

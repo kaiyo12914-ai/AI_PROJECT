@@ -40,6 +40,7 @@ urlpatterns = [
     path("chatbotui/", include("webapps.chatbotui.urls")),
     path("projectnotes/", include("webapps.projectnotes.urls")),
     path("formalize/", include("webapps.document_formalize.urls")),
+    path("videolearning/", include("webapps.videolearning.urls")),
 
     # ============================================================
     # Portal (single canonical entry)

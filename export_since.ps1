@@ -427,7 +427,10 @@ foreach ($zf in $zipFiles) {
 if ($overwriteCount -gt 0) {
   $BackupZip = Join-Path $BackupDir ("backup_" + $ts + ".zip")
   if (Test-Path $BackupZip) { Remove-Item $BackupZip -Force }
-  Compress-Archive -Path (Join-Path $BackupStage "*") -DestinationPath $BackupZip -Force
+  $backupFiles = Get-ChildItem -Path $BackupStage -Recurse -File
+  if ($backupFiles -and $backupFiles.Count -gt 0) {
+    New-ZipFromFileList -ZipPath $BackupZip -Files $backupFiles -BasePath $BackupStage
+  }
   Write-Host ("Backed up overwritten files: " + $overwriteCount)
   Write-Host ("Backup zip: " + $BackupZip)
 } else {
@@ -468,7 +471,11 @@ Copy-Item -LiteralPath $ListPath -Destination (Join-Path $BundleStage (Split-Pat
 Copy-Item -LiteralPath $InstallPath -Destination (Join-Path $BundleStage (Split-Path $InstallPath -Leaf)) -Force
 
 if (Test-Path $BundlePath) { Remove-Item $BundlePath -Force }
-Compress-Archive -Path (Join-Path $BundleStage '*') -DestinationPath $BundlePath -Force
+$bundleFiles = Get-ChildItem -Path $BundleStage -Recurse -File
+if (-not $bundleFiles -or $bundleFiles.Count -eq 0) {
+  throw "No files in bundle stage."
+}
+New-ZipFromFileList -ZipPath $BundlePath -Files $bundleFiles -BasePath $BundleStage
 
 try { Remove-Item $BundleStage -Recurse -Force } catch { }
 
