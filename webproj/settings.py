@@ -262,6 +262,12 @@ OLLAMA_MODE = env_str("OLLAMA_MODE", "CHAT").upper()
 OLLAMA_EMBED_MODEL = env_str("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 
 # ============================================================
+# Video tools
+# ============================================================
+YTDLP_BIN = env_str("YTDLP_BIN", "yt-dlp")
+FFMPEG_BIN = env_str("FFMPEG_BIN", "ffmpeg")
+
+# ============================================================
 # LangChain（保留原樣）
 # ============================================================
 LANGCHAIN = {

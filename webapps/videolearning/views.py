@@ -368,13 +368,27 @@ def api_video_import_youtube(request: HttpRequest) -> JsonResponse:
     youtube_url = str(body.get("youtube_url") or "").strip()
     if not youtube_url:
         return _err("YOUTUBE_URL_REQUIRED", "youtube_url is required.", status=400)
+    output_format = str(body.get("output_format") or "mp4").strip().lower()
+    if output_format not in {"mp4", "mp3"}:
+        return _err("INVALID_OUTPUT_FORMAT", "output_format must be mp4 or mp3.", status=400)
 
     try:
-        imported = import_youtube_to_media(youtube_url)
+        imported = import_youtube_to_media(youtube_url, output_format=output_format)
     except YouTubeImportError as ex:
         return _err("YOUTUBE_IMPORT_ERROR", str(ex), status=400)
     except Exception:
         return _err("YOUTUBE_IMPORT_ERROR", "YouTube import failed.", status=500)
+
+    if output_format == "mp3":
+        # MP3 mode: export file only, do not create DB records.
+        return _ok(
+            {
+                "import": imported,
+                "db_saved": False,
+                "message": "MP3 轉檔完成，已輸出至 H:\\Mp3，不納入影片清單管理。",
+            },
+            status=201,
+        )
 
     title = str(body.get("title") or imported.get("title") or "").strip()
     if not title:

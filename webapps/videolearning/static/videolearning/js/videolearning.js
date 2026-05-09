@@ -1,6 +1,32 @@
 (function () {
   "use strict";
 
+  var TEXT = {
+    ALL: "全部",
+    EMPTY_LIST: "目前沒有影片資料。",
+    LOADING: "載入中...",
+    LIST_LOAD_FAIL: "影片清單載入失敗。",
+    SELECT_FILE_FIRST: "請先選擇影片檔案。",
+    UPLOADING: "上傳中...",
+    UPLOAD_FAIL: "上傳失敗。",
+    UPLOAD_DONE: "上傳完成，已填入影片路徑。",
+    TITLE_REQUIRED: "標題不可空白。",
+    FILE_PATH_REQUIRED: "請提供影片路徑。可先上傳檔案。",
+    DURATION_INVALID: "時長必須大於或等於 0 的整數。",
+    CREATING: "建立中...",
+    CREATE_FAIL: "建立失敗。",
+    CREATE_DONE: "建立完成。",
+    YOUTUBE_URL_REQUIRED: "請輸入 YouTube 網址。",
+    PROCESSING: "Processing",
+    YOUTUBE_FAIL: "YouTube import failed.",
+    YOUTUBE_DONE: "YouTube import completed.",
+    MP3_DONE_PREFIX: "MP3 done: ",
+    DETAIL_LOAD_FAIL: "影片載入失敗。",
+    QUALITY_PREFIX: "畫質：",
+    LABEL_CATEGORY: "分類：",
+    LABEL_TAGS: "標籤："
+  };
+
   function setText(id, msg) {
     var el = document.getElementById(id);
     if (el) el.textContent = msg || "";
@@ -36,7 +62,7 @@
     var res = await fetch(url, opts || {});
     var data = await res.json();
     return { res: res, data: data };
-  }`r`n  }
+  }
 
   function toTagLine(tags) {
     return (tags || []).map(function (t) { return t.name; }).join(", ") || "-";
@@ -46,21 +72,8 @@
     return (video.category && video.category.name) ? video.category.name : "-";
   }
 
-  function openEditDialog(video) {
-    var dialog = document.getElementById("video-edit-dialog");
-    if (!dialog) return;
-    document.getElementById("e-video-id").value = video.id;
-    document.getElementById("e-title").value = video.title || "";
-    document.getElementById("e-category").value = toCategory(video) === "-" ? "" : toCategory(video);
-    document.getElementById("e-tags").value = toTagLine(video.tags) === "-" ? "" : toTagLine(video.tags);
-    document.getElementById("e-visibility").value = video.visibility || "private";
-    document.getElementById("e-status").value = video.status || "draft";
-    setText("edit-message", "");
-    if (typeof dialog.showModal === "function") dialog.showModal();
-  }
-
   var _allVideos = [];
-  var _activeCategory = "?券";
+  var _activeCategory = TEXT.ALL;
 
   function renderVideoList(videos) {
     var listEl = document.getElementById("video-list");
@@ -68,7 +81,7 @@
     listEl.innerHTML = "";
 
     if (!videos.length) {
-      setText("video-list-text", "?桀?瘝?敶梁?鞈???);
+      setText("video-list-text", TEXT.EMPTY_LIST);
       return;
     }
     setText("video-list-text", "");
@@ -83,7 +96,7 @@
       img.className = "vl-video-thumb";
       img.src = v.thumbnail_path || apiurl("/static/videolearning/img/placeholder.png");
       img.alt = v.title;
-      img.onerror = function() { this.src = apiurl("/static/videolearning/img/placeholder.png"); };
+      img.onerror = function () { this.src = apiurl("/static/videolearning/img/placeholder.png"); };
       thumbContainer.appendChild(img);
       li.appendChild(thumbContainer);
 
@@ -98,25 +111,8 @@
 
       var meta = document.createElement("div");
       meta.className = "vl-video-card-meta";
-      meta.innerHTML = "??嚗? + toCategory(v) + " <br> 璅惜嚗? + toTagLine(v.tags) + "<br>" + (v.quality_text || "");
+      meta.innerHTML = TEXT.LABEL_CATEGORY + toCategory(v) + " <br> " + TEXT.LABEL_TAGS + toTagLine(v.tags) + "<br>" + (v.quality_text || "");
       body.appendChild(meta);
-
-      var isAdmin = document.body.dataset.isAdmin === "1";
-      if (isAdmin) {
-        var actions = document.createElement("div");
-        actions.className = "vl-video-card-actions vl-actions";
-        var editBtn = document.createElement("button");
-        editBtn.type = "button";
-        editBtn.className = "vl-btn-small";
-        editBtn.textContent = "編輯";
-        editBtn.addEventListener("click", function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          openEditDialog(v);
-        });
-        actions.appendChild(editBtn);
-        body.appendChild(actions);
-      }
 
       li.appendChild(body);
       listEl.appendChild(li);
@@ -127,12 +123,10 @@
     var filterEl = document.getElementById("category-filter");
     if (!filterEl) return;
 
-    var categories = ["?券"];
+    var categories = [TEXT.ALL];
     _allVideos.forEach(function (v) {
       var cat = toCategory(v);
-      if (cat !== "-" && categories.indexOf(cat) === -1) {
-        categories.push(cat);
-      }
+      if (cat !== "-" && categories.indexOf(cat) === -1) categories.push(cat);
     });
 
     filterEl.innerHTML = "";
@@ -143,7 +137,7 @@
       pill.addEventListener("click", function () {
         _activeCategory = cat;
         renderFilterBar();
-        var filtered = cat === "?券" ? _allVideos : _allVideos.filter(function (v) { return toCategory(v) === cat; });
+        var filtered = cat === TEXT.ALL ? _allVideos : _allVideos.filter(function (v) { return toCategory(v) === cat; });
         renderVideoList(filtered);
       });
       filterEl.appendChild(pill);
@@ -151,91 +145,19 @@
   }
 
   async function loadVideoList() {
-    setText("video-list-text", "頛銝?..");
+    setText("video-list-text", TEXT.LOADING);
     try {
       var out = await fetchJson(apiurl("/videolearning/api/videos/"), { headers: csrfHeaders() });
       if (!out.res.ok || !out.data || !out.data.ok) {
-        setText("video-list-text", "敶梁?皜頛憭望???);
+        setText("video-list-text", TEXT.LIST_LOAD_FAIL);
         return;
       }
-
       _allVideos = (out.data.data && out.data.data.videos) || [];
-      _activeCategory = "?券";
+      _activeCategory = TEXT.ALL;
       renderFilterBar();
       renderVideoList(_allVideos);
     } catch (_err) {
-      setText("video-list-text", "敶梁?皜頛憭望???);
-    }
-  }
-
-
-  async function saveVideoEdit(evt) {
-    evt.preventDefault();
-    var videoId = document.getElementById("e-video-id").value;
-    var title = (document.getElementById("e-title").value || "").trim();
-    var categoryName = (document.getElementById("e-category").value || "").trim();
-    var tagsRaw = (document.getElementById("e-tags").value || "").trim();
-    var visibility = document.getElementById("e-visibility").value;
-    var status = document.getElementById("e-status").value;
-
-    if (!videoId) return;
-    if (!title) {
-      setText("edit-message", "璅?銝蝛箇??);
-      return;
-    }
-
-    var tagNames = tagsRaw ? tagsRaw.split(",").map(function (x) { return x.trim(); }).filter(Boolean) : [];
-    setText("edit-message", "?脣?銝?..");
-
-    try {
-      var out = await fetchJson(apiurl("/videolearning/api/videos/" + videoId + "/update/"), {
-        method: "POST",
-        headers: csrfHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
-          title: title,
-          category_name: categoryName,
-          tag_names: tagNames,
-          visibility: visibility,
-          status: status
-        })
-      });
-
-      if (!out.res.ok || !out.data || !out.data.ok) {
-        setText("edit-message", (out.data && out.data.error && out.data.error.message) || "?湔憭望???);
-        return;
-      }
-
-      var dialog = document.getElementById("video-edit-dialog");
-      if (dialog && typeof dialog.close === "function") dialog.close();
-      await loadVideoList();
-    } catch (_err) {
-      setText("edit-message", "?湔憭望???);
-    }
-  }
-
-  async function deleteVideoFromEditDialog() {
-    var videoId = document.getElementById("e-video-id").value;
-    var title = (document.getElementById("e-title").value || "").trim();
-    if (!videoId) return;
-    if (!window.confirm("蝣箏?閬?文蔣?? + (title || ("#" + videoId)) + "??嚗?)) return;
-
-    setText("edit-message", "?芷銝?..");
-    try {
-      var out = await fetchJson(apiurl("/videolearning/api/videos/" + videoId + "/delete/"), {
-        method: "POST",
-        headers: csrfHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({})
-      });
-      if (!out.res.ok || !out.data || !out.data.ok) {
-        setText("edit-message", (out.data && out.data.error && out.data.error.message) || "?芷憭望???);
-        return;
-      }
-
-      var dialog = document.getElementById("video-edit-dialog");
-      if (dialog && typeof dialog.close === "function") dialog.close();
-      await loadVideoList();
-    } catch (_err) {
-      setText("edit-message", "?芷憭望???);
+      setText("video-list-text", TEXT.LIST_LOAD_FAIL);
     }
   }
 
@@ -244,14 +166,11 @@
     var pathInput = document.getElementById("f-file-path");
     if (!fileInput || !pathInput) return;
     var f = fileInput.files && fileInput.files[0];
-    if (!f) {
-      setText("upload-message", "隢??豢?敶梁?瑼???);
-      return;
-    }
+    if (!f) return setText("upload-message", TEXT.SELECT_FILE_FIRST);
 
     var form = new FormData();
     form.append("file", f);
-    setText("upload-message", "銝銝?..");
+    setText("upload-message", TEXT.UPLOADING);
     try {
       var res = await fetch(apiurl("/videolearning/api/videos/upload/"), {
         method: "POST",
@@ -260,13 +179,13 @@
       });
       var data = await res.json();
       if (!res.ok || !data || !data.ok) {
-        setText("upload-message", (data && data.error && data.error.message) || "銝憭望???);
+        setText("upload-message", (data && data.error && data.error.message) || TEXT.UPLOAD_FAIL);
         return;
       }
       pathInput.value = (data.data && data.data.upload && data.data.upload.file_path) || "";
-      setText("upload-message", "銝摰?嚗歇憛怠敶梁?頝臬???);
+      setText("upload-message", TEXT.UPLOAD_DONE);
     } catch (_err) {
-      setText("upload-message", "銝憭望???);
+      setText("upload-message", TEXT.UPLOAD_FAIL);
     }
   }
 
@@ -282,11 +201,11 @@
     var status = document.getElementById("f-status").value;
     var tags = tagsRaw ? tagsRaw.split(",").map(function (x) { return x.trim(); }).filter(Boolean) : [];
 
-    if (!title) return setText("form-message", "璅?銝蝛箇??);
-    if (!filePath) return setText("form-message", "隢?靘蔣?楝敺???單?獢?);
-    if (isNaN(duration) || duration < 0) return setText("form-message", "?敹?憭扳????0 ??詻?);
+    if (!title) return setText("form-message", TEXT.TITLE_REQUIRED);
+    if (!filePath) return setText("form-message", TEXT.FILE_PATH_REQUIRED);
+    if (isNaN(duration) || duration < 0) return setText("form-message", TEXT.DURATION_INVALID);
 
-    setText("form-message", "撱箇?銝?..");
+    setText("form-message", TEXT.CREATING);
     try {
       var out = await fetchJson(apiurl("/videolearning/api/videos/create/"), {
         method: "POST",
@@ -303,35 +222,46 @@
         })
       });
       if (!out.res.ok || !out.data || !out.data.ok) {
-        setText("form-message", (out.data && out.data.error && out.data.error.message) || "撱箇?憭望???);
+        setText("form-message", (out.data && out.data.error && out.data.error.message) || TEXT.CREATE_FAIL);
         return;
       }
-      setText("form-message", "撱箇?摰???);
+      setText("form-message", TEXT.CREATE_DONE);
       document.getElementById("create-video-form").reset();
       setText("upload-message", "");
       await loadVideoList();
     } catch (_err) {
-      setText("form-message", "撱箇?憭望???);
+      setText("form-message", TEXT.CREATE_FAIL);
     }
   }
 
   async function importYoutube(evt) {
     evt.preventDefault();
     var youtubeUrl = (document.getElementById("y-url").value || "").trim();
-    if (!youtubeUrl) return setText("youtube-message", "隢撓??YouTube 蝬脣???);
+    if (!youtubeUrl) return setText("youtube-message", TEXT.YOUTUBE_URL_REQUIRED);
 
     var title = (document.getElementById("y-title").value || "").trim();
+    var outputFormatEl = document.getElementById("y-output-format");
+    var outputFormat = outputFormatEl ? String(outputFormatEl.value || "mp4").toLowerCase() : "mp4";
     var category = (document.getElementById("y-category").value || "").trim();
     var tagsRaw = (document.getElementById("y-tags").value || "").trim();
     var tags = tagsRaw ? tagsRaw.split(",").map(function (x) { return x.trim(); }).filter(Boolean) : [];
+    var submitBtn = document.getElementById("y-submit");
+    var msgEl = document.getElementById("youtube-message");
 
-    setText("youtube-message", "銝???乩葉嚗?蝔?..");
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.classList.add("vl-is-loading");
+    }
+    if (msgEl) msgEl.classList.add("vl-loading-text");
+
+    setText("youtube-message", TEXT.PROCESSING);
     try {
       var out = await fetchJson(apiurl("/videolearning/api/videos/import-youtube/"), {
         method: "POST",
         headers: csrfHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           youtube_url: youtubeUrl,
+          output_format: outputFormat,
           title: title,
           category_name: category,
           tag_names: tags,
@@ -340,14 +270,27 @@
         })
       });
       if (!out.res.ok || !out.data || !out.data.ok) {
-        setText("youtube-message", (out.data && out.data.error && out.data.error.message) || "YouTube ?臬憭望???);
+        setText("youtube-message", (out.data && out.data.error && out.data.error.message) || TEXT.YOUTUBE_FAIL);
         return;
       }
-      setText("youtube-message", "YouTube ?臬摰?嚗歇撱箇?敶梁???);
+
+      if (outputFormat === "mp3") {
+        var mp3Path = out.data && out.data.data && out.data.data.import ? out.data.data.import.file_path : "";
+        setText("youtube-message", TEXT.MP3_DONE_PREFIX + mp3Path);
+      } else {
+        setText("youtube-message", TEXT.YOUTUBE_DONE);
+      }
+
       document.getElementById("youtube-import-form").reset();
-      await loadVideoList();
+      if (outputFormat !== "mp3") await loadVideoList();
     } catch (_err) {
-      setText("youtube-message", "YouTube ?臬憭望???);
+      setText("youtube-message", TEXT.YOUTUBE_FAIL);
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove("vl-is-loading");
+      }
+      if (msgEl) msgEl.classList.remove("vl-loading-text");
     }
   }
 
@@ -355,15 +298,13 @@
     if (!videoId) return;
     try {
       var out = await fetchJson(apiurl("/videolearning/api/videos/" + videoId + "/"), { headers: csrfHeaders() });
-      if (!out.res.ok || !out.data || !out.data.ok || !out.data.data.video) {
-        return;
-      }
+      if (!out.res.ok || !out.data || !out.data.ok || !out.data.data.video) return;
 
       var v = out.data.data.video;
-      setText("detail-title", v.title);
+      setText("detail-title", v.title || "");
       setText("detail-category", toCategory(v));
       setText("detail-tags", toTagLine(v.tags));
-      setText("detail-meta", "?怨釭嚗? + (v.quality_text || "-"));
+      setText("detail-meta", TEXT.QUALITY_PREFIX + (v.quality_text || "-"));
 
       var player = document.getElementById("detail-player");
       if (player) {
@@ -371,10 +312,9 @@
         player.load();
       }
     } catch (_err) {
-      // Failed silently or handle if needed
+      setText("detail-meta", TEXT.DETAIL_LOAD_FAIL);
     }
   }
-
 
   function bindEvents() {
     var refreshBtn = document.getElementById("refresh-list");
@@ -388,25 +328,10 @@
 
     var ytForm = document.getElementById("youtube-import-form");
     if (ytForm) ytForm.addEventListener("submit", importYoutube);
-
-    var editForm = document.getElementById("video-edit-form");
-    if (editForm) editForm.addEventListener("submit", saveVideoEdit);
-
-    var cancelBtn = document.getElementById("e-cancel");
-    if (cancelBtn) {
-      cancelBtn.addEventListener("click", function () {
-        var dialog = document.getElementById("video-edit-dialog");
-        if (dialog && typeof dialog.close === "function") dialog.close();
-      });
-    }
-
-    var deleteBtn = document.getElementById("e-delete");
-    if (deleteBtn) deleteBtn.addEventListener("click", deleteVideoFromEditDialog);
   }
 
   function bootstrap() {
     bindEvents();
-    
     var videoId = document.body.dataset.videoId;
     if (videoId) {
       loadVideoDetail(videoId);

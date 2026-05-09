@@ -16,7 +16,7 @@
     <p class="vl-subtitle">AI 教學影片管理</p>
 
     <nav class="vl-tabs" aria-label="功能切換">
-      <a href="{% url 'videolearning:page' %}" class="vl-tab {% if active_tab == 'query' %}is-active{% endif %}" data-tab-target="query">查詢影片</a>
+      <a href="{% url 'videolearning:page' %}" class="vl-tab {% if active_tab == 'query' %}is-active{% endif %}" data-tab-target="query">影片清單</a>
       <a href="{% url 'videolearning:import_page' %}" class="vl-tab {% if active_tab == 'import' %}is-active{% endif %}" data-tab-target="import">匯入影片</a>
       <a href="{% url 'videolearning:transcode_page' %}" class="vl-tab {% if active_tab == 'transcode' %}is-active{% endif %}" data-tab-target="transcode">YouTube 轉檔</a>
     </nav>
@@ -87,6 +87,13 @@
           {% csrf_token %}
           <label class="vl-field"><span>YouTube 網址</span><input id="y-url" name="youtube_url" type="url" placeholder="https://www.youtube.com/watch?v=..." required></label>
           <label class="vl-field"><span>標題（可選）</span><input id="y-title" name="title" type="text" maxlength="255"></label>
+          <label class="vl-field">
+            <span>輸出格式</span>
+            <select id="y-output-format" name="output_format">
+              <option value="mp4" selected>MP4（維持原功能，寫入影片清單）</option>
+              <option value="mp3">MP3（僅轉檔輸出到 H:\Mp3，不寫入清單）</option>
+            </select>
+          </label>
           <div class="vl-grid-2">
             <label class="vl-field"><span>分類</span><input id="y-category" name="category_name" type="text" maxlength="100" placeholder="YouTube 教材"></label>
             <label class="vl-field"><span>標籤（逗號分隔）</span><input id="y-tags" name="tag_names" type="text" placeholder="youtube, ai"></label>
