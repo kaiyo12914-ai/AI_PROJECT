@@ -143,3 +143,5 @@ site/
 **/*.local.md
 ehthumbs.db
 *~
+*.dump
+ffmpeg-8.1.1.tar.xz

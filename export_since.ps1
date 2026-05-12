@@ -274,6 +274,40 @@ $lines = foreach ($f in $files) {
 # -------------------------
 # zip
 # -------------------------
+if (-not (Get-Command New-ZipFromFileList -ErrorAction SilentlyContinue)) {
+  function New-ZipFromFileList([string]$ZipPath, $Files, [string]$BasePath) {
+    if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force }
+    if ($null -eq $Files -or $Files.Count -eq 0) { throw "No files to zip." }
+
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+    $fs = $null
+    $zip = $null
+    try {
+      $fs = [System.IO.File]::Open($ZipPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+      $zip = New-Object System.IO.Compression.ZipArchive($fs, [System.IO.Compression.ZipArchiveMode]::Create, $false)
+      foreach ($f in $Files) {
+        $rel = Get-RelPath $BasePath $f.FullName
+        if ([string]::IsNullOrWhiteSpace($rel)) { continue }
+        $entry = $zip.CreateEntry($rel.Replace('\','/'), [System.IO.Compression.CompressionLevel]::Optimal)
+        $inStream = $null
+        $outStream = $null
+        try {
+          $inStream = [System.IO.File]::OpenRead($f.FullName)
+          $outStream = $entry.Open()
+          $inStream.CopyTo($outStream)
+        } finally {
+          if ($outStream) { $outStream.Dispose() }
+          if ($inStream) { $inStream.Dispose() }
+        }
+      }
+    } finally {
+      if ($zip) { $zip.Dispose() }
+      if ($fs) { $fs.Dispose() }
+    }
+  }
+}
 New-ZipFromFileList -ZipPath $ZipPath -Files $files -BasePath $BasePath
 
 # -------------------------

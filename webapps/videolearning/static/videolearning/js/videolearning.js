@@ -17,10 +17,10 @@
     CREATE_FAIL: "建立失敗。",
     CREATE_DONE: "建立完成。",
     YOUTUBE_URL_REQUIRED: "請輸入 YouTube 網址。",
-    PROCESSING: "Processing",
-    YOUTUBE_FAIL: "YouTube import failed.",
-    YOUTUBE_DONE: "YouTube import completed.",
-    MP3_DONE_PREFIX: "MP3 done: ",
+    PROCESSING: "處理中",
+    YOUTUBE_FAIL: "YouTube 匯入失敗。",
+    YOUTUBE_DONE: "YouTube 匯入完成，已建立影片。",
+    MP3_DONE_PREFIX: "MP3 轉檔完成：",
     DETAIL_LOAD_FAIL: "影片載入失敗。",
     QUALITY_PREFIX: "畫質：",
     LABEL_CATEGORY: "分類：",
@@ -234,6 +234,34 @@
     }
   }
 
+  function bindYoutubeModeTabs() {
+    var tabs = document.querySelectorAll(".vl-subtab[data-yt-mode]");
+    var hidden = document.getElementById("y-output-format");
+    var hint = document.getElementById("y-mode-hint");
+    if (!tabs.length || !hidden) return;
+
+    function applyMode(mode) {
+      hidden.value = mode;
+      tabs.forEach(function (btn) {
+        var active = btn.getAttribute("data-yt-mode") === mode;
+        btn.classList.toggle("is-active", active);
+        btn.setAttribute("aria-selected", active ? "true" : "false");
+      });
+      if (hint) {
+        if (mode === "mp3") hint.textContent = "MP3：僅轉檔輸出至 H:\\Mp3，不寫入影片清單。";
+        else hint.textContent = "MP4：維持原功能，寫入影片清單。";
+      }
+    }
+
+    tabs.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        applyMode(btn.getAttribute("data-yt-mode") || "mp4");
+      });
+    });
+
+    applyMode(hidden.value || "mp4");
+  }
+
   async function importYoutube(evt) {
     evt.preventDefault();
     var youtubeUrl = (document.getElementById("y-url").value || "").trim();
@@ -247,6 +275,8 @@
     var tags = tagsRaw ? tagsRaw.split(",").map(function (x) { return x.trim(); }).filter(Boolean) : [];
     var submitBtn = document.getElementById("y-submit");
     var msgEl = document.getElementById("youtube-message");
+    var progress = 0;
+    var progressTimer = null;
 
     if (submitBtn) {
       submitBtn.disabled = true;
@@ -254,7 +284,19 @@
     }
     if (msgEl) msgEl.classList.add("vl-loading-text");
 
-    setText("youtube-message", TEXT.PROCESSING);
+    function renderProgress(pct) {
+      setText("youtube-message", TEXT.PROCESSING + " " + String(pct) + "%");
+    }
+
+    renderProgress(progress);
+    progressTimer = setInterval(function () {
+      if (progress < 95) {
+        progress += (progress < 70 ? 3 : 1);
+        if (progress > 95) progress = 95;
+        renderProgress(progress);
+      }
+    }, 350);
+
     try {
       var out = await fetchJson(apiurl("/videolearning/api/videos/import-youtube/"), {
         method: "POST",
@@ -282,10 +324,13 @@
       }
 
       document.getElementById("youtube-import-form").reset();
+      bindYoutubeModeTabs();
       if (outputFormat !== "mp3") await loadVideoList();
     } catch (_err) {
       setText("youtube-message", TEXT.YOUTUBE_FAIL);
     } finally {
+      if (progressTimer) clearInterval(progressTimer);
+      if (progress < 100) renderProgress(100);
       if (submitBtn) {
         submitBtn.disabled = false;
         submitBtn.classList.remove("vl-is-loading");
@@ -328,6 +373,8 @@
 
     var ytForm = document.getElementById("youtube-import-form");
     if (ytForm) ytForm.addEventListener("submit", importYoutube);
+
+    bindYoutubeModeTabs();
   }
 
   function bootstrap() {

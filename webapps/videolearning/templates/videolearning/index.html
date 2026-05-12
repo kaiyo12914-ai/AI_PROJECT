@@ -68,7 +68,7 @@
           <label class="vl-field"><span>描述</span><textarea id="f-description" name="description" rows="3"></textarea></label>
           <div class="vl-grid-2">
             <label class="vl-field"><span>分類</span><input id="f-category" name="category_name" type="text" maxlength="100" placeholder="AI 教材"></label>
-            <label class="vl-field"><span>標籤（逗號分隔）</span><input id="f-tags" name="tag_names" type="text" placeholder="教學, AI"></label>
+            <label class="vl-field"><span>標籤（逗號分隔）</span><input id="f-tags" name="tag_names" type="text" placeholder="youtube, ai"></label>
           </div>
           <div class="vl-grid-3">
             <label class="vl-field"><span>時長（秒）</span><input id="f-duration" name="duration_seconds" type="number" min="0" step="1" value="0"></label>
@@ -87,13 +87,17 @@
           {% csrf_token %}
           <label class="vl-field"><span>YouTube 網址</span><input id="y-url" name="youtube_url" type="url" placeholder="https://www.youtube.com/watch?v=..." required></label>
           <label class="vl-field"><span>標題（可選）</span><input id="y-title" name="title" type="text" maxlength="255"></label>
-          <label class="vl-field">
-            <span>輸出格式</span>
-            <select id="y-output-format" name="output_format">
-              <option value="mp4" selected>MP4（維持原功能，寫入影片清單）</option>
-              <option value="mp3">MP3（僅轉檔輸出到 H:\Mp3，不寫入清單）</option>
-            </select>
-          </label>
+
+          <div class="vl-field">
+            <span>轉檔模式</span>
+            <div class="vl-subtabs" role="tablist" aria-label="YouTube 轉檔模式">
+              <button type="button" class="vl-subtab" data-yt-mode="mp4" role="tab" aria-selected="false">YouTube轉MP4</button>
+              <button type="button" class="vl-subtab is-active" data-yt-mode="mp3" role="tab" aria-selected="true">YouTube轉MP3</button>
+            </div>
+            <input type="hidden" id="y-output-format" name="output_format" value="mp3">
+            <div id="y-mode-hint" class="vl-item-meta">MP4：維持原功能，寫入影片清單。</div>
+          </div>
+
           <div class="vl-grid-2">
             <label class="vl-field"><span>分類</span><input id="y-category" name="category_name" type="text" maxlength="100" placeholder="YouTube 教材"></label>
             <label class="vl-field"><span>標籤（逗號分隔）</span><input id="y-tags" name="tag_names" type="text" placeholder="youtube, ai"></label>

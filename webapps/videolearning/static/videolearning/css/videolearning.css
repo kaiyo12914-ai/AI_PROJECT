@@ -153,6 +153,29 @@ body {
   font-weight: 700;
   color: #1f2937;
 }
+.vl-subtabs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.vl-subtab {
+  border: 1px solid var(--line);
+  background: #f8fbff;
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+.vl-subtab:hover {
+  border-color: #b8c7e0;
+}
+.vl-subtab.is-active {
+  border-color: var(--primary);
+  background: linear-gradient(135deg, var(--primary), var(--primary-strong));
+  color: #fff;
+}
 
 .vl-field input,
 .vl-field textarea,
