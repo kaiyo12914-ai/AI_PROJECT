@@ -8,6 +8,8 @@ import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 from django.conf import settings
 
@@ -41,6 +43,12 @@ def _make_media_url(abs_path: Path) -> str:
     return f"{media_url}{rel_url}"
 
 
+def _thumbnail_root() -> Path:
+    env_name = str(getattr(settings, "ENV_NAME", "EXT") or "EXT").upper()
+    env_key = "int" if env_name == "INT" else "ext"
+    return Path(settings.MEDIA_ROOT) / "videolearning" / env_key / "thumbnails"
+
+
 def _safe_name(name: str) -> str:
     base = re.sub(r"[^\w\-\u4e00-\u9fff]+", "_", (name or "").strip(), flags=re.UNICODE).strip("_")
     return base[:80] or "youtube_video"
@@ -62,6 +70,32 @@ def _as_float(v) -> float | None:
         return float(v)
     except Exception:
         return None
+
+
+def _download_thumbnail_to_media(thumbnail_url: str, youtube_id: str, now: datetime) -> str:
+    raw = (thumbnail_url or "").strip()
+    if not raw:
+        return ""
+    parsed = urlparse(raw)
+    if parsed.scheme not in {"http", "https"}:
+        return ""
+
+    ext = Path(parsed.path or "").suffix.lower()
+    if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
+        ext = ".jpg"
+
+    thumb_dir = _thumbnail_root() / f"{now.year:04d}" / f"{now.month:02d}"
+    thumb_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_id = re.sub(r"[^a-zA-Z0-9_-]+", "_", (youtube_id or "").strip()) or uuid.uuid4().hex[:8]
+    file_name = f"{now.strftime('%Y%m%d_%H%M%S')}_{safe_id}_{uuid.uuid4().hex[:6]}{ext}"
+    abs_path = thumb_dir / file_name
+
+    req = Request(raw, headers={"User-Agent": "Mozilla/5.0"})
+    with urlopen(req, timeout=20) as resp, open(abs_path, "wb") as f:
+        f.write(resp.read())
+
+    return _make_media_url(abs_path)
 
 
 def _resolve_yt_dlp_cmd() -> list[str]:
@@ -187,11 +221,19 @@ def import_youtube_to_media(youtube_url: str, output_format: str = "mp4") -> dic
         else:
             file_path = _make_media_url(final_path)
 
+        thumb_url = str(meta.get("thumbnail") or "")
+        local_thumb_path = ""
+        try:
+            local_thumb_path = _download_thumbnail_to_media(thumb_url, str(meta.get("id") or ""), now)
+        except Exception:
+            local_thumb_path = ""
+
         return {
             "file_path": file_path,
             "title": str(meta.get("title") or ""),
             "duration_seconds": int(meta.get("duration") or 0),
-            "thumbnail_url": str(meta.get("thumbnail") or ""),
+            "thumbnail_url": thumb_url,
+            "thumbnail_path": local_thumb_path,
             "source_url": url,
             "ffmpeg_used": bool(ffmpeg_bin),
             "container_ext": final_ext.lstrip("."),

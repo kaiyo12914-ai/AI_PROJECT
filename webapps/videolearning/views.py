@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import json
+import re
+import uuid
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import unquote, urlparse
+from urllib.request import Request, urlopen
 
 from django.db import transaction
 from django.http import HttpRequest, HttpResponse, JsonResponse
@@ -259,6 +263,73 @@ def _resolve_media_abs_path(file_path: str) -> Path | None:
     return None
 
 
+def _make_media_url(abs_path: Path) -> str:
+    rel_from_media = abs_path.relative_to(Path(settings.MEDIA_ROOT))
+    rel_url = "/".join(rel_from_media.parts)
+    media_url = str(getattr(settings, "MEDIA_URL", "/media/") or "/media/")
+    if not media_url.endswith("/"):
+        media_url += "/"
+    return f"{media_url}{rel_url}"
+
+
+def _thumbnail_root_for_current_env() -> Path:
+    env_name = str(getattr(settings, "ENV_NAME", "EXT") or "EXT").upper()
+    env_key = "int" if env_name == "INT" else "ext"
+    return Path(settings.MEDIA_ROOT) / "videolearning" / env_key / "thumbnails"
+
+
+def _download_thumbnail_url_to_media(url: str, seed: str = "") -> str:
+    raw = str(url or "").strip()
+    if not (raw.startswith("http://") or raw.startswith("https://")):
+        return raw
+    try:
+        parsed = urlparse(raw)
+        ext = Path(parsed.path or "").suffix.lower()
+        if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
+            ext = ".jpg"
+        now = datetime.now()
+        root = _thumbnail_root_for_current_env() / f"{now.year:04d}" / f"{now.month:02d}"
+        root.mkdir(parents=True, exist_ok=True)
+        safe_seed = re.sub(r"[^a-zA-Z0-9_-]+", "_", seed or "") or uuid.uuid4().hex[:8]
+        name = f"{now.strftime('%Y%m%d_%H%M%S')}_{safe_seed}_{uuid.uuid4().hex[:6]}{ext}"
+        out = root / name
+        req = Request(raw, headers={"User-Agent": "Mozilla/5.0"})
+        with urlopen(req, timeout=20) as resp, open(out, "wb") as f:
+            f.write(resp.read())
+        return _make_media_url(out)
+    except Exception:
+        return ""
+
+
+def _ensure_int_local_thumbnail(video: VideoAsset) -> None:
+    env_name = str(getattr(settings, "ENV_NAME", "EXT") or "EXT").upper()
+    # Backfill should run on EXT (internet available) and also allow INT retry.
+    if env_name not in {"EXT", "INT"}:
+        return
+    current = str(video.thumbnail_path or "").strip()
+    if not (current.startswith("http://") or current.startswith("https://")):
+        return
+    try:
+        parsed = urlparse(current)
+        ext = Path(parsed.path or "").suffix.lower()
+        if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
+            ext = ".jpg"
+        now = datetime.now()
+        # Always build INT thumbnail path so assets can be copied to intranet.
+        root = Path(settings.MEDIA_ROOT) / "videolearning" / "int" / "thumbnails" / f"{now.year:04d}" / f"{now.month:02d}"
+        root.mkdir(parents=True, exist_ok=True)
+        safe_id = re.sub(r"[^a-zA-Z0-9_-]+", "_", str(video.id))
+        name = f"{now.strftime('%Y%m%d_%H%M%S')}_{safe_id}_{uuid.uuid4().hex[:6]}{ext}"
+        out = root / name
+        req = Request(current, headers={"User-Agent": "Mozilla/5.0"})
+        with urlopen(req, timeout=15) as resp, open(out, "wb") as f:
+            f.write(resp.read())
+        video.thumbnail_path = _make_media_url(out)
+        video.save(update_fields=["thumbnail_path", "updated_at"])
+    except Exception:
+        return
+
+
 @require_GET
 @require_node("videolearning", api=True)
 def api_video_list(request: HttpRequest) -> JsonResponse:
@@ -335,12 +406,15 @@ def api_video_create(request: HttpRequest) -> JsonResponse:
 
     owner = _resolve_owner(request)
 
+    thumb_input = str(body.get("thumbnail_path") or "").strip()
+    thumb_local = _download_thumbnail_url_to_media(thumb_input, seed=title)
+
     video = VideoAsset.objects.create(
         title=title,
         description=str(body.get("description") or "").strip(),
         category=category,
         file_path=file_path,
-        thumbnail_path=str(body.get("thumbnail_path") or "").strip(),
+        thumbnail_path=thumb_local or thumb_input,
         duration_seconds=duration_seconds,
         width=width,
         height=height,
@@ -409,7 +483,7 @@ def api_video_import_youtube(request: HttpRequest) -> JsonResponse:
         description=str(body.get("description") or "").strip(),
         category=category,
         file_path=str(imported.get("file_path") or "").strip(),
-        thumbnail_path=str(imported.get("thumbnail_url") or "").strip(),
+        thumbnail_path=str(imported.get("thumbnail_path") or "").strip(),
         duration_seconds=max(0, duration_seconds),
         width=imported.get("width"),
         height=imported.get("height"),
@@ -450,7 +524,9 @@ def api_video_update(request: HttpRequest, video_id: int) -> JsonResponse:
             return _err("FILE_PATH_REQUIRED", "file_path is required.", status=400)
         video.file_path = file_path
     if "thumbnail_path" in body:
-        video.thumbnail_path = str(body.get("thumbnail_path") or "").strip()
+        thumb_input = str(body.get("thumbnail_path") or "").strip()
+        thumb_local = _download_thumbnail_url_to_media(thumb_input, seed=str(video.id))
+        video.thumbnail_path = thumb_local or thumb_input
     if "duration_seconds" in body:
         try:
             video.duration_seconds = max(0, int(body.get("duration_seconds") or 0))
