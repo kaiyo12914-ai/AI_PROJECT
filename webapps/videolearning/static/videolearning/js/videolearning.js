@@ -96,7 +96,6 @@
       img.className = "vl-video-thumb";
       img.src = v.thumbnail_path || apiurl("/static/videolearning/img/placeholder.png");
       img.alt = v.title;
-      img.onerror = function () { this.src = apiurl("/static/videolearning/img/placeholder.png"); };
       thumbContainer.appendChild(img);
       li.appendChild(thumbContainer);
 

@@ -60,7 +60,13 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_prompt(topic: str, mode: str, level: str, requested_count: int) -> str:
+def build_prompt(
+    topic: str,
+    mode: str,
+    level: str,
+    requested_count: int,
+    banned_signatures: Sequence[str] | None = None,
+) -> str:
     beginner_translation_hint = ""
     beginner_level_hint = ""
     if level == "beginner":
@@ -88,6 +94,11 @@ beginner 題目請額外遵守以下簡化規則：
    - `explanation_zh` 必須用繁體中文清楚說明主詞、動詞型態，以及一個關鍵用字。
    - `sample_answer` 應保持簡短、基礎。
 """
+    banned_clause = ""
+    if banned_signatures:
+        banned_preview = "\n".join(f"- {sig}" for sig in list(banned_signatures)[:30])
+        banned_clause = f"\n10. Avoid generating questions that match these existing signatures:\n{banned_preview}\n"
+
     return f"""
 請產生 {requested_count} 題 TOEIC 風格英文練習題，語言要貼近日常實用英文，並參考 COCA 常見用法。
 
@@ -126,10 +137,12 @@ beginner 題目請額外遵守以下簡化規則：
 2. reorder：
    - `prompt_text` 必填。
    - `words_json` 至少要有 3 個打亂順序的單字或片語。
-   - `choices_json` 必須是 []。
+   - `choices_json` 必須是 []（強制規則，不可放任何選項）。
+   - 若 `choices_json` 不是 []，視為格式錯誤。
    - `answer_text`、`explanation_zh`、`pattern_text` 必填。
 3. translation：
    - `zh_prompt`、`sample_answer`、`explanation_zh` 必填。
+   - `explanation_zh` 至少 12 個字，需說明關鍵句型或文法重點。
    - `choices_json` 與 `words_json` 應為 []。
    - `patterns_json` 應提供對學習者有幫助的提示。
 4. 每一題都必須符合指定難度。
@@ -140,6 +153,7 @@ beginner 題目請額外遵守以下簡化規則：
 9. 若 level 是 beginner，請優先以初級英文教材風格出題，而不是標準 TOEIC 中高難度句型。
 {beginner_level_hint}
 {beginner_translation_hint}
+{banned_clause}
 """.strip()
 
 
@@ -156,6 +170,36 @@ def normalize_string_list(value: Any, field_name: str) -> List[str]:
     if any(not item for item in normalized):
         raise QuestionGenerationError(f"{field_name} cannot contain empty strings.")
     return normalized
+
+
+def build_translation_explanation_fallback(sample_answer: str, patterns: Sequence[str]) -> str:
+    pattern_text = "、".join([normalize_text(p) for p in patterns if normalize_text(p)][:2])
+    if pattern_text:
+        return f"此句建議使用「{pattern_text}」等句型，請注意語序與動詞形式。"
+    if sample_answer:
+        return "此句請對照參考答案，注意主詞、動詞與語序是否正確。"
+    return "請使用自然且正確的英文語序完成翻譯。"
+
+
+def question_signature(item: Dict[str, Any]) -> str:
+    mode = normalize_text(item.get("mode")).lower()
+    topic = normalize_text(item.get("topic_key")).lower()
+    level = normalize_text(item.get("level")).lower()
+    prompt = normalize_text(item.get("prompt_text")).lower()
+    answer = normalize_text(item.get("answer_text")).lower()
+    zh_prompt = normalize_text(item.get("zh_prompt")).lower()
+    sample_answer = normalize_text(item.get("sample_answer")).lower()
+    words = " ".join(normalize_string_list(item.get("words_json"), "words_json")).lower()
+
+    if mode == "fill_blank":
+        core = f"{prompt}|{answer}"
+    elif mode == "reorder":
+        core = f"{prompt}|{answer}|{words}"
+    elif mode == "translation":
+        core = f"{zh_prompt}|{sample_answer}"
+    else:
+        core = f"{prompt}|{answer}|{zh_prompt}|{sample_answer}|{words}"
+    return f"{topic}|{mode}|{level}|{core}"
 
 
 def validate_item(item: Any, topic: str, mode: str, level: str, sort_order: int) -> Dict[str, Any]:
@@ -178,6 +222,15 @@ def validate_item(item: Any, topic: str, mode: str, level: str, sort_order: int)
         "sort_order": sort_order,
     }
 
+    # Auto-fix for reorder mode: choices_json must always be empty.
+    if mode == "reorder":
+        normalized["choices_json"] = []
+    if mode == "translation" and not normalized["explanation_zh"]:
+        normalized["explanation_zh"] = build_translation_explanation_fallback(
+            normalized["sample_answer"],
+            normalized["patterns_json"],
+        )
+
     if not normalized["explanation_zh"]:
         raise QuestionGenerationError("explanation_zh is required.")
 
@@ -193,8 +246,6 @@ def validate_item(item: Any, topic: str, mode: str, level: str, sort_order: int)
     elif mode == "reorder":
         if not normalized["prompt_text"]:
             raise QuestionGenerationError("reorder prompt_text is required.")
-        if normalized["choices_json"]:
-            raise QuestionGenerationError("reorder choices_json must be empty.")
         if len(normalized["words_json"]) < 3:
             raise QuestionGenerationError("reorder words_json must contain at least 3 words.")
         if not normalized["answer_text"] or not normalized["pattern_text"]:
@@ -254,8 +305,9 @@ def generate_combo_questions(
     requested_count: int,
     temperature: float,
     timeout: int,
+    banned_signatures: Sequence[str] | None = None,
 ) -> Tuple[List[Dict[str, Any]], int]:
-    prompt = build_prompt(topic, mode, level, requested_count)
+    prompt = build_prompt(topic, mode, level, requested_count, banned_signatures=banned_signatures)
     try:
         raw_items = invoke_json_array(
             prompt,
@@ -271,7 +323,17 @@ def generate_combo_questions(
     validated_items = []
     for index, item in enumerate(raw_items, start=1):
         validated_items.append(validate_item(item, topic, mode, level, DEFAULT_SORT_ORDER_BASE + index - 1))
-    unique_items, skipped_duplicates = dedupe_items(validated_items)
+    existing = set(banned_signatures or [])
+    filtered_items: List[Dict[str, Any]] = []
+    filtered_out_existing = 0
+    for item in validated_items:
+        if question_signature(item) in existing:
+            filtered_out_existing += 1
+            continue
+        filtered_items.append(item)
+
+    unique_items, skipped_duplicates = dedupe_items(filtered_items)
+    skipped_duplicates += filtered_out_existing
     if len(unique_items) < requested_count:
         raise QuestionGenerationError(
             f"Expected {requested_count} unique questions but received {len(unique_items)} after dedupe; "
@@ -308,6 +370,8 @@ def run_generation(args: argparse.Namespace) -> Tuple[Dict[str, Any], int]:
                 combo_results.append(combo)
                 print(f"產生組合中 topic={topic} mode={mode} level={level}")
                 try:
+                    existing_rows = repo.fetch_questions(topic_key=topic, mode=mode, level=level)
+                    banned_signatures = [question_signature(row) for row in existing_rows]
                     items, skipped_duplicates = generate_combo_questions(
                         topic,
                         mode,
@@ -315,6 +379,7 @@ def run_generation(args: argparse.Namespace) -> Tuple[Dict[str, Any], int]:
                         args.questions_per_combo,
                         args.temperature,
                         args.timeout,
+                        banned_signatures=banned_signatures,
                     )
                     keep_ids = [item["question_id"] for item in items]
                     combo.skipped_duplicates = skipped_duplicates

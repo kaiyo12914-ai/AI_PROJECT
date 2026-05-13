@@ -33,6 +33,7 @@ class ChatbotUIRepository(BaseRepository):
             role TEXT NOT NULL,
             content TEXT NOT NULL,
             model_type TEXT,
+            model_name TEXT NOT NULL DEFAULT '',
             latency_ms INTEGER NOT NULL DEFAULT 0,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
@@ -103,6 +104,9 @@ class ChatbotUIRepository(BaseRepository):
             ADD COLUMN IF NOT EXISTS model_name TEXT NOT NULL DEFAULT '';
 
         ALTER TABLE chatbotui_user_profile
+            ADD COLUMN IF NOT EXISTS model_name TEXT NOT NULL DEFAULT '';
+
+        ALTER TABLE chatbotui_message
             ADD COLUMN IF NOT EXISTS model_name TEXT NOT NULL DEFAULT '';
         """
         self.execute(sql, profile=self.profile)
@@ -307,7 +311,7 @@ class ChatbotUIRepository(BaseRepository):
 
     def list_messages(self, conversation_id: str) -> List[Dict[str, Any]]:
         sql = """
-        SELECT id, role, content, model_type, latency_ms, created_at
+        SELECT id, role, content, model_type, model_name, latency_ms, created_at
         FROM chatbotui_message
         WHERE conversation_id = %s
         ORDER BY created_at ASC, id ASC
@@ -321,16 +325,17 @@ class ChatbotUIRepository(BaseRepository):
         role: str,
         content: str,
         model_type: str,
+        model_name: str = "",
         latency_ms: int = 0,
     ) -> int:
         sql = """
         INSERT INTO chatbotui_message (
-            conversation_id, role, content, model_type, latency_ms, created_at
+            conversation_id, role, content, model_type, model_name, latency_ms, created_at
         ) VALUES (
-            %s, %s, %s, %s, %s, NOW()
+            %s, %s, %s, %s, %s, %s, NOW()
         )
         """
-        return self.execute(sql, [conversation_id, role, content, model_type, latency_ms], profile=self.profile)
+        return self.execute(sql, [conversation_id, role, content, model_type, model_name, latency_ms], profile=self.profile)
 
     def clear_messages(self, conversation_id: str) -> int:
         sql = "DELETE FROM chatbotui_message WHERE conversation_id = %s"
@@ -598,14 +603,16 @@ class ChatbotUIRepository(BaseRepository):
                 "role": row[1] if len(row) > 1 else "",
                 "content": row[2] if len(row) > 2 else "",
                 "model_type": row[3] if len(row) > 3 else "",
-                "latency_ms": int(row[4] or 0) if len(row) > 4 else 0,
-                "created_at": row[5] if len(row) > 5 else None,
+                "model_name": row[4] if len(row) > 4 else "",
+                "latency_ms": int(row[5] or 0) if len(row) > 5 else 0,
+                "created_at": row[6] if len(row) > 6 else None,
             }
         return {
             "id": getattr(row, "id", 0),
             "role": getattr(row, "role", ""),
             "content": getattr(row, "content", ""),
             "model_type": getattr(row, "model_type", ""),
+            "model_name": getattr(row, "model_name", ""),
             "latency_ms": int(getattr(row, "latency_ms", 0) or 0),
             "created_at": getattr(row, "created_at", None),
         }

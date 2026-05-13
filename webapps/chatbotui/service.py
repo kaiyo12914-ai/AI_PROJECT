@@ -147,6 +147,31 @@ def resolve_model_name(model_type: str) -> str:
     return ""
 
 
+def _is_int_env() -> bool:
+    return safe_text(os.getenv("ENV")).upper() == "INT"
+
+
+def allowed_model_types() -> set[str]:
+    if _is_int_env():
+        return {"OLLAMA", "LM_STUDIO"}
+    return {"GOOGLE", "OPENAI", "OLLAMA", "LM_STUDIO"}
+
+
+def normalize_model_type(value: Any, default: str = "OLLAMA") -> str:
+    requested = safe_text(value).upper()
+    allowed = allowed_model_types()
+    if requested in allowed:
+        return requested
+    if default in allowed:
+        return default
+    return "OLLAMA" if "OLLAMA" in allowed else "LM_STUDIO"
+
+
+def normalize_model_name(model_type: str, model_name: Any) -> str:
+    name = safe_text(model_name)
+    return name or resolve_model_name(model_type)
+
+
 def normalize_filename(value: Any) -> str:
     name = safe_text(value).replace("\\", "/").split("/")[-1]
     return name[:200]
@@ -203,10 +228,11 @@ class ChatbotUIService:
         rows = self.repository.list_conversations(user_id)
         out: List[Dict[str, Any]] = []
         for row in rows:
+            model_type = normalize_model_type(safe_text(row.get("model_type")) or "OLLAMA", default="OLLAMA")
             out.append({
                 "id": safe_text(row.get("id")),
                 "title": safe_text(row.get("title")) or "New Chat",
-                "model_type": safe_text(row.get("model_type")) or "OPENAI",
+                "model_type": model_type,
                 "model_name": safe_text(row.get("model_name")) or "",
                 "temperature": normalize_temperature(row.get("temperature")),
                 "timeout_sec": normalize_timeout_sec(row.get("timeout_sec")),
@@ -219,13 +245,11 @@ class ChatbotUIService:
             })
         return out
 
-    def create_conversation(self, user_id: str, title: str = "New Chat", model_type: str = "OPENAI") -> Dict[str, Any]:
+    def create_conversation(self, user_id: str, title: str = "New Chat", model_type: str = "OLLAMA") -> Dict[str, Any]:
         self.ensure_schema()
         profile = self.repository.get_user_profile(user_id) or {}
         profile_model_type = safe_text(profile.get("model_type")).upper() if profile else ""
-        chosen_model_type = safe_text(model_type).upper() or profile_model_type or "OPENAI"
-        if chosen_model_type not in {"GOOGLE", "OPENAI", "OLLAMA", "LM_STUDIO"}:
-            chosen_model_type = "OPENAI"
+        chosen_model_type = normalize_model_type(model_type or profile_model_type or "OLLAMA", default="OLLAMA")
         conversation_id = str(uuid.uuid4())
         self.repository.create_conversation(
             conversation_id=conversation_id,
@@ -273,7 +297,7 @@ class ChatbotUIService:
         return {
             "id": safe_text(conversation.get("id")),
             "title": safe_text(conversation.get("title")) or "New Chat",
-            "model_type": safe_text(conversation.get("model_type")) or "OPENAI",
+            "model_type": normalize_model_type(safe_text(conversation.get("model_type")) or "OLLAMA", default="OLLAMA"),
             "model_name": safe_text(conversation.get("model_name")) or "",
             "temperature": config["temperature"],
             "timeout_sec": config["timeout_sec"],
@@ -287,6 +311,7 @@ class ChatbotUIService:
                     "role": safe_text(item.get("role")),
                     "content": safe_text(item.get("content")),
                     "model_type": safe_text(item.get("model_type")),
+                    "model_name": safe_text(item.get("model_name")),
                     "latency_ms": int(item.get("latency_ms") or 0),
                 }
                 for item in self.repository.list_messages(conversation_id)
@@ -437,7 +462,7 @@ class ChatbotUIService:
         return {
             "id": safe_text(refreshed.get("id")),
             "title": safe_text(refreshed.get("title")) or "New Chat",
-            "model_type": safe_text(refreshed.get("model_type")) or "OPENAI",
+            "model_type": normalize_model_type(safe_text(refreshed.get("model_type")) or "OLLAMA", default="OLLAMA"),
             "temperature": config["temperature"],
             "timeout_sec": config["timeout_sec"],
             "system_prompt": config["system_prompt"],
@@ -448,15 +473,15 @@ class ChatbotUIService:
         conversation = self.repository.get_conversation(user_id, conversation_id)
         if not conversation:
             return {}
-        normalized = safe_text(model_type).upper()
-        if normalized not in {"GOOGLE", "OPENAI", "OLLAMA", "LM_STUDIO"}:
-            raise RuntimeError("unsupported model_type")
-        self.repository.set_model_type(user_id, conversation_id, normalized, safe_text(model_name))
+        normalized = normalize_model_type(model_type, default=safe_text(conversation.get("model_type")) or "OLLAMA")
+        existing_model_name = safe_text(conversation.get("model_name"))
+        chosen_model_name = normalize_model_name(normalized, model_name or existing_model_name)
+        self.repository.set_model_type(user_id, conversation_id, normalized, chosen_model_name)
         config = self._conversation_config(conversation)
         self.repository.upsert_user_profile(
             user_id=user_id,
             model_type=normalized,
-            model_name=safe_text(model_name),
+            model_name=chosen_model_name,
             temperature=config["temperature"],
             timeout_sec=config["timeout_sec"],
             system_prompt=config["system_prompt"],
@@ -468,7 +493,7 @@ class ChatbotUIService:
             "id": safe_text(conversation.get("id")),
             "title": safe_text(conversation.get("title")) or "New Chat",
             "model_type": normalized,
-            "model_name": safe_text(model_name) or resolve_model_name(normalized),
+            "model_name": chosen_model_name,
             "temperature": config["temperature"],
             "timeout_sec": config["timeout_sec"],
             "system_prompt": config["system_prompt"],
@@ -512,7 +537,7 @@ class ChatbotUIService:
             chat_mode=next_chat_mode,
             rag_source=next_rag_source,
         )
-        model_type = safe_text(conversation.get("model_type")) or "OPENAI"
+        model_type = normalize_model_type(safe_text(conversation.get("model_type")) or "OLLAMA", default="OLLAMA")
         self.repository.upsert_user_profile(
             user_id=user_id,
             model_type=model_type,
@@ -532,7 +557,7 @@ class ChatbotUIService:
 
         refreshed = self.repository.get_conversation(user_id, conversation_id) or {}
         config = self._conversation_config(refreshed)
-        model_type = safe_text(refreshed.get("model_type")) or "OPENAI"
+        model_type = normalize_model_type(safe_text(refreshed.get("model_type")) or "OLLAMA", default="OLLAMA")
         return {
             "id": safe_text(refreshed.get("id")),
             "title": safe_text(refreshed.get("title")) or "New Chat",
@@ -551,24 +576,28 @@ class ChatbotUIService:
         conversation = self.repository.get_conversation(user_id, conversation_id)
         if not conversation:
             return {}
-        profile = self.repository.get_user_profile(user_id) or {}
-        if not profile:
-            raise RuntimeError("user profile not found")
+        env_model_type = normalize_model_type(os.getenv("MODEL_TYPE") or "OLLAMA", default="OLLAMA")
+        env_model_name = resolve_model_name(env_model_type)
+        next_temperature = normalize_temperature(DEFAULT_TEMPERATURE, DEFAULT_TEMPERATURE)
+        next_timeout = normalize_timeout_sec(DEFAULT_TIMEOUT_SEC, DEFAULT_TIMEOUT_SEC)
+        next_system_prompt = ""
+        next_chat_mode = "GENERAL"
+        next_rag_source = ""
 
-        model_type = safe_text(profile.get("model_type")).upper() or "OPENAI"
-        if model_type not in {"GOOGLE", "OPENAI", "OLLAMA", "LM_STUDIO"}:
-            model_type = "OPENAI"
-        model_name = safe_text(profile.get("model_name")) or resolve_model_name(model_type)
-        next_temperature = normalize_temperature(profile.get("temperature"), DEFAULT_TEMPERATURE)
-        next_timeout = normalize_timeout_sec(profile.get("timeout_sec"), DEFAULT_TIMEOUT_SEC)
-        next_system_prompt = normalize_system_prompt(profile.get("system_prompt"))
-        next_chat_mode = safe_text(profile.get("chat_mode")) or "GENERAL"
-        next_rag_source = safe_text(profile.get("rag_source"))
-
-        self.repository.set_model_type(user_id, conversation_id, model_type, model_name)
+        self.repository.set_model_type(user_id, conversation_id, env_model_type, env_model_name)
         self.repository.set_conversation_config(
             user_id=user_id,
             conversation_id=conversation_id,
+            temperature=next_temperature,
+            timeout_sec=next_timeout,
+            system_prompt=next_system_prompt,
+            chat_mode=next_chat_mode,
+            rag_source=next_rag_source,
+        )
+        self.repository.upsert_user_profile(
+            user_id=user_id,
+            model_type=env_model_type,
+            model_name=env_model_name,
             temperature=next_temperature,
             timeout_sec=next_timeout,
             system_prompt=next_system_prompt,
@@ -582,14 +611,14 @@ class ChatbotUIService:
         return {
             "id": safe_text(refreshed.get("id")),
             "title": safe_text(refreshed.get("title")) or "New Chat",
-            "model_type": safe_text(refreshed.get("model_type")) or model_type,
-            "model_name": safe_text(refreshed.get("model_name")) or model_name,
+            "model_type": safe_text(refreshed.get("model_type")) or env_model_type,
+            "model_name": safe_text(refreshed.get("model_name")) or env_model_name,
             "temperature": config["temperature"],
             "timeout_sec": config["timeout_sec"],
             "system_prompt": config["system_prompt"],
             "chat_mode": config["chat_mode"],
             "rag_source": config["rag_source"],
-            "config_source": "profile",
+            "config_source": "environment",
         }
 
     def list_prompt_history(self, user_id: str, conversation_id: str, limit: int = 20) -> List[Dict[str, Any]]:
@@ -627,6 +656,7 @@ class ChatbotUIService:
         messages: List[Dict[str, Any]],
         user_text: str,
         model_type: str,
+        model_name: str,
         temperature: float,
         timeout_sec: int,
         system_prompt: str,
@@ -663,7 +693,12 @@ class ChatbotUIService:
 
         prompt = history_to_prompt(messages, user_text, system_prompt, attachment_context)
         started = time.perf_counter()
-        llm = get_chat_model(temperature=temperature, timeout=timeout_sec, model_type=model_type)
+        llm = get_chat_model(
+            temperature=temperature,
+            timeout=timeout_sec,
+            model_type=model_type,
+            model_name=model_name,
+        )
         result = llm.invoke(prompt)
         latency_ms = int((time.perf_counter() - started) * 1000)
         answer = extract_message_text(getattr(result, "content", result))
@@ -705,13 +740,15 @@ class ChatbotUIService:
         # Keep only messages before the target user message for context rebuild.
         history_messages = all_messages[:target_user_idx]
 
-        model_type = safe_text(model_type) or safe_text(conversation.get("model_type")) or "OPENAI"
+        model_type = normalize_model_type(safe_text(model_type) or safe_text(conversation.get("model_type")) or "OLLAMA", default="OLLAMA")
+        model_name = normalize_model_name(model_type, conversation.get("model_name"))
         config = self._conversation_config(conversation)
         attachment_context = self._build_attachment_context(user_id, conversation_id)
         generated = self._invoke_reply(
             history_messages,
             latest_user_text,
             model_type,
+            model_name,
             config["temperature"],
             config["timeout_sec"],
             config["system_prompt"],
@@ -727,16 +764,16 @@ class ChatbotUIService:
             raise RuntimeError("invalid target message id")
         self.repository.delete_messages_from(conversation_id, start_message_id)
 
-        self.repository.set_model_type(user_id, conversation_id, model_type)
-        self.repository.add_message(conversation_id, "user", latest_user_text, model_type, 0)
-        self.repository.add_message(conversation_id, "assistant", answer, model_type, latency_ms)
+        self.repository.set_model_type(user_id, conversation_id, model_type, model_name)
+        self.repository.add_message(conversation_id, "user", latest_user_text, model_type, model_name, 0)
+        self.repository.add_message(conversation_id, "assistant", answer, model_type, model_name, latency_ms)
         self.repository.touch_conversation(conversation_id)
         return {
             "reply": answer,
             "conversation_title": safe_text(conversation.get("title")) or "New Chat",
             "latency_ms": latency_ms,
             "model_type": model_type,
-            "model_name": resolve_model_name(model_type),
+            "model_name": model_name,
             "temperature": config["temperature"],
             "timeout_sec": config["timeout_sec"],
             "user_message": latest_user_text,
@@ -780,13 +817,15 @@ class ChatbotUIService:
             raise RuntimeError("message is required")
 
         history_messages = all_messages[:target_idx]
-        model_type = safe_text(model_type) or safe_text(conversation.get("model_type")) or "OPENAI"
+        model_type = normalize_model_type(safe_text(model_type) or safe_text(conversation.get("model_type")) or "OLLAMA", default="OLLAMA")
+        model_name = normalize_model_name(model_type, conversation.get("model_name"))
         config = self._conversation_config(conversation)
         attachment_context = self._build_attachment_context(user_id, conversation_id)
         generated = self._invoke_reply(
             history_messages,
             normalized_user_text,
             model_type,
+            model_name,
             config["temperature"],
             config["timeout_sec"],
             config["system_prompt"],
@@ -796,16 +835,16 @@ class ChatbotUIService:
         )
 
         self.repository.delete_messages_from(conversation_id, target_message_id)
-        self.repository.set_model_type(user_id, conversation_id, model_type)
-        self.repository.add_message(conversation_id, "user", normalized_user_text, model_type, 0)
-        self.repository.add_message(conversation_id, "assistant", generated["answer"], model_type, generated["latency_ms"])
+        self.repository.set_model_type(user_id, conversation_id, model_type, model_name)
+        self.repository.add_message(conversation_id, "user", normalized_user_text, model_type, model_name, 0)
+        self.repository.add_message(conversation_id, "assistant", generated["answer"], model_type, model_name, generated["latency_ms"])
         self.repository.touch_conversation(conversation_id)
         return {
             "reply": generated["answer"],
             "conversation_title": safe_text(conversation.get("title")) or "New Chat",
             "latency_ms": generated["latency_ms"],
             "model_type": model_type,
-            "model_name": resolve_model_name(model_type),
+            "model_name": model_name,
             "temperature": config["temperature"],
             "timeout_sec": config["timeout_sec"],
             "user_message": normalized_user_text,
@@ -823,7 +862,8 @@ class ChatbotUIService:
         if not conversation:
             return {}
 
-        model_type = safe_text(model_type) or safe_text(conversation.get("model_type")) or "OPENAI"
+        model_type = normalize_model_type(safe_text(model_type) or safe_text(conversation.get("model_type")) or "OLLAMA", default="OLLAMA")
+        model_name = normalize_model_name(model_type, conversation.get("model_name"))
         current_messages = self.repository.list_messages(conversation_id)
         config = self._conversation_config(conversation)
         attachment_context = self._build_attachment_context(user_id, conversation_id)
@@ -831,6 +871,7 @@ class ChatbotUIService:
             current_messages,
             user_text,
             model_type,
+            model_name,
             config["temperature"],
             config["timeout_sec"],
             config["system_prompt"],
@@ -843,16 +884,16 @@ class ChatbotUIService:
 
         if not current_messages:
             self.repository.rename_conversation(user_id, conversation_id, infer_title(user_text))
-        self.repository.set_model_type(user_id, conversation_id, model_type)
-        self.repository.add_message(conversation_id, "user", user_text, model_type, 0)
-        self.repository.add_message(conversation_id, "assistant", answer, model_type, latency_ms)
+        self.repository.set_model_type(user_id, conversation_id, model_type, model_name)
+        self.repository.add_message(conversation_id, "user", user_text, model_type, model_name, 0)
+        self.repository.add_message(conversation_id, "assistant", answer, model_type, model_name, latency_ms)
         self.repository.touch_conversation(conversation_id)
         return {
             "reply": answer,
             "conversation_title": infer_title(user_text) if not current_messages else safe_text(conversation.get("title")) or "New Chat",
             "latency_ms": latency_ms,
             "model_type": model_type,
-            "model_name": resolve_model_name(model_type),
+            "model_name": model_name,
             "temperature": config["temperature"],
             "timeout_sec": config["timeout_sec"],
             "attachment_used": bool(generated.get("attachment_used")),

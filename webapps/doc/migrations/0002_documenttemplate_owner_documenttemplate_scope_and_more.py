@@ -14,10 +14,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # ============================================================
-        # Add new fields (scope/owner + new schema v2 columns)
-        # ============================================================
-
+        # Add new fields (scope/owner + schema v2 columns)
         migrations.AddField(
             model_name="documenttemplate",
             name="owner",
@@ -34,28 +31,22 @@ class Migration(migrations.Migration):
             model_name="documenttemplate",
             name="scope",
             field=models.CharField(
-                choices=[("public", "?祇?"), ("personal", "?犖")],
+                choices=[("public", "公用"), ("personal", "個人")],
                 db_index=True,
                 default="public",
                 max_length=20,
             ),
         ),
-
-        # ???啣嚗?瑽?畾菔嚗敹?
         migrations.AddField(
             model_name="documenttemplate",
             name="sections",
             field=models.JSONField(blank=True, default=dict),
         ),
-
-        # ???啣嚗?憭?雿??賜阮?嗡辣???啣?/?交?蝑?
         migrations.AddField(
             model_name="documenttemplate",
             name="doc_fields",
             field=models.JSONField(blank=True, default=dict),
         ),
-
-        # ???啣嚗chema version + meta
         migrations.AddField(
             model_name="documenttemplate",
             name="schema_ver",
@@ -66,20 +57,13 @@ class Migration(migrations.Migration):
             name="meta",
             field=models.JSONField(blank=True, default=dict),
         ),
-
-        # ???舫嚗??摮??汗/?冽?瑼Ｙ揣/?臬嚗?
         migrations.AddField(
             model_name="documenttemplate",
             name="content_text",
             field=models.TextField(blank=True, default=""),
         ),
 
-        # ??tags: list[str]
-
-        # ============================================================
-        # Alter existing fields (align model)
-        # ============================================================
-
+        # Align existing fields
         migrations.AlterField(
             model_name="documenttemplate",
             name="created_at",
@@ -90,18 +74,16 @@ class Migration(migrations.Migration):
             name="description",
             field=models.CharField(blank=True, default="", max_length=400),
         ),
-
-        # ??doc_type ?唬誨蝣?+ max_length=40
         migrations.AlterField(
             model_name="documenttemplate",
             name="doc_type",
             field=models.CharField(
                 choices=[
-                    ("sign_memo", "蝪賢?"),
-                    ("order_draft", "隞斤阮"),
-                    ("submit_draft", "?阮"),
-                    ("letter_draft", "?賜阮"),
-                    ("note", "靘輻惜"),
+                    ("sign_memo", "簽呈"),
+                    ("order_draft", "令稿"),
+                    ("submit_draft", "呈稿"),
+                    ("letter_draft", "函稿"),
+                    ("note", "便籤"),
                 ],
                 db_index=True,
                 max_length=40,
@@ -118,10 +100,7 @@ class Migration(migrations.Migration):
             field=models.DateTimeField(auto_now=True, db_index=True),
         ),
 
-        # ============================================================
         # Indexes
-        # ============================================================
-
         migrations.AddIndex(
             model_name="documenttemplate",
             index=models.Index(
@@ -137,10 +116,7 @@ class Migration(migrations.Migration):
             ),
         ),
 
-        # ============================================================
         # Constraints
-        # ============================================================
-
         migrations.AddConstraint(
             model_name="documenttemplate",
             constraint=models.UniqueConstraint(
@@ -158,3 +134,4 @@ class Migration(migrations.Migration):
             ),
         ),
     ]
+

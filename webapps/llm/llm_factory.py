@@ -319,6 +319,9 @@ def _make_ollama(temperature: float | None, timeout: int | None, model_name: str
     llm = _build_ollama(model)
 
     class LoggedOllama:
+        def __getattr__(self, name):
+            return getattr(llm, name)
+
         def invoke(self, input, **kwargs):
             _log_llm_use("OLLAMA", model, temperature=t, timeout=to)
             try:
@@ -413,6 +416,9 @@ def _make_openai(temperature: float | None, timeout: int | None,model:str |None=
         raise RuntimeError("no fallback configured")
 
     class LoggedOpenAI:
+        def __getattr__(self, name):
+            return getattr(llm, name)
+
         def invoke(self, input, **kwargs):
             _log_llm_use("OPENAI", model, temperature=t, timeout=to)
             try:
@@ -462,6 +468,9 @@ def _make_lm_studio(temperature: float | None, timeout: int | None):
     )
 
     class LoggedLMStudio:
+        def __getattr__(self, name):
+            return getattr(llm, name)
+
         def invoke(self, input, **kwargs):
             _log_llm_use("LM_STUDIO", model, temperature=t, timeout=to)
             return llm.invoke(input, **kwargs)
@@ -525,6 +534,9 @@ def _make_google(temperature: float | None, timeout: int | None):
     llm = ChatGoogleGenerativeAI(**kwargs)
 
     class LoggedGoogle:
+        def __getattr__(self, name):
+            return getattr(llm, name)
+
         def invoke(self, input, **kwargs):
             _log_llm_use("GOOGLE", model, temperature=t, timeout=to)
             return llm.invoke(input, **kwargs)

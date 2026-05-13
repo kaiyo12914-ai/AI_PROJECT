@@ -30,6 +30,24 @@ logger = logging.getLogger(__name__)
 service = ChatbotUIService()
 
 
+def _is_int_env() -> bool:
+    return safe_text(os.getenv("ENV")).upper() == "INT"
+
+
+def _allowed_model_types() -> list[str]:
+    if _is_int_env():
+        return ["OLLAMA", "LM_STUDIO"]
+    return ["OLLAMA", "GOOGLE", "OPENAI", "LM_STUDIO"]
+
+
+def _normalize_model_type_for_view(value: Any) -> str:
+    requested = safe_text(value).upper()
+    allowed = _allowed_model_types()
+    if requested in allowed:
+        return requested
+    return allowed[0]
+
+
 def _split_model_options(raw: str, defaults: list[str]) -> list[str]:
     text = safe_text(raw)
     if not text:
@@ -49,7 +67,7 @@ def _read_json_body(request) -> Dict[str, Any] | None:
 
 @require_node("chatbotui")
 def index(request):
-    default_model_type = safe_text(getattr(settings, "MODEL_TYPE", "OPENAI")) or "OPENAI"
+    default_model_type = _normalize_model_type_for_view(getattr(settings, "MODEL_TYPE", "OPENAI"))
     google_default = safe_text(os.getenv("GOOGLE_MODEL")) or "gemini-3-flash-preview"
     openai_default = safe_text(os.getenv("OPENAI_MODEL")) or "gpt-4o-mini"
     google_options = _split_model_options(
@@ -70,6 +88,7 @@ def index(request):
         {
             "debug_mode": bool(getattr(settings, "DEBUG", False)),
             "default_model_type": default_model_type,
+            "allowed_model_types": _allowed_model_types(),
             "default_model_name": resolve_model_name(default_model_type),
             "google_model_name": google_default,
             "openai_model_name": openai_default,
@@ -105,7 +124,9 @@ def api_conversations(request):
             conversation = service.create_conversation(
                 user_id=user_id,
                 title=safe_text(body.get("title")) or "New Chat",
-                model_type=safe_text(body.get("model_type")) or safe_text(getattr(settings, "MODEL_TYPE", "OPENAI")) or "OPENAI",
+                model_type=_normalize_model_type_for_view(
+                    safe_text(body.get("model_type")) or safe_text(getattr(settings, "MODEL_TYPE", "OPENAI")) or "OPENAI"
+                ),
             )
             return JsonResponse({"ok": True, "conversation": conversation}, status=201)
         except Exception as exc:
@@ -193,10 +214,11 @@ def api_conversation_model(request, conversation_id: str):
     if body is None:
         return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
     user_id = resolve_user_id(request)
-    model_type = safe_text(body.get("model_type"))
-    model_name = safe_text(body.get("model_name")) or ""
-    if not model_type:
+    raw_model_type = safe_text(body.get("model_type"))
+    if not raw_model_type:
         return JsonResponse({"ok": False, "error": "model_type is required"}, status=400)
+    model_type = _normalize_model_type_for_view(raw_model_type)
+    model_name = safe_text(body.get("model_name")) or ""
     try:
         result = service.update_conversation_model(user_id, safe_text(conversation_id), model_type, model_name)
         if not result:
@@ -391,7 +413,9 @@ def api_chat(request):
         return JsonResponse({"ok": False, "error": "message is required"}, status=400)
 
     user_id = resolve_user_id(request)
-    model_type = safe_text(body.get("model_type")) or safe_text(getattr(settings, "MODEL_TYPE", "OPENAI")) or "OPENAI"
+    model_type = _normalize_model_type_for_view(
+        safe_text(body.get("model_type")) or safe_text(getattr(settings, "MODEL_TYPE", "OPENAI")) or "OPENAI"
+    )
     model_name = safe_text(body.get("model_name")) or ""
 
     try:
@@ -447,7 +471,9 @@ def api_chat_regenerate(request):
         return JsonResponse({"ok": False, "error": "conversation_id is required"}, status=400)
 
     user_id = resolve_user_id(request)
-    model_type = safe_text(body.get("model_type")) or safe_text(getattr(settings, "MODEL_TYPE", "OPENAI")) or "OPENAI"
+    model_type = _normalize_model_type_for_view(
+        safe_text(body.get("model_type")) or safe_text(getattr(settings, "MODEL_TYPE", "OPENAI")) or "OPENAI"
+    )
 
     try:
         result = service.regenerate_last_reply(user_id=user_id, conversation_id=conversation_id, model_type=model_type)
@@ -508,7 +534,9 @@ def api_chat_resend(request):
         return JsonResponse({"ok": False, "error": "message is required"}, status=400)
 
     user_id = resolve_user_id(request)
-    model_type = safe_text(body.get("model_type")) or safe_text(getattr(settings, "MODEL_TYPE", "OPENAI")) or "OPENAI"
+    model_type = _normalize_model_type_for_view(
+        safe_text(body.get("model_type")) or safe_text(getattr(settings, "MODEL_TYPE", "OPENAI")) or "OPENAI"
+    )
 
     try:
         result = service.resend_from_user_message(

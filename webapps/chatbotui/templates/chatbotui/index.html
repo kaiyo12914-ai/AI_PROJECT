@@ -65,10 +65,9 @@
           <div class="config-row">
             <label for="modelTypeSelect">模型</label>
             <select id="modelTypeSelect" class="model-select" aria-label="模型類型">
-              <option value="OLLAMA">OLLAMA</option>
-              <option value="GOOGLE">GOOGLE</option>
-              <option value="OPENAI">OPENAI</option>
-              <option value="LM_STUDIO">LM_STUDIO</option>
+              {% for model_type in allowed_model_types %}
+              <option value="{{ model_type }}">{{ model_type }}</option>
+              {% endfor %}
             </select>
             <select id="modelNameSelect" class="model-select" aria-label="模型名稱" style="display:none; max-width: 150px; text-overflow: ellipsis;">
             </select>

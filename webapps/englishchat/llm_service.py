@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import json
 import logging
+import os
 import time
 from typing import Any, Dict, List
 
@@ -105,7 +106,7 @@ def summarize_for_log(value: Any, limit: int = RAW_LOG_LIMIT) -> str:
 def log_parse_diagnostics(kind: str, purpose: str, attempt: int, out: Any) -> None:
     raw_content = out.content if hasattr(out, "content") else out
     coerced_text = coerce_llm_text(out)
-    logger.warning(
+    logger.debug(
         (
             "englishchat llm %s parse diagnostics purpose=%s attempt=%s "
             "response_type=%s content_type=%s raw_excerpt=%r normalized_excerpt=%r"
@@ -165,7 +166,11 @@ def extract_json_array(raw: str) -> List[Dict[str, Any]]:
         return []
     try:
         parsed = json.loads(text)
-        return parsed if isinstance(parsed, list) else []
+        if isinstance(parsed, list):
+            return [item for item in parsed if isinstance(item, dict)]
+        if isinstance(parsed, dict):
+            return [parsed]
+        return []
     except Exception:
         pass
     start = text.find("[")
@@ -173,10 +178,75 @@ def extract_json_array(raw: str) -> List[Dict[str, Any]]:
     if start >= 0 and end > start:
         try:
             parsed = json.loads(text[start : end + 1])
-            return parsed if isinstance(parsed, list) else []
+            return [item for item in parsed if isinstance(item, dict)] if isinstance(parsed, list) else []
         except Exception:
-            return []
+            pass
+    try:
+        parsed = ast.literal_eval(text)
+        if isinstance(parsed, list):
+            return [item for item in parsed if isinstance(item, dict)]
+        if isinstance(parsed, dict):
+            return [parsed]
+    except Exception:
+        pass
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        snippet = text[start : end + 1]
+        try:
+            parsed = json.loads(snippet)
+            return [parsed] if isinstance(parsed, dict) else []
+        except Exception:
+            try:
+                parsed = ast.literal_eval(snippet)
+                return [parsed] if isinstance(parsed, dict) else []
+            except Exception:
+                return []
     return []
+
+
+def _openai_array_schema() -> Dict[str, Any]:
+    return {
+        "name": "englishchat_question_array",
+        "schema": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": True,
+                "properties": {
+                    "prompt_text": {"type": "string"},
+                    "choices_json": {"type": "array", "items": {"type": "string"}},
+                    "words_json": {"type": "array"},
+                    "answer_text": {"type": "string"},
+                    "explanation_zh": {"type": "string"},
+                    "pattern_text": {"type": "string"},
+                    "zh_prompt": {"type": "string"},
+                    "sample_answer": {"type": "string"},
+                    "patterns_json": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["prompt_text", "choices_json", "answer_text"],
+            },
+        },
+    }
+
+
+def try_invoke_structured_json_array(llm: Any, prompt: str) -> List[Dict[str, Any]]:
+    # Default OFF: some environments return 400 for structured output attempts.
+    # Enable only when explicitly requested.
+    if (os.getenv("ENABLE_OPENAI_STRUCTURED_ARRAY") or "").strip() != "1":
+        return []
+    model_type = (os.getenv("MODEL_TYPE") or "").strip().upper()
+    if model_type != "OPENAI":
+        return []
+    if not hasattr(llm, "with_structured_output"):
+        return []
+    try:
+        structured_llm = llm.with_structured_output(_openai_array_schema(), method="json_schema")
+        out = structured_llm.invoke(prompt)
+        return extract_json_array(out)
+    except Exception as exc:
+        logger.debug("englishchat structured output failed error=%s", exc)
+        return []
 
 
 def invoke_json(
@@ -204,7 +274,7 @@ def invoke_json(
                 )
                 return parsed
             last_error = EnglishChatLLMError("empty_or_invalid_json")
-            logger.warning("englishchat llm parse failure purpose=%s attempt=%s", purpose, attempt)
+            logger.info("englishchat llm parse failure purpose=%s attempt=%s", purpose, attempt)
             log_parse_diagnostics("object", purpose, attempt, out)
         except Exception as exc:
             last_error = exc
@@ -230,8 +300,11 @@ def invoke_json_array(
     for attempt in range(1, max_retries + 2):
         try:
             started = time.time()
-            out = llm.invoke(prompt)
-            parsed = extract_json_array(out)
+            out: Any = None
+            parsed = try_invoke_structured_json_array(llm, prompt)
+            if not parsed:
+                out = llm.invoke(prompt)
+                parsed = extract_json_array(out)
             if parsed:
                 logger.info(
                     "englishchat llm array success purpose=%s attempt=%s duration_ms=%s",
@@ -241,9 +314,12 @@ def invoke_json_array(
                 )
                 return parsed
             last_error = EnglishChatLLMError("empty_or_invalid_json_array")
-            logger.warning("englishchat llm array parse failure purpose=%s attempt=%s", purpose, attempt)
-            log_parse_diagnostics("array", purpose, attempt, out)
-            repaired_raw = coerce_llm_text(out)
+            logger.info("englishchat llm array parse failure purpose=%s attempt=%s", purpose, attempt)
+            if out is not None:
+                log_parse_diagnostics("array", purpose, attempt, out)
+                repaired_raw = coerce_llm_text(out)
+            else:
+                repaired_raw = ""
             if repaired_raw:
                 try:
                     repair_started = time.time()
@@ -258,7 +334,7 @@ def invoke_json_array(
                             round((time.time() - repair_started) * 1000),
                         )
                         return repaired
-                    logger.warning("englishchat llm array repair parse failure purpose=%s attempt=%s", purpose, attempt)
+                    logger.info("englishchat llm array repair parse failure purpose=%s attempt=%s", purpose, attempt)
                     log_parse_diagnostics("array_repair", purpose, attempt, repair_out)
                 except Exception as repair_exc:
                     logger.warning(

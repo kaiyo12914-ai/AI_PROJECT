@@ -434,13 +434,24 @@
     if (!current || state.sending) return;
     const opts = options || {};
     const payload = getConfigPayloadFromInputs();
+    const selectedModelType = elements.modelTypeSelect ? String(elements.modelTypeSelect.value || "") : "";
+    const selectedModelName = elements.modelNameSelect ? String(elements.modelNameSelect.value || "") : "";
+    const currentModelType = String(current.model_type || DEFAULT_MODEL_TYPE || "");
+    const currentModelName = String(current.model_name || "");
+    const modelChanged = (
+      selectedModelType &&
+      (selectedModelType !== currentModelType || (selectedModelName && selectedModelName !== currentModelName))
+    );
     const noChange = (
       payload.temperature === normalizeTemperature(current.temperature) &&
       payload.timeout_sec === normalizeTimeout(current.timeout_sec) &&
       payload.system_prompt === normalizePrompt(current.system_prompt)
     );
+    if (modelChanged) {
+      await changeConversationModel(selectedModelType, selectedModelName);
+    }
     if (noChange) {
-      if (opts.manual) setConfigStatus("沒有可儲存的變更", false);
+      if (opts.manual) setConfigStatus(modelChanged ? "Model setting saved" : "沒有可儲存的變更", false);
       return;
     }
 
@@ -481,7 +492,7 @@
     current.chat_mode = updated.chat_mode || "GENERAL";
     current.rag_source = updated.rag_source || "";
     await loadPromptHistory(current.id);
-    setConfigStatus("已恢復個人預設", false);
+    setConfigStatus("已恢復環境預設", false);
     render();
   }
 
@@ -878,6 +889,7 @@
         body: JSON.stringify({
           conversation_id: current.id,
           model_type: current.model_type || DEFAULT_MODEL_TYPE,
+          model_name: current.model_name || DEFAULT_MODEL_NAME || "",
           message: text,
         }),
       });
@@ -1005,21 +1017,19 @@
   if (elements.modelTypeSelect) {
     elements.modelTypeSelect.addEventListener("change", async function () {
       const selectedType = elements.modelTypeSelect.value;
-      let selectedName = "";
       if (supportsModelNameSelection(selectedType)) {
         const options = await ensureModelOptionsForType(selectedType);
         elements.modelNameSelect.style.display = "inline-block";
         fillModelNameSelect(options, resolveModelName(selectedType));
-        selectedName = elements.modelNameSelect.value;
       } else {
         elements.modelNameSelect.style.display = "none";
       }
-      changeConversationModel(selectedType, selectedName).catch(handleUiError);
+      setConfigStatus("模型設定已變更，請按「儲存設定」", false);
     });
   }
   if (elements.modelNameSelect) {
     elements.modelNameSelect.addEventListener("change", function () {
-      changeConversationModel(elements.modelTypeSelect.value, elements.modelNameSelect.value).catch(handleUiError);
+      setConfigStatus("模型設定已變更，請按「儲存設定」", false);
     });
   }
   if (elements.saveConfigBtn) {

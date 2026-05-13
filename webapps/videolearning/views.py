@@ -96,6 +96,8 @@ def _read_json(request: HttpRequest) -> dict | None:
 def _as_video_dict(video: VideoAsset) -> dict:
     latest_transcript = video.transcripts.order_by("-updated_at", "-id").first()
     chapters = list(video.chapters.order_by("order_index", "id"))
+    prefix= str(getattr(settings, 'PROXY_PREFIX'))
+
     return {
         "id": video.id,
         "title": video.title,
@@ -107,7 +109,7 @@ def _as_video_dict(video: VideoAsset) -> dict:
         ),
         "tags": [{"id": t.id, "name": t.name} for t in video.tags.all().order_by("name")],
         "file_path": video.file_path,
-        "thumbnail_path": video.thumbnail_path,
+        "thumbnail_path": prefix+video.thumbnail_path,
         "duration_seconds": video.duration_seconds,
         "width": video.width,
         "height": video.height,

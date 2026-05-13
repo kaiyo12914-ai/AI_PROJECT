@@ -18,7 +18,12 @@
 
 ```powershell
 pg_dump -h 192.168.0.137 -p 5432 -U projectnotes_user -d projectnotes -t videolearning_category -t videolearning_tag -t videolearning_asset -t videolearning_asset_tags -t videolearning_playlist -t videolearning_playlist_item -t videolearning_transcript -t videolearning_chapter -F c -f videolearning_tables_full.dump
+
+pg_dump -h 192.168.0.137 -p 5432 -U projectnotes_user -d projectnotes --no-owner --no-privileges -t videolearning_category -t videolearning_tag -t videolearning_asset -t videolearning_asset_tags -t videolearning_playlist -t videolearning_playlist_item -t videolearning_transcript -t videolearning_chapter -F c -f videolearning_tables_full.dump
+
 ```
+pg_dump -h 192.168.0.137 -p 5432 -U projectnotes_user -d projectnotes --no-owner --no-privileges -t englishchat_question_bank -F c -f englishchat_question_bank_full.dump
+
 
 說明：
 - `-F c` 為 custom format，含 schema + data。
@@ -29,6 +34,11 @@ pg_dump -h 192.168.0.137 -p 5432 -U projectnotes_user -d projectnotes -t videole
 
 ```powershell
 pg_restore --clean --if-exists --no-owner --no-privileges -h 192.168.0.137 -p 5432 -U projectnotes_user -d projectnotes .\videolearning_tables_full.dump
+
+
+
+pg_restore -h 192.168.0.137 -p 5432 -U projectnotes_user -d projectnotes --no-owner --no-privileges -t englishchat_question_bank englishchat_question_bank_full.dump
+
 ---
 
 說明：
