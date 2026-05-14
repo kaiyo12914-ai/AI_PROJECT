@@ -75,6 +75,33 @@
   var _allVideos = [];
   var _activeCategory = TEXT.ALL;
 
+  function canDeleteVideo() {
+    var body = document.body || {};
+    var v = String((body.dataset && body.dataset.canDeleteVideo) || "");
+    if (v === "1") return true;
+    var isAdmin = String((body.dataset && body.dataset.isAdmin) || "");
+    return isAdmin === "1";
+  }
+
+  async function deleteVideoById(videoId) {
+    var ok = window.confirm("確定要刪除這部影片嗎？");
+    if (!ok) return;
+    try {
+      var out = await fetchJson(apiurl("/videolearning/api/videos/" + String(videoId) + "/delete/"), {
+        method: "POST",
+        headers: csrfHeaders({ "Content-Type": "application/json" }),
+        body: "{}"
+      });
+      if (!out.res.ok || !out.data || !out.data.ok) {
+        window.alert((out.data && out.data.error && out.data.error.message) || "刪除失敗");
+        return;
+      }
+      await loadVideoList();
+    } catch (_err) {
+      window.alert("刪除失敗");
+    }
+  }
+
   function renderVideoList(videos) {
     var listEl = document.getElementById("video-list");
     if (!listEl) return;
@@ -112,6 +139,20 @@
       meta.className = "vl-video-card-meta";
       meta.innerHTML = TEXT.LABEL_CATEGORY + toCategory(v) + " <br> " + TEXT.LABEL_TAGS + toTagLine(v.tags) + "<br>" + (v.quality_text || "");
       body.appendChild(meta);
+
+      if (canDeleteVideo()) {
+        var actions = document.createElement("div");
+        actions.className = "vl-actions";
+        var delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "vl-danger";
+        delBtn.textContent = "刪除";
+        delBtn.addEventListener("click", function () {
+          deleteVideoById(v.id);
+        });
+        actions.appendChild(delBtn);
+        body.appendChild(actions);
+      }
 
       li.appendChild(body);
       listEl.appendChild(li);
@@ -352,7 +393,7 @@
 
       var player = document.getElementById("detail-player");
       if (player) {
-        player.src = apiurl(v.file_path);
+        player.src = apiurl("/videolearning/api/videos/" + String(videoId) + "/stream/");
         player.load();
       }
     } catch (_err) {
@@ -376,8 +417,122 @@
     bindYoutubeModeTabs();
   }
 
+  function bindDetailPlayerControls() {
+    var player = document.getElementById("detail-player");
+    var progress = document.getElementById("detail-progress");
+    var timeText = document.getElementById("detail-time");
+    var fullscreenBtn = document.getElementById("detail-fullscreen-btn");
+    if (!player || !progress || !timeText || !fullscreenBtn) return;
+
+    var isSeeking = false;
+    var pendingSeekRatio = null;
+
+    function pad2(n) {
+      return String(n).padStart(2, "0");
+    }
+
+    function formatTime(sec) {
+      if (!isFinite(sec) || sec < 0) return "00:00";
+      var s = Math.floor(sec);
+      var m = Math.floor(s / 60);
+      var r = s % 60;
+      return pad2(m) + ":" + pad2(r);
+    }
+
+    function syncProgressFromPlayer() {
+      if (isSeeking) return;
+      if (player.duration && isFinite(player.duration) && player.duration > 0) {
+        progress.value = String((player.currentTime / player.duration) * 100);
+      } else {
+        progress.value = "0";
+      }
+      timeText.textContent = formatTime(player.currentTime) + " / " + formatTime(player.duration);
+    }
+
+    function seekByProgressValue() {
+      if (!player.duration || !isFinite(player.duration) || player.duration <= 0) {
+        pendingSeekRatio = Math.max(0, Math.min(1, Number(progress.value || 0) / 100));
+        return;
+      }
+      var pct = Number(progress.value || 0) / 100;
+      player.currentTime = Math.max(0, Math.min(player.duration, pct * player.duration));
+      timeText.textContent = formatTime(player.currentTime) + " / " + formatTime(player.duration);
+    }
+
+    function setProgressFromClientX(clientX) {
+      var rect = progress.getBoundingClientRect();
+      if (!rect || rect.width <= 0) return;
+      var ratio = (clientX - rect.left) / rect.width;
+      ratio = Math.max(0, Math.min(1, ratio));
+      progress.value = String(ratio * 100);
+      seekByProgressValue();
+    }
+
+    player.addEventListener("loadedmetadata", function () {
+      if (pendingSeekRatio !== null && isFinite(player.duration) && player.duration > 0) {
+        player.currentTime = Math.max(0, Math.min(player.duration, pendingSeekRatio * player.duration));
+        pendingSeekRatio = null;
+      }
+      syncProgressFromPlayer();
+    });
+    player.addEventListener("timeupdate", syncProgressFromPlayer);
+    player.addEventListener("durationchange", syncProgressFromPlayer);
+
+    progress.addEventListener("mousedown", function (evt) {
+      isSeeking = true;
+      setProgressFromClientX(evt.clientX);
+    });
+    progress.addEventListener("touchstart", function () { isSeeking = true; }, { passive: true });
+    progress.addEventListener("input", seekByProgressValue);
+    progress.addEventListener("click", seekByProgressValue);
+    progress.addEventListener("mousemove", function (evt) {
+      if (!isSeeking) return;
+      setProgressFromClientX(evt.clientX);
+    });
+    document.addEventListener("mousemove", function (evt) {
+      if (!isSeeking) return;
+      setProgressFromClientX(evt.clientX);
+    });
+
+    function finishSeek() {
+      isSeeking = false;
+      seekByProgressValue();
+      syncProgressFromPlayer();
+    }
+
+    progress.addEventListener("change", finishSeek);
+    progress.addEventListener("mouseup", finishSeek);
+    progress.addEventListener("touchend", finishSeek, { passive: true });
+
+    fullscreenBtn.addEventListener("click", function () {
+      var doc = document;
+      var isFs = !!(doc.fullscreenElement || doc.webkitFullscreenElement || doc.msFullscreenElement);
+      if (isFs) {
+        if (doc.exitFullscreen) doc.exitFullscreen();
+        else if (doc.webkitExitFullscreen) doc.webkitExitFullscreen();
+        else if (doc.msExitFullscreen) doc.msExitFullscreen();
+        return;
+      }
+
+      var target = player;
+      try {
+        var p = null;
+        if (target.requestFullscreen) p = target.requestFullscreen();
+        else if (target.webkitRequestFullscreen) p = target.webkitRequestFullscreen();
+        else if (target.msRequestFullscreen) p = target.msRequestFullscreen();
+        else if (player.webkitEnterFullscreen) p = player.webkitEnterFullscreen();
+        if (p && typeof p.catch === "function") {
+          p.catch(function () { setText("detail-meta", "全螢幕切換失敗，請用播放器右下角按鈕。"); });
+        }
+      } catch (_err) {
+        setText("detail-meta", "全螢幕切換失敗，請用播放器右下角按鈕。");
+      }
+    });
+  }
+
   function bootstrap() {
     bindEvents();
+    bindDetailPlayerControls();
     var videoId = document.body.dataset.videoId;
     if (videoId) {
       loadVideoDetail(videoId);

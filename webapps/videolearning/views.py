@@ -9,7 +9,7 @@ from urllib.parse import unquote, urlparse
 from urllib.request import Request, urlopen
 
 from django.db import transaction
-from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.middleware.csrf import get_token
 from django.shortcuts import render
 from django.views.decorators.http import require_GET, require_POST
@@ -40,28 +40,40 @@ from .services import (
 
 @require_node("videolearning")
 def index(request: HttpRequest) -> HttpResponse:
+    login_user = str(getattr(request, "login_user", None) or request.session.get("login_user") or "").strip()
+    user = getattr(request, "user", None)
+    is_admin = bool(user and (getattr(user, "is_staff", False) or getattr(user, "is_superuser", False)))
+    can_delete_video = is_admin or login_user.lower() == "h121356578"
     return render(
         request,
         "videolearning/index.html",
-        {"csrf_token": get_token(request), "active_tab": "query"},
+        {"csrf_token": get_token(request), "active_tab": "query", "can_delete_video": can_delete_video},
     )
 
 
 @require_node("videolearning")
 def import_page(request: HttpRequest) -> HttpResponse:
+    login_user = str(getattr(request, "login_user", None) or request.session.get("login_user") or "").strip()
+    user = getattr(request, "user", None)
+    is_admin = bool(user and (getattr(user, "is_staff", False) or getattr(user, "is_superuser", False)))
+    can_delete_video = is_admin or login_user.lower() == "h121356578"
     return render(
         request,
         "videolearning/index.html",
-        {"csrf_token": get_token(request), "active_tab": "import"},
+        {"csrf_token": get_token(request), "active_tab": "import", "can_delete_video": can_delete_video},
     )
 
 
 @require_node("videolearning")
 def transcode_page(request: HttpRequest) -> HttpResponse:
+    login_user = str(getattr(request, "login_user", None) or request.session.get("login_user") or "").strip()
+    user = getattr(request, "user", None)
+    is_admin = bool(user and (getattr(user, "is_staff", False) or getattr(user, "is_superuser", False)))
+    can_delete_video = is_admin or login_user.lower() == "h121356578"
     return render(
         request,
         "videolearning/index.html",
-        {"csrf_token": get_token(request), "active_tab": "transcode"},
+        {"csrf_token": get_token(request), "active_tab": "transcode", "can_delete_video": can_delete_video},
     )
 
 
@@ -265,6 +277,44 @@ def _resolve_media_abs_path(file_path: str) -> Path | None:
     return None
 
 
+def _parse_http_range(range_header: str, file_size: int) -> tuple[int, int] | None:
+    raw = str(range_header or "").strip()
+    if not raw.startswith("bytes="):
+        return None
+    part = raw[6:].split(",", 1)[0].strip()
+    if "-" not in part:
+        return None
+    start_s, end_s = part.split("-", 1)
+    try:
+        if start_s == "":
+            suffix_len = int(end_s)
+            if suffix_len <= 0:
+                return None
+            start = max(0, file_size - suffix_len)
+            end = file_size - 1
+            return (start, end)
+        start = int(start_s)
+        end = int(end_s) if end_s else file_size - 1
+    except Exception:
+        return None
+    if start < 0 or end < start or start >= file_size:
+        return None
+    end = min(end, file_size - 1)
+    return (start, end)
+
+
+def _iter_file_range(path: Path, start: int, end: int, chunk_size: int = 64 * 1024):
+    with path.open("rb") as f:
+        f.seek(start)
+        remaining = end - start + 1
+        while remaining > 0:
+            data = f.read(min(chunk_size, remaining))
+            if not data:
+                break
+            remaining -= len(data)
+            yield data
+
+
 def _make_media_url(abs_path: Path) -> str:
     rel_from_media = abs_path.relative_to(Path(settings.MEDIA_ROOT))
     rel_url = "/".join(rel_from_media.parts)
@@ -351,6 +401,41 @@ def api_video_detail(request: HttpRequest, video_id: int) -> JsonResponse:
     if not video:
         return _err("VIDEO_NOT_FOUND", "Video not found.", status=404)
     return _ok({"video": _as_video_dict(video)})
+
+
+@require_GET
+@require_node("videolearning", api=True)
+def api_video_stream(request: HttpRequest, video_id: int) -> HttpResponse:
+    video = VideoAsset.objects.filter(id=video_id).first()
+    if not video:
+        return _err("VIDEO_NOT_FOUND", "Video not found.", status=404)
+
+    abs_path = _resolve_media_abs_path(video.file_path)
+    if abs_path is None or not abs_path.exists() or not abs_path.is_file():
+        return _err("VIDEO_FILE_NOT_FOUND", "Video file not found.", status=404)
+
+    file_size = abs_path.stat().st_size
+    range_header = request.headers.get("Range", "")
+    parsed = _parse_http_range(range_header, file_size) if range_header else None
+
+    content_type = "video/mp4"
+    if parsed is None:
+        resp = StreamingHttpResponse(_iter_file_range(abs_path, 0, file_size - 1), content_type=content_type)
+        resp["Content-Length"] = str(file_size)
+        resp["Accept-Ranges"] = "bytes"
+        return resp
+
+    start, end = parsed
+    length = end - start + 1
+    resp = StreamingHttpResponse(
+        _iter_file_range(abs_path, start, end),
+        status=206,
+        content_type=content_type,
+    )
+    resp["Content-Length"] = str(length)
+    resp["Accept-Ranges"] = "bytes"
+    resp["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+    return resp
 
 
 @require_POST
@@ -576,6 +661,14 @@ def api_video_delete(request: HttpRequest, video_id: int) -> JsonResponse:
     video = VideoAsset.objects.filter(id=video_id).first()
     if not video:
         return _err("VIDEO_NOT_FOUND", "Video not found.", status=404)
+
+    request_owner = _resolve_owner(request)
+    user = getattr(request, "user", None)
+    is_superuser = bool(user and getattr(user, "is_superuser", False))
+    is_staff = bool(user and getattr(user, "is_staff", False))
+    is_admin = is_superuser or is_staff
+    if not is_admin and request_owner != str(video.owner or "").strip():
+        return _err("FORBIDDEN", "You can only delete your own videos.", status=403)
 
     abs_path = _resolve_media_abs_path(video.file_path)
     file_deleted = False

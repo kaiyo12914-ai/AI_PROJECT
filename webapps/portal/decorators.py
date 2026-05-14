@@ -125,7 +125,39 @@ def _is_external_env() -> bool:
     return env_name == "EXT"
 
 
-def _should_bypass_acl_group(node: str, user: Any) -> bool:
+def _is_internal_env() -> bool:
+    env_name = str(
+        getattr(settings, "ENV_NAME", "") or os.getenv("ENV", "")
+    ).strip().upper()
+    return env_name == "INT"
+
+
+def _current_user_id(request: HttpRequest, user: Any) -> str:
+    # Prefer login_user for intranet SSO/session identity.
+    login_user = str(getattr(request, "login_user", None) or request.session.get("login_user") or "").strip()
+    if login_user:
+        return login_user
+    return str(getattr(user, "username", "") or "").strip()
+
+
+def _should_bypass_acl_group(node: str, user: Any, request: HttpRequest | None = None) -> bool:
+    # In internal environment, allow ACL group bypass for selected users and nodes.
+    # Default target: USER_ID=H121356578 on node=videolearning.
+    if _is_internal_env() and request is not None:
+        bypass_nodes_int = _as_node_set(getattr(settings, "PORTAL_ACL_BYPASS_NODES_INT", None))
+        if not bypass_nodes_int:
+            bypass_nodes_int = {"videolearning"}
+        bypass_users_int = _as_node_set(getattr(settings, "PORTAL_ACL_BYPASS_USERS_INT", None))
+        if not bypass_users_int:
+            bypass_users_int = {"h121356578"}
+        node_key = (node or "").strip().lower()
+        user_id = _current_user_id(request, user).lower()
+        has_identity = _is_authenticated_user(user) or bool(
+            str(getattr(request, "login_user", None) or request.session.get("login_user") or "").strip()
+        )
+        if node_key in bypass_nodes_int and user_id in bypass_users_int and has_identity:
+            return True
+
     # In external environment, skip ACL group check for selected nodes.
     if not _is_external_env():
         return False
@@ -151,7 +183,7 @@ def require_node(node: str, api: bool = False) -> Callable[[T], T]:
             wants_json = bool(api or _wants_json(request))
             is_auth = _is_authenticated_user(user)
 
-            if _should_bypass_acl_group(node, user):
+            if _should_bypass_acl_group(node, user, request):
                 return view_func(request, *args, **kwargs)
 
             # ✅ 關鍵：不要先擋未登入

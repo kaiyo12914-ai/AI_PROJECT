@@ -12,6 +12,7 @@ urlpatterns = [
     path("api/health/", views.api_health, name="api_health"),
     path("api/videos/", views.api_video_list, name="api_video_list"),
     path("api/videos/<int:video_id>/", views.api_video_detail, name="api_video_detail"),
+    path("api/videos/<int:video_id>/stream/", views.api_video_stream, name="api_video_stream"),
     path("api/videos/upload/", views.api_video_upload, name="api_video_upload"),
     path("api/videos/import-youtube/", views.api_video_import_youtube, name="api_video_import_youtube"),
     path("api/videos/create/", views.api_video_create, name="api_video_create"),

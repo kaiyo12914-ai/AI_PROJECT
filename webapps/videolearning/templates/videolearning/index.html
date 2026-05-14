@@ -10,7 +10,7 @@
   <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
   <script defer src="{% custom_static 'videolearning/js/videolearning.js' %}"></script>
 </head>
-<body data-base-url="{{ request.script_name }}" data-is-admin="{% if request.user.is_staff %}1{% else %}0{% endif %}">
+<body data-base-url="{{ request.script_name }}" data-is-admin="{% if request.user.is_staff %}1{% else %}0{% endif %}" data-can-delete-video="{% if can_delete_video %}1{% else %}0{% endif %}">
   <main class="vl-shell">
     <h1>教學影片中心</h1>
     <p class="vl-subtitle">AI 教學影片管理</p>
