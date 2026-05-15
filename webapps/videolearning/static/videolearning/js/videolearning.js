@@ -119,11 +119,15 @@
 
       var thumbContainer = document.createElement("div");
       thumbContainer.className = "vl-video-thumb-container";
+      var thumbLink = document.createElement("a");
+      thumbLink.href = apiurl("/videolearning/videos/" + v.id + "/");
+      thumbLink.className = "vl-video-thumb-link";
       var img = document.createElement("img");
       img.className = "vl-video-thumb";
       img.src = v.thumbnail_path || apiurl("/static/videolearning/img/placeholder.png");
       img.alt = v.title;
-      thumbContainer.appendChild(img);
+      thumbLink.appendChild(img);
+      thumbContainer.appendChild(thumbLink);
       li.appendChild(thumbContainer);
 
       var body = document.createElement("div");

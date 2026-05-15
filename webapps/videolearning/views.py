@@ -16,6 +16,7 @@ from django.views.decorators.http import require_GET, require_POST
 from django.conf import settings
 
 from webapps.portal.decorators import require_node
+from webapps.portal.identity import resolve_effective_user_id
 from .models import (
     VideoAsset,
     VideoCategory,
@@ -38,43 +39,38 @@ from .services import (
 )
 
 
-@require_node("videolearning")
-def index(request: HttpRequest) -> HttpResponse:
-    login_user = str(getattr(request, "login_user", None) or request.session.get("login_user") or "").strip()
+def _can_delete_video(request: HttpRequest) -> bool:
     user = getattr(request, "user", None)
     is_admin = bool(user and (getattr(user, "is_staff", False) or getattr(user, "is_superuser", False)))
-    can_delete_video = is_admin or login_user.lower() == "h121356578"
+    current_user_id = resolve_effective_user_id(request, user).lower()
+    return is_admin or current_user_id == "h121356578"
+
+
+def _render_index_with_tab(request: HttpRequest, active_tab: str) -> HttpResponse:
     return render(
         request,
         "videolearning/index.html",
-        {"csrf_token": get_token(request), "active_tab": "query", "can_delete_video": can_delete_video},
+        {
+            "csrf_token": get_token(request),
+            "active_tab": active_tab,
+            "can_delete_video": _can_delete_video(request),
+        },
     )
+
+
+@require_node("videolearning")
+def index(request: HttpRequest) -> HttpResponse:
+    return _render_index_with_tab(request, "query")
 
 
 @require_node("videolearning")
 def import_page(request: HttpRequest) -> HttpResponse:
-    login_user = str(getattr(request, "login_user", None) or request.session.get("login_user") or "").strip()
-    user = getattr(request, "user", None)
-    is_admin = bool(user and (getattr(user, "is_staff", False) or getattr(user, "is_superuser", False)))
-    can_delete_video = is_admin or login_user.lower() == "h121356578"
-    return render(
-        request,
-        "videolearning/index.html",
-        {"csrf_token": get_token(request), "active_tab": "import", "can_delete_video": can_delete_video},
-    )
+    return _render_index_with_tab(request, "import")
 
 
 @require_node("videolearning")
 def transcode_page(request: HttpRequest) -> HttpResponse:
-    login_user = str(getattr(request, "login_user", None) or request.session.get("login_user") or "").strip()
-    user = getattr(request, "user", None)
-    is_admin = bool(user and (getattr(user, "is_staff", False) or getattr(user, "is_superuser", False)))
-    can_delete_video = is_admin or login_user.lower() == "h121356578"
-    return render(
-        request,
-        "videolearning/index.html",
-        {"csrf_token": get_token(request), "active_tab": "transcode", "can_delete_video": can_delete_video},
-    )
+    return _render_index_with_tab(request, "transcode")
 
 
 @require_node("videolearning")
@@ -242,13 +238,7 @@ def _parse_transcript_by_format(fmt: str, content: str) -> list[dict]:
 
 
 def _resolve_owner(request: HttpRequest) -> str:
-    owner = ""
-    user = getattr(request, "user", None)
-    if user and getattr(user, "is_authenticated", False):
-        owner = getattr(user, "username", "") or ""
-    if not owner:
-        owner = str(request.session.get("login_user") or "").strip()
-    return owner
+    return resolve_effective_user_id(request)
 
 
 def _resolve_media_abs_path(file_path: str) -> Path | None:
@@ -663,10 +653,13 @@ def api_video_delete(request: HttpRequest, video_id: int) -> JsonResponse:
         return _err("VIDEO_NOT_FOUND", "Video not found.", status=404)
 
     request_owner = _resolve_owner(request)
+    login_user = resolve_effective_user_id(request).lower()
+    env_name = str(getattr(settings, "ENV_NAME", "EXT") or "EXT").strip().upper()
     user = getattr(request, "user", None)
     is_superuser = bool(user and getattr(user, "is_superuser", False))
     is_staff = bool(user and getattr(user, "is_staff", False))
-    is_admin = is_superuser or is_staff
+    is_int_bypass_user = env_name == "INT" and login_user == "h121356578"
+    is_admin = is_superuser or is_staff or is_int_bypass_user
     if not is_admin and request_owner != str(video.owner or "").strip():
         return _err("FORBIDDEN", "You can only delete your own videos.", status=403)
 
@@ -833,12 +826,7 @@ def api_playlist_create(request: HttpRequest) -> JsonResponse:
     if visibility not in {x for x, _ in VideoPlaylist.VISIBILITY_CHOICES}:
         return _err("INVALID_VISIBILITY", "Invalid visibility.", status=400)
 
-    owner = ""
-    user = getattr(request, "user", None)
-    if user and getattr(user, "is_authenticated", False):
-        owner = getattr(user, "username", "") or ""
-    if not owner:
-        owner = str(request.session.get("login_user") or "").strip()
+    owner = _resolve_owner(request)
 
     playlist = VideoPlaylist.objects.create(
         title=title,

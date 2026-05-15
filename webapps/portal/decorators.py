@@ -9,6 +9,7 @@ from django.conf import settings
 from django.http import HttpResponseForbidden, JsonResponse, HttpRequest, HttpResponse
 
 from webapps.portal.acl import can_access
+from webapps.portal.identity import resolve_effective_user_id
 
 T = TypeVar("T", bound=Callable[..., HttpResponse])
 
@@ -132,14 +133,6 @@ def _is_internal_env() -> bool:
     return env_name == "INT"
 
 
-def _current_user_id(request: HttpRequest, user: Any) -> str:
-    # Prefer login_user for intranet SSO/session identity.
-    login_user = str(getattr(request, "login_user", None) or request.session.get("login_user") or "").strip()
-    if login_user:
-        return login_user
-    return str(getattr(user, "username", "") or "").strip()
-
-
 def _should_bypass_acl_group(node: str, user: Any, request: HttpRequest | None = None) -> bool:
     # In internal environment, allow ACL group bypass for selected users and nodes.
     # Default target: USER_ID=H121356578 on node=videolearning.
@@ -151,10 +144,8 @@ def _should_bypass_acl_group(node: str, user: Any, request: HttpRequest | None =
         if not bypass_users_int:
             bypass_users_int = {"h121356578"}
         node_key = (node or "").strip().lower()
-        user_id = _current_user_id(request, user).lower()
-        has_identity = _is_authenticated_user(user) or bool(
-            str(getattr(request, "login_user", None) or request.session.get("login_user") or "").strip()
-        )
+        user_id = resolve_effective_user_id(request, user).lower()
+        has_identity = _is_authenticated_user(user) or bool(resolve_effective_user_id(request, user))
         if node_key in bypass_nodes_int and user_id in bypass_users_int and has_identity:
             return True
 

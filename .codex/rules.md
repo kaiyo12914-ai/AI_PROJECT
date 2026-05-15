@@ -370,4 +370,20 @@ DEV_LOGIN_NAME=
 ## PostgreSQL Default Policy (Mandatory)
 - `webapps/videolearning` MUST use PostgreSQL (via Django `DATABASES["default"]` when `DATABASE_URL` is set).
 - Going forward, all newly added app tables in this repository MUST be created in PostgreSQL, not SQLite.
+
+## Shared Utility Rule (Mandatory)
+- Do not create duplicate helper functions with the same responsibility in different modules.
+- Before adding a new helper, search existing modules for equivalent logic and reuse it.
+- If reused across modules, move it into a shared utility module (example: `webapps/portal/identity.py`).
+- `decorators.py` and `middleware.py` must use shared identity resolution, not separate per-file implementations.
+
+## No Duplicate Responsibility Functions Rule (Mandatory)
+- 禁止在不同檔案重複建立「同責任」函式（同輸入/同目的/同輸出語意）。
+- 新增函式前必須先全文搜尋既有實作（至少以 `rg` 搜函式名、關鍵欄位、主要流程關鍵字）。
+- 若已存在等價邏輯：必須直接重用；不得複製貼上再微調命名。
+- 若多模組都需要：必須抽到共用模組（例如 `webapps/<node>/identity.py`、`utils.py`、`services/common.py`）。
+- PR/提交前需完成：
+- `1.` 列出重用或抽共用的函式位置
+- `2.` 移除舊重複函式或改為轉呼叫共用函式
+- `3.` 確認呼叫端行為一致（必要時補測試）
 ```

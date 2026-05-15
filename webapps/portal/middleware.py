@@ -13,6 +13,7 @@ from typing import Optional, Tuple, Dict, Any
 from django.conf import settings
 from django.utils import timezone
 
+from webapps.portal.identity import resolve_effective_user_id
 from webapps.portal.models import PortalUsageLog
 from webapps.portal.oracle_emp import get_emp_full_info
 
@@ -515,7 +516,7 @@ class PortalUsageLogMiddleware:
             program_code = _match_program_code(norm_path, request=request)
             if not program_code: return response
 
-            user_id = (getattr(request, "login_user", "") or "").strip()
+            user_id = resolve_effective_user_id(request)
             user_name = (getattr(request, "login_user_name", "") or "").strip()
             if user_id and (not user_name) and _env_bool("EMP_NAME_LOOKUP", default=True):
                 name2 = _cache_get_emp_name(user_id)
