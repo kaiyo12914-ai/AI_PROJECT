@@ -387,3 +387,14 @@ DEV_LOGIN_NAME=
 - `2.` 移除舊重複函式或改為轉呼叫共用函式
 - `3.` 確認呼叫端行為一致（必要時補測試）
 ```
+
+## Vibe Coding 開發環境與 Git 版本控管（Mandatory）
+- AI 工具在本專案進行 Vibe coding 前，必讀：`H:\AI\AI_TOOLS\.md\開發環境與Git版本控管.md`。
+- 此文件為 A/B 雙機開發、Git 中樞、WSL/Windows 同步腳本與日常版本操作之標準作業依據。
+- 未閱讀或未遵循該文件流程之變更，視為流程不合規，不得合併。
+
+## Git Commit 腳本聯動規則（Mandatory）
+- AI 工具協助執行 `git commit` 時，必須一併執行版本控管腳本並確認結果。
+- Windows 流程：先執行 `git-sync.ps1`，提交後執行 `git-push.ps1`。
+- WSL 流程：先執行 `git-sync.sh`，提交後執行 `git-push.sh`。
+- 若腳本因衝突、未暫存變更或其他原因失敗，必須先排除問題後重跑，直到同步與推送狀態明確。
