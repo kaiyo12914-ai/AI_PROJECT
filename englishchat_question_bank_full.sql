@@ -1706,6 +1706,12 @@ COPY public.englishchat_question_bank (id, question_id, topic_key, mode, level, 
 4125	seed-airport-translation-advanced-012	airport	translation	advanced		[]	[]		練習 will 句型。 主題詞是「航班狀態」。		我明天會確認航班狀態。	I will verify the flight status tomorrow.	["I will verify ...", "tomorrow"]	12	t	2026-05-04 09:47:11.122666+08	2026-05-04 09:47:11.122666+08
 \.
 
+-- Ensure imported rows are enabled by default for all future restores/imports.
+UPDATE public.englishchat_question_bank
+SET is_active = TRUE,
+    updated_at = NOW()
+WHERE is_active IS DISTINCT FROM TRUE;
+
 
 --
 -- Name: englishchat_question_bank_id_seq; Type: SEQUENCE SET; Schema: public; Owner: projectnotes_user
@@ -1742,4 +1748,3 @@ CREATE INDEX idx_englishchat_qb_topic_mode_level ON public.englishchat_question_
 --
 
 \unrestrict mec4uXaqDkpW6glfW9kLaapZr40ONDZkfOnEzjQdTZYcdMvDWzzYXKl1lq2D8Zq
-

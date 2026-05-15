@@ -308,6 +308,11 @@ if (-not (Get-Command New-ZipFromFileList -ErrorAction SilentlyContinue)) {
     }
   }
 }
+
+# Backward-compatible alias for environments/scripts that call underscore-style name.
+function New_ZipFromFileList([string]$ZipPath, $Files, [string]$BasePath) {
+  New-ZipFromFileList -ZipPath $ZipPath -Files $Files -BasePath $BasePath
+}
 New-ZipFromFileList -ZipPath $ZipPath -Files $files -BasePath $BasePath
 
 # -------------------------
@@ -355,6 +360,43 @@ function Get-RelPath($Base, $Full) {
   if ($Full.Length -le $Base.Length) { return "" }
   $rel = $Full.Substring($Base.Length)
   return $rel.TrimStart('\','/')
+}
+
+function New-ZipFromFileList([string]$ZipPath, $Files, [string]$BasePath) {
+  if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force }
+  if ($null -eq $Files -or $Files.Count -eq 0) { throw "No files to zip." }
+
+  Add-Type -AssemblyName System.IO.Compression
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+  $fs = $null
+  $zip = $null
+  try {
+    $fs = [System.IO.File]::Open($ZipPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+    $zip = New-Object System.IO.Compression.ZipArchive($fs, [System.IO.Compression.ZipArchiveMode]::Create, $false)
+    foreach ($f in $Files) {
+      $rel = Get-RelPath $BasePath $f.FullName
+      if ([string]::IsNullOrWhiteSpace($rel)) { continue }
+      $entry = $zip.CreateEntry($rel.Replace('\','/'), [System.IO.Compression.CompressionLevel]::Optimal)
+      $inStream = $null
+      $outStream = $null
+      try {
+        $inStream = [System.IO.File]::OpenRead($f.FullName)
+        $outStream = $entry.Open()
+        $inStream.CopyTo($outStream)
+      } finally {
+        if ($outStream) { $outStream.Dispose() }
+        if ($inStream) { $inStream.Dispose() }
+      }
+    }
+  } finally {
+    if ($zip) { $zip.Dispose() }
+    if ($fs) { $fs.Dispose() }
+  }
+}
+
+function New_ZipFromFileList([string]$ZipPath, $Files, [string]$BasePath) {
+  New-ZipFromFileList -ZipPath $ZipPath -Files $Files -BasePath $BasePath
 }
 
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -463,7 +505,7 @@ if ($overwriteCount -gt 0) {
   if (Test-Path $BackupZip) { Remove-Item $BackupZip -Force }
   $backupFiles = Get-ChildItem -Path $BackupStage -Recurse -File
   if ($backupFiles -and $backupFiles.Count -gt 0) {
-    New-ZipFromFileList -ZipPath $BackupZip -Files $backupFiles -BasePath $BackupStage
+    New_ZipFromFileList -ZipPath $BackupZip -Files $backupFiles -BasePath $BackupStage
   }
   Write-Host ("Backed up overwritten files: " + $overwriteCount)
   Write-Host ("Backup zip: " + $BackupZip)

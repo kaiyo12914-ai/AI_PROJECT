@@ -106,6 +106,11 @@
     appendDebugLine(`[${scope}] source=${data.source || "unknown"} reason=${data.fallback_reason}`);
   }
 
+  function bankNoticeText(data) {
+    if (!data || !data.bank_exhausted) return "";
+    return data.bank_notice || "題庫已用完改由 AI出題";
+  }
+
   function currentTopic() {
     return (customTopic.value || "").trim() || topicSelect.value;
   }
@@ -449,7 +454,7 @@
     quizQuestion.textContent = quiz.question || "";
     rememberSpeakText(quiz.question || "");
     quizChoices.innerHTML = "";
-    quizResult.textContent = "";
+    quizResult.textContent = bankNoticeText(quiz);
     (quiz.choices || []).forEach((choice) => {
       const btn = document.createElement("button");
       btn.type = "button";
@@ -535,7 +540,7 @@
     reorderPrompt.textContent = quiz.prompt || "Put the words in order.";
     rememberSpeakText(quiz.answer || "");
     reorderAnswer.textContent = "";
-    reorderResult.textContent = "";
+    reorderResult.textContent = bankNoticeText(quiz);
     reorderWords.innerHTML = "";
     (quiz.words || []).forEach((word) => {
       const chip = document.createElement("button");
@@ -623,7 +628,7 @@
     translatePrompt.textContent = quiz.zh_prompt || "";
     rememberSpeakText(quiz.sample_answer || "");
     translateInput.value = "";
-    translateResult.textContent = "";
+    translateResult.textContent = bankNoticeText(quiz);
     translatePatterns.innerHTML = "";
     (quiz.patterns || []).forEach((pattern) => {
       const chip = document.createElement("button");

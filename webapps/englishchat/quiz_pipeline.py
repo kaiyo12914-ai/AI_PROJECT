@@ -4,7 +4,7 @@ import random
 from typing import Any, Callable, Dict, List
 
 from .llm_service import EnglishChatLLMError, invoke_json, safe_text
-from .services import get_db_question, get_seed_question
+from .services import get_db_question
 
 LEVEL_PROFILE = {
     "beginner": "Use short sentences, high-frequency words, and slower pacing.",
@@ -250,15 +250,13 @@ def run_quiz_pipeline(
     normalize: Callable[[Dict[str, Any], str], Dict[str, Any]],
     prompt_builder: Callable[[str, str], str],
 ) -> Dict[str, Any]:
+    bank_notice = "題庫已用完改由 AI出題"
     db_item = get_db_question(topic, mode, level, exclude_ids)
     if db_item:
         quiz = normalize(db_item, level)
         quiz["source"] = "question_bank"
-        return quiz
-    seed_item = get_seed_question(topic, mode, level, exclude_ids)
-    if seed_item:
-        quiz = normalize(seed_item, level)
-        quiz["source"] = "seed_bank"
+        quiz["bank_exhausted"] = False
+        quiz["bank_notice"] = ""
         return quiz
     fallback_reason = ""
     try:
@@ -271,4 +269,6 @@ def run_quiz_pipeline(
         fallback_reason = str(exc)
     if fallback_reason:
         quiz["fallback_reason"] = fallback_reason
+    quiz["bank_exhausted"] = True
+    quiz["bank_notice"] = bank_notice
     return quiz
