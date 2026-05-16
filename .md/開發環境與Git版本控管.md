@@ -1,70 +1,54 @@
-# AI_TOOLS 開發環境管理手冊
+# AI_TOOLS 開發環境與 Git 版本控管
 
-## 1. 架構定案
+## 1. 架構定案（GitHub 為唯一中樞）
 
 ```text
+Git 中樞（雲端）
+└── GitHub Repo（origin）
+
 A 電腦 Windows
-├── H:\git\AI_TOOLS.git       # Git 中樞 bare repo（不在此寫程式）
-├── H:\AI\AI_TOOLS            # A 的 Windows 開發目錄
-│   └── venv 或 .venv-win       # A 專用 venv（不進 Git）
-└── 對 B 提供 Git 存取
-    ├── 方式 1：Windows 網路分享
-    └── 方式 2：SSH
+└── H:\AI\AI_TOOLS
+    └── venv 或 .venv-win（不進 Git）
 
 B 電腦 WSL Ubuntu
-└── /mnt/d/AI/AI_TOOLS          # B 的 WSL 開發目錄
-    ├── venv                    # B 專用 venv（不進 Git）
+└── /mnt/d/AI/AI_TOOLS
+    ├── venv（不進 Git）
     └── Hermes Agent + Docker
 ```
 
 重點原則：
-- `H:\git\AI_TOOLS.git` 是 Git 中樞，只做版本中繼。
-- A/B 各自維護自己的 venv，不同步。
+- Git 中樞改為 GitHub `origin`。
+- A/B 只透過 `git pull` / `git push` 與 GitHub 同步。
 - `.env` 不進 Git。
 - `venv` / `.venv-win` 不進 Git。
 
-## 2. A 電腦建立 Git 中樞（bare repo）
+## 2. GitHub 遠端設定（A 電腦）
 
-在 A 的 Windows PowerShell：
-
-```powershell
-mkdir H:\git
-git init --bare H:\git\AI_TOOLS.git
-```
-
-注意：
-- 不要用 VS Code 開 `H:\git\AI_TOOLS.git`。
-
-## 3. A 電腦把現有專案推入中樞
-
-### 3.1 專案尚未初始化 Git
+### 2.1 新專案初始化
 
 ```powershell
 cd H:\AI\AI_TOOLS
-
 git init
 git branch -M main
-git remote add origin H:\git\AI_TOOLS.git
+git remote add origin <GITHUB_REPO_URL>
 
 git add .
 git commit -m "Initial commit"
 git push -u origin main
 ```
 
-### 3.2 專案已是 Git repo（改 remote）
+### 2.2 已有 Git 專案改用 GitHub
 
 ```powershell
 cd H:\AI\AI_TOOLS
-
 git remote -v
-git remote remove origin
-git remote add origin H:\git\AI_TOOLS.git
+git remote set-url origin <GITHUB_REPO_URL>
 git push -u origin main
 ```
 
-## 4. A 電腦 venv（Windows）
+## 3. A 電腦 venv（Windows）
 
-### 4.1 沿用既有 venv
+### 3.1 沿用既有 venv
 
 ```powershell
 cd H:\AI\AI_TOOLS
@@ -72,7 +56,7 @@ cd H:\AI\AI_TOOLS
 python manage.py runserver 127.0.0.1:8000
 ```
 
-### 4.2 建議命名（較清楚）
+### 3.2 建議命名（較清楚）
 
 ```powershell
 cd H:\AI\AI_TOOLS
@@ -81,30 +65,12 @@ py -3 -m venv .venv-win
 pip install -r requirements.txt
 ```
 
-## 5. B 電腦透過網路分享存取 A 的 Git 中樞
-
-A 電腦分享：
-- 分享資料夾：`H:\git`
-- 分享名稱：`git`（範例）
-- A 電腦名稱：`A-PC`（範例）
-
-在 B 的 WSL Ubuntu：
-
-```bash
-sudo mkdir -p /mnt/a_git
-sudo mount -t drvfs '\\A-PC\git' /mnt/a_git
-ls /mnt/a_git
-```
-
-預期可看到：`AI_TOOLS.git`
-
-## 6. B 電腦 clone 到 `/mnt/d/AI/AI_TOOLS`
+## 4. B 電腦 clone（WSL）
 
 ```bash
 mkdir -p /mnt/d/AI
 cd /mnt/d/AI
-
-git clone /mnt/a_git/AI_TOOLS.git AI_TOOLS
+git clone <GITHUB_REPO_URL> AI_TOOLS
 cd AI_TOOLS
 ```
 
@@ -113,47 +79,36 @@ cd AI_TOOLS
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-若尚無 `requirements.txt`：
+## 5. 若 B 端資料夾已存在
 
-```bash
-pip install django openai python-dotenv
-pip freeze > requirements.txt
-git add requirements.txt
-git commit -m "Add requirements"
-git push
-```
-
-## 7. 若 B 端資料夾已存在
-
-### 7.1 不覆蓋，直接接上 Git
+### 5.1 直接接上 GitHub
 
 ```bash
 cd /mnt/d/AI/AI_TOOLS
 git init
-git remote add origin /mnt/a_git/AI_TOOLS.git
+git remote add origin <GITHUB_REPO_URL>
 git fetch origin
 git checkout -b main origin/main
 ```
 
-### 7.2 較安全做法：先備份再重 clone
+### 5.2 較安全做法：先備份再重 clone
 
 ```bash
 mv /mnt/d/AI/AI_TOOLS /mnt/d/AI/AI_TOOLS_backup
 mkdir -p /mnt/d/AI
 cd /mnt/d/AI
-git clone /mnt/a_git/AI_TOOLS.git AI_TOOLS
+git clone <GITHUB_REPO_URL> AI_TOOLS
 ```
 
-## 8. B 電腦 Hermes Agent 工作流程
+## 6. B 電腦 Hermes Agent 工作流程
 
 ```bash
 cd /mnt/d/AI/AI_TOOLS
-git pull
+git pull --rebase origin main
 source venv/bin/activate
 git checkout -b agent/hermes-task
 ```
@@ -184,12 +139,11 @@ git commit -m "Hermes agent update"
 git push -u origin agent/hermes-task
 ```
 
-## 9. A 電腦接收 Hermes 分支
+## 7. A 電腦接收 Hermes 修改
 
 ```powershell
 cd H:\AI\AI_TOOLS
-
-git fetch
+git fetch origin
 git checkout agent/hermes-task
 ```
 
@@ -197,12 +151,12 @@ git checkout agent/hermes-task
 
 ```powershell
 git checkout main
-git pull
+git pull --rebase origin main
 git merge agent/hermes-task
-git push
+git push origin main
 ```
 
-## 10. `.gitignore` 必備設定
+## 8. `.gitignore` 必備設定
 
 ```gitignore
 # Python
@@ -237,7 +191,7 @@ Thumbs.db
 必要結論：
 - `venv/`、`.venv-win/`、`.env` 一律不可提交。
 
-## 11. 建議加入 `.env.example`
+## 9. 建議加入 `.env.example`
 
 ```env
 DEBUG=True
@@ -250,74 +204,59 @@ ALLOWED_HOSTS=localhost,127.0.0.1
 - A：`H:\AI\AI_TOOLS\.env`
 - B：`/mnt/d/AI/AI_TOOLS/.env`
 
-## 12. 日常協作準則
+## 10. 版本同步腳本使用說明（A/B 共用）
 
-- A/B 同步一律走 `git push` / `git pull`。
-- 不同步 venv，不同步 `.env`。
-- 功能開發用分支，驗證後再合併回 `main`。
-- `H:\git\AI_TOOLS.git` 僅當中樞，不做開發。
-## 13. 版本同步腳本使用說明（A/B 共用）
-
-專案根目錄已提供 4 支腳本：
-
+專案根目錄提供 4 支腳本：
 - `git-sync.sh`：WSL/Linux 同步腳本
 - `git-push.sh`：WSL/Linux 提交推送腳本
 - `git-sync.ps1`：Windows PowerShell 同步腳本
 - `git-push.ps1`：Windows PowerShell 提交推送腳本
 
-### 13.1 WSL（`.sh`）版本
-
-先切到專案目錄：
+### 10.1 WSL（`.sh`）
 
 ```bash
 cd /mnt/d/AI/AI_TOOLS
+bash git-sync.sh main
+bash git-push.sh "feat: your message"
 ```
 
-同步 `main`：
+### 10.2 Windows（`.ps1`）
+
+```powershell
+cd H:\AI\AI_TOOLS
+.\git-sync.ps1 -Branch main
+.\git-push.ps1 -Message "feat: your message"
+```
+
+### 10.3 建議日常流程
+- 開工前先同步：`git-sync`
+- 開新功能分支：`git checkout -b feat/<topic>`
+- 完成後提交推送：`git-push`
+- 合併前再同步一次 `main`，降低衝突機率。
+
+### 10.4 注意事項
+- 若遇到 rebase 衝突：先解衝突，再 `git rebase --continue`。
+- `.env`、`venv/`、`.venv-win/` 不可提交。
+- A/B 版本一致以 GitHub `origin` 為準。
+
+## 11. WSL 遠端錯誤快速修正
+
+若出現 `origin = H:\git\AI_TOOLS.git`（Windows 路徑）導致 WSL 無法解析，請改成 GitHub：
+
+```bash
+cd /mnt/d/AI/AI_TOOLS
+git remote set-url origin <GITHUB_REPO_URL>
+git remote -v
+```
+
+再執行：
 
 ```bash
 bash git-sync.sh main
 ```
 
-提交並推送目前分支：
+## 12. 結論
 
-```bash
-bash git-push.sh "feat: your message"
-```
-
-### 13.2 Windows（`.ps1`）版本
-
-先切到專案目錄：
-
-```powershell
-cd H:\AI\AI_TOOLS
-```
-
-同步 `main`：
-
-```powershell
-.\git-sync.ps1 -Branch main
-```
-
-提交並推送目前分支：
-
-```powershell
-.\git-push.ps1 -Message "feat: your message"
-```
-
-### 13.3 建議日常流程
-
-- 開工前先同步：
-  - WSL：`bash git-sync.sh main`
-  - Windows：`.\git-sync.ps1 -Branch main`
-- 開新功能分支開發：`git checkout -b feat/<topic>`
-- 完成後推送分支：
-  - WSL：`bash git-push.sh "feat: ..."`
-  - Windows：`.\git-push.ps1 -Message "feat: ..."`
-- 合併前再同步一次 `main`，降低衝突機率。
-
-### 13.4 注意事項
-
-- 若遇到 rebase 衝突：先解衝突，再執行 `git rebase --continue`。
-- `.env`、`venv/`、`.venv-win/` 不可提交。
-- A/B 版本一致以 `origin`（`H:\git\AI_TOOLS.git`）為準。
+- Git 中樞固定為 GitHub，不再使用本機 `H:\git\AI_TOOLS.git` 當中樞。
+- A/B 僅同步程式碼，不同步 `venv` 與 `.env`。
+- AI 協助 commit 時，必須聯動執行 sync/push 腳本並回報結果。

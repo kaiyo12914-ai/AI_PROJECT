@@ -4,7 +4,6 @@
 *.pyd
 __pycache__/
 *.sqlite3
-manage.py
 *.pyc
 api/__pycache__
 
@@ -22,6 +21,7 @@ openclaw-workspace/heartbeat-state.json
 venv/
 env/
 venv3.12/
+.venv-win/
 ref/
 *.log
 *.tmp
@@ -50,6 +50,11 @@ media/**
 # OpenClaw workspace
 openclaw-workspace/
 export_out/
+
+# Env
+.env
+.env.*
+!.env.example
 
 webapps/text2pptx/pptx_templates/~$*
 
