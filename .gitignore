@@ -149,5 +149,9 @@ site/
 ehthumbs.db
 *~
 *.dump
+*.pptx
+*.mp4
+*.mp3
+
 ffmpeg-8.1.1.tar.xz
 scratch/reports

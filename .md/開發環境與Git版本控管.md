@@ -30,7 +30,7 @@ B 電腦 WSL Ubuntu
 cd H:\AI\AI_TOOLS
 git init
 git branch -M main
-git remote add origin <GITHUB_REPO_URL>
+git remote add origin https://github.com/yuanlinwen-cell/Django.git
 
 git add .
 git commit -m "Initial commit"
@@ -42,7 +42,7 @@ git push -u origin main
 ```powershell
 cd H:\AI\AI_TOOLS
 git remote -v
-git remote set-url origin <GITHUB_REPO_URL>
+git remote set-url origin https://github.com/yuanlinwen-cell/Django.git
 git push -u origin main
 ```
 
@@ -70,7 +70,7 @@ pip install -r requirements.txt
 ```bash
 mkdir -p /mnt/d/AI
 cd /mnt/d/AI
-git clone <GITHUB_REPO_URL> AI_TOOLS
+git clone https://github.com/yuanlinwen-cell/Django.git AI_TOOLS
 cd AI_TOOLS
 ```
 
@@ -90,7 +90,7 @@ pip install -r requirements.txt
 ```bash
 cd /mnt/d/AI/AI_TOOLS
 git init
-git remote add origin <GITHUB_REPO_URL>
+git remote add origin https://github.com/yuanlinwen-cell/Django.git
 git fetch origin
 git checkout -b main origin/main
 ```
@@ -101,7 +101,7 @@ git checkout -b main origin/main
 mv /mnt/d/AI/AI_TOOLS /mnt/d/AI/AI_TOOLS_backup
 mkdir -p /mnt/d/AI
 cd /mnt/d/AI
-git clone <GITHUB_REPO_URL> AI_TOOLS
+git clone https://github.com/yuanlinwen-cell/Django.git AI_TOOLS
 ```
 
 ## 6. B 電腦 Hermes Agent 工作流程
@@ -245,7 +245,7 @@ cd H:\AI\AI_TOOLS
 
 ```bash
 cd /mnt/d/AI/AI_TOOLS
-git remote set-url origin <GITHUB_REPO_URL>
+git remote set-url origin https://github.com/yuanlinwen-cell/Django.git
 git remote -v
 ```
 
