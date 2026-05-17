@@ -157,7 +157,7 @@ def parse_multiple_json_arrays(text: str) -> List[Dict[str, Any]]:
     會全部合併成一個 list。
     """
     # 移除 BOM / 前後空白
-        text = text.lstrip("﻿").strip()
+    text = text.lstrip("﻿").strip()
     if not text:
         return []
 

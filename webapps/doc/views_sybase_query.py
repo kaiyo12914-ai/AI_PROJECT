@@ -28,8 +28,9 @@ from webapps.doc.views_pages import _calc_app_base_url
 
 
 MAIN_DOC_FORMATS = {"簽呈", "呈", "令", "函", "便籤"}
-MAIN_DOC_FORMAT_ALIASES = {"蝪賢?", "隞?", "靘輻惜"}
-ATTACH_DOC_FORMATS = {"檔案", "瑼?"}
+# 常見異體/跨系統格式別名（避免編碼污染字串）
+MAIN_DOC_FORMAT_ALIASES = {"便箋", "便签"}
+ATTACH_DOC_FORMATS = {"檔案", "附件"}
 
 
 def _safe_str(x: Any) -> str:
