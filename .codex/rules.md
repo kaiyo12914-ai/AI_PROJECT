@@ -398,3 +398,13 @@ DEV_LOGIN_NAME=
 - Windows 流程：先執行 `git-sync.ps1`，提交後執行 `git-push.ps1`。
 - WSL 流程：先執行 `git-sync.sh`，提交後執行 `git-push.sh`。
 - 若腳本因衝突、未暫存變更或其他原因失敗，必須先排除問題後重跑，直到同步與推送狀態明確。
+
+## EXT Mock Policy（Mandatory）
+- `ENV=EXT` 時，ACL **不得查詢 Oracle ACL**；必須直接使用 mock data。
+  - 實作檔案：`webapps/portal/acl.py`
+- `ENV=EXT` 時，`USER_ID` / `USER_NAME` **不得查詢 Oracle 員工資料**；必須使用 mock data。
+  - 實作檔案：`webapps/portal/oracle_emp.py`
+- mock data 讀檔必須具備路徑 fallback：
+  - 若設定路徑（例如跨機器 `D:\...`）不存在，必須自動回退到目前專案根目錄可用的 `SQLTEST_output.json`。
+  - 此規則同時適用 ACL 與 EMP mock 載入流程。
+- 任何違反以上 EXT mock policy 的變更，視為流程不合規，`MUST NOT MERGE`。

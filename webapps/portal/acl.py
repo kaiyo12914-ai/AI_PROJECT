@@ -1,8 +1,11 @@
 # webapps/portal/acl.py
 from __future__ import annotations
 
+import json
+import os
 import re
 import time
+from pathlib import Path
 from typing import Any, Dict, Iterable, Set, Tuple
 
 from django.conf import settings
@@ -54,6 +57,65 @@ def _effective_backend() -> str:
 #     "note": str,   # optional debug label
 #   }
 _ACL_CACHE: Dict[Tuple[str, str], Dict[str, Any]] = {}
+
+
+def _is_ext_env() -> bool:
+    env_name = str(
+        getattr(settings, "ENV_NAME", "") or os.getenv("ENV", "")
+    ).strip().upper()
+    return env_name == "EXT"
+
+
+def _mock_db_json_path() -> str:
+    p = str(getattr(settings, "MOCK_DB_JSON", "") or "").strip()
+    if p:
+        return p
+    p = (os.getenv("MOCK_DB_JSON") or "").strip()
+    if p:
+        return p
+    return "SQLTEST_output.json"
+
+
+def _load_oracle_acl_groups_from_mock() -> Set[str]:
+    candidate = Path(_mock_db_json_path())
+    paths = [candidate]
+    if not candidate.is_absolute():
+        paths.append(Path.cwd() / candidate)
+    else:
+        # When configured absolute path does not exist on current host,
+        # fallback to local repo mock file.
+        paths.append(Path.cwd() / "SQLTEST_output.json")
+
+    data: Dict[str, Any] | None = None
+    for p in paths:
+        try:
+            if p.exists():
+                data = json.loads(p.read_text(encoding="utf-8"))
+                break
+        except Exception:
+            continue
+    if not isinstance(data, dict):
+        return set()
+
+    sections: list[Any] = []
+    if isinstance(data, dict):
+        if "oracle_acl" in data:
+            sections.append(data.get("oracle_acl"))
+        recs = data.get("records")
+        if isinstance(recs, list):
+            for r in recs:
+                if isinstance(r, dict) and ("oracle_acl" in r):
+                    sections.append(r.get("oracle_acl"))
+
+    for sec in reversed(sections):
+        if not isinstance(sec, dict):
+            continue
+        groups = sec.get("groups")
+        if isinstance(groups, list):
+            out = {str(x or "").strip() for x in groups if str(x or "").strip()}
+            if out:
+                return out
+    return set()
 
 
 def _acl_cache_ttl() -> float:
@@ -146,6 +208,10 @@ def _get_user_groups_from_oracle_uncached(user) -> Set[str]:
     if not (_SAFE_IDENT.match(table) and _SAFE_IDENT.match(user_col) and _SAFE_IDENT.match(group_col)):
         # 不符合白名單：直接拒絕（安全）
         return set()
+
+    # EXT policy: do not query Oracle ACL; use mock groups only.
+    if _is_ext_env():
+        return _load_oracle_acl_groups_from_mock()
 
     sql = _oracle_acl_sql(table, user_col, group_col)
 
