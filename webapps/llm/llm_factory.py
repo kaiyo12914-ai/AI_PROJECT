@@ -277,6 +277,7 @@ def log_llm_config():
         m = os.getenv("LM_STUDIO_MODEL", "ministral-3-14b-instruct-2512")
         u = os.getenv("LM_STUDIO_BASE_URL", "http://mpcai.mpc.mil.tw:1234/v1")
         logger.info("[LLM CONFIG] LM_STUDIO: model=%s, base_url=%s", m, u)
+    logger.info("%s", "-" * 40)
 
 def _make_ollama(temperature: float | None, timeout: int | None, model_name: str | None = None):
     model = model_name or os.getenv("OLLAMA_MODEL", "mistral_small_3_1_2503:latest")

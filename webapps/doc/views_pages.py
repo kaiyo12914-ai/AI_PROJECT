@@ -49,6 +49,24 @@ def _calc_app_base_url(request: HttpRequest) -> str:
         mount = "/" + first if first else "/doc"
 
     return _norm_base((script + mount).replace("//", "/"))
+    if not path.startswith("/"):
+        path = "/" + path
+    if not path_info.startswith("/"):
+        path_info = "/" + path_info
+
+    path = path.rstrip("/") or "/"
+    path_info = path_info.rstrip("/") or "/"
+
+    if path_info != "/" and path.endswith(path_info):
+        base = path[: -len(path_info)]
+        if not base:
+            base = path
+    elif path_info == "/":
+        base = path
+    else:
+        base = path
+
+    return _norm_base(base)
 
 
 def _to_bool_setting(v: object, default: bool = True) -> bool:

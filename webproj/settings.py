@@ -624,7 +624,6 @@ LOGGING = {
     "root": {"handlers": ["console"], "level": LOG_LEVEL},
     "loggers": {
         "django.security.csrf": {"handlers": ["console"], "level": "WARNING", "propagate": False},
-        "django.utils.autoreload": {"handlers": ["console"], "level": "WARNING", "propagate": False},
     },
 }
 

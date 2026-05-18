@@ -58,13 +58,13 @@ def _normalize_org_text(s: str) -> str:
     if not t: return ""
     t = t.replace("0", "○").replace("０", "○")
     t = re.sub(r"[\s　]+", "", t)
-    t = re.sub(r"[，,。．、;；:：()（）\[\]【】<>《》\"'“”‘’·\s]+", "", t)
+    t = re.sub(r"[，,。．、;；:：()（）\[\]【】<>《》\"'指標“”指標‘’·、，,。．:：;；\s]+", "", t)
     return t
 
 def _normalize_point_text(s: str) -> str:
     t = (s or "").strip().lower()
     if not t: return ""
-    return re.sub(r"[()（）\[\]【】「」\"'“”‘’·、，,。．:：;；\s]+", "", t)
+    return re.sub(r"[()（）\[\]【】「」\"'指標“”指標‘’·、，,。．:：;；\s]+", "", t)
 
 
 def _strip_point_prefixes(s: str) -> str:
