@@ -9,18 +9,6 @@ from webapps.portal.acl import can_access
 register = template.Library()
 
 
-class _RequestLoginUserProxy:
-    """
-    Proxy user object for template ACL checks when request.user is anonymous
-    but middleware has resolved request.login_user.
-    Keeps ACL behavior stable for intranet aaa/session identity flow.
-    """
-
-    def __init__(self, username: str):
-        self.username = (username or "").strip()
-        self.is_authenticated = bool(self.username)
-
-
 def _strip_slashes(s: str) -> str:
     return (s or "").strip().strip("/")
 
@@ -122,10 +110,4 @@ def allow(context, node: str) -> bool:
     """
     request = context.get("request")
     user = getattr(request, "user", None) if request else None
-    if request is not None:
-        is_auth = bool(getattr(user, "is_authenticated", False))
-        if not is_auth:
-            login_user = (getattr(request, "login_user", "") or "").strip()
-            if login_user:
-                user = _RequestLoginUserProxy(login_user)
     return can_access(user, node)
