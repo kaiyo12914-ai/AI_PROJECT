@@ -40,7 +40,7 @@ class PortalConfig(AppConfig):
         
         # 啟動時列印 LLM 引用狀態 (僅在主 reloader 進程執行，避免雙重列印)
         import os  # Explicit local import to prevent NameError
-        if os.environ.get('RUN_MAIN') == 'true':
+        if os.environ.get("RUN_MAIN") == "true" and os.environ.get("LLM_STARTUP_LOG", "1").strip() in ("1", "true", "TRUE", "yes", "on"):
             try:
                 from webapps.llm.llm_factory import log_llm_config
                 log_llm_config()

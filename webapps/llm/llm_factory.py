@@ -171,6 +171,22 @@ def _resolve_openai_runtime_fallback() -> str:
         return fallback
     return ""
 
+def _looks_non_chat_openai_model(model: str) -> bool:
+    m = (model or "").strip().lower()
+    if not m:
+        return False
+    # Completion-only or clearly non-chat families.
+    bad_tokens = (
+        "instruct",
+        "text-",
+        "codex",
+        "davinci",
+        "babbage",
+        "curie",
+        "ada",
+    )
+    return any(t in m for t in bad_tokens)
+
 
 def _normalize_provider_for_env(provider: str) -> str:
     p = (provider or "").strip().upper()
@@ -253,7 +269,6 @@ def log_llm_config():
     啟動時列印 LLM 配置摘要，方便診斷。
     """
     model_type = (os.getenv("MODEL_TYPE") or "OLLAMA").strip().upper()
-    logger.info("[LLM CONFIG] MODEL_TYPE=%s", model_type)
 
     def _mask_key(key):
         if not key: return "MISSING"
@@ -261,23 +276,13 @@ def log_llm_config():
         return f"SET ({key[:4]}...{key[-4:]})"
 
     if model_type == "GOOGLE":
-        m = os.getenv("GOOGLE_MODEL", "gemini-3-flash")
-        k = os.getenv("GEMINI_API_KEY")
-        logger.info("[LLM CONFIG] GOOGLE: model=%s, api_key=%s", m, _mask_key(k))
+        return
     elif model_type == "OPENAI":
         m = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         k = os.getenv("OPENAI_API_KEY")
         fb = (os.getenv("OPENAI_RUNTIME_FALLBACK") or "").strip().upper()
         logger.info("[LLM CONFIG] OPENAI: model=%s, api_key=%s, runtime_fallback=%s", m, _mask_key(k), fb or "NONE")
-    elif model_type == "OLLAMA":
-        m = os.getenv("OLLAMA_MODEL", "mistral_small_3_1_2503:latest")
-        u = os.getenv("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
-        logger.info("[LLM CONFIG] OLLAMA: model=%s, base_url=%s", m, u)
-    elif model_type == "LM_STUDIO":
-        m = os.getenv("LM_STUDIO_MODEL", "ministral-3-14b-instruct-2512")
-        u = os.getenv("LM_STUDIO_BASE_URL", "http://mpcai.mpc.mil.tw:1234/v1")
-        logger.info("[LLM CONFIG] LM_STUDIO: model=%s, base_url=%s", m, u)
-    logger.info("%s", "-" * 40)
+        return
 
 def _make_ollama(temperature: float | None, timeout: int | None, model_name: str | None = None):
     model = model_name or os.getenv("OLLAMA_MODEL", "mistral_small_3_1_2503:latest")
@@ -383,6 +388,10 @@ def _make_openai(temperature: float | None, timeout: int | None,model:str |None=
         api_key = "lm-studio"
 
     model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    if _looks_non_chat_openai_model(model):
+        fallback_chat_model = (os.getenv("OPENAI_CHAT_MODEL") or "gpt-4.1").strip()
+        logger.warning("[LLM] OPENAI_MODEL=%s is non-chat; fallback to chat model=%s", model, fallback_chat_model)
+        model = fallback_chat_model
 
     # ✅ 改：支援 MODEL_TEMPERATURE / MODEL_TIMEOUT fallback
     t = _resolve_temperature("OPENAI_TEMPERATURE", temperature)

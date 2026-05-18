@@ -15,6 +15,6 @@ class Text2PptxConfig(AppConfig):
         Text2PptxConfig._pptx_checked = True
         try:
             import pptx  # noqa: F401
-            logger.info("text2pptx startup check: python-pptx is available.")
+            logger.debug("text2pptx startup check: python-pptx is available.")
         except Exception as e:
             logger.error("text2pptx startup check failed: python-pptx unavailable: %s", e)

@@ -74,7 +74,7 @@ def page(request: HttpRequest) -> HttpResponse:
 def health(request: HttpRequest) -> JsonResponse:
     # 依規範：health 不能永遠 ok=True，必須呈現「是否可用」
     try:
-        from .rag_settings import RAG_CONFIG_ERROR, CHROMA_PERSIST_DIR, CHROMA_COLLECTION, TOP_K  # type: ignore
+        from .rag_settings import RAG_BACKEND, RAG_CONFIG_ERROR, PG_RAG_TABLE, TOP_K  # type: ignore
     except Exception as e:
         return JsonResponse(
             {
@@ -103,8 +103,8 @@ def health(request: HttpRequest) -> JsonResponse:
         "status": "ready" if ok else "degraded",
         "error": err,
         "detail": (RAG_CONFIG_ERROR or imp_err or ""),
-        "chroma_dir": str(CHROMA_PERSIST_DIR),
-        "collection": str(CHROMA_COLLECTION),
+        "backend": str(RAG_BACKEND),
+        "source_table": str(PG_RAG_TABLE),
         "top_k": int(TOP_K),
     }
 
@@ -127,7 +127,7 @@ def api_ask(request: HttpRequest) -> JsonResponse:
       - k: int (optional)
 
     output:
-      { ok, answer, sources, top_k, collection, ... }
+      { ok, answer, sources, top_k, source_table, ... }
     """
     try:
         # 先檢查 rag_settings 狀態（fail-close 只關 RAG）

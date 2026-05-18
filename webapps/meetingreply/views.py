@@ -18,16 +18,6 @@ from webapps.portal.decorators import require_node
 from webapps.database.db_factory import db_connect
 from webapps.common.login_utils import get_login_user_idno
 
-# ✅ 直接呼叫 rag_search（不走 HTTP）
-try:
-    from webapps.rag_oracle.retrieve import rag_search  # type: ignore
-except Exception as e:
-    rag_search = None  # type: ignore
-    _RAG_IMPORT_ERROR = str(e)
-else:
-    _RAG_IMPORT_ERROR = ""
-
-
 # ============================================================
 # helpers: env / request.script_name
 # ============================================================
@@ -121,7 +111,7 @@ def _json_err(msg: str, *, status: int = 400, **payload: Any) -> JsonResponse:
 
 def _normalize_sources(raw: Any) -> List[Dict[str, Any]]:
     """
-    rag_search 的 sources/hits 可能是：
+    檢索結果的 sources/hits 可能是：
     - list[dict]
     - dict[key->dict]
     - 其他：當作空
@@ -334,7 +324,7 @@ def todo_list(request: HttpRequest):
 # ============================================================
 def _rag_ask_direct(q: str, *, k: int) -> Dict[str, Any]:
     """
-    改用 PostgreSQL keyword search 替代原 chroma_search
+    改用 PostgreSQL keyword search
     """
     q = (q or "").strip()
     if not q:
@@ -409,7 +399,7 @@ def _rag_ask_direct(q: str, *, k: int) -> Dict[str, Any]:
             "ok": True,
             "sources": sources,
             "top_k": k,
-            "collection": "public.meeting_records",
+            "source_table": "public.meeting_records",
             "count": len(sources),
         }
     except Exception as e:
@@ -612,7 +602,7 @@ def rag_only(request: HttpRequest):
             sources=[],
             hits_count=0,
             top_k=k,
-            service="rag_oracle:direct",
+            service="meetingreply:postgres",
             note="empty_query",
         )
 
@@ -622,12 +612,10 @@ def rag_only(request: HttpRequest):
         if not bool(rag.get("ok", False)):
             # rag_only：讓前端明確看到錯誤（保留你原設計）
             return _json_err(
-                rag.get("error") or "rag_search_failed",
+                rag.get("error") or "search_failed",
                 status=500,
-                service="rag_oracle:direct",
-                collection=rag.get("collection", ""),
+                service="meetingreply:postgres",
                 count=rag.get("count", None),
-                persist_dir=rag.get("persist_dir", ""),
             )
 
         hits_all = _normalize_sources(rag.get("sources") or rag.get("hits") or [])
@@ -637,14 +625,12 @@ def rag_only(request: HttpRequest):
             sources=hits_all,
             hits_count=len(hits_all),
             top_k=int(rag.get("top_k") or k),
-            service="rag_oracle:direct",
-            collection=rag.get("collection", ""),
+            service="meetingreply:postgres",
             count=rag.get("count", None),
-            persist_dir=rag.get("persist_dir", ""),
         )
 
     except Exception as e:
-        return _json_err(str(e), status=500, service="rag_oracle:direct")
+        return _json_err(str(e), status=500, service="meetingreply:postgres")
 
 
 # ✅ 相容別名：解掉你目前 template/JS 的 {% url 'api_rag_only' %} / reverse('api_rag_only')
@@ -686,10 +672,8 @@ def build_reply(request: HttpRequest):
         "hits_injected": [],
         "context": "",
         "error": "",
-        "service": "rag_oracle:direct",
-        "collection": "",
+        "service": "meetingreply:postgres",
         "count": None,
-        "persist_dir": "",
     }
 
     rag_query = directive or staff
@@ -712,9 +696,7 @@ def build_reply(request: HttpRequest):
         try:
             rag = _rag_ask_direct(rag_query, k=RAG_TOP_K)
 
-            rag_payload["collection"] = rag.get("collection", "")
             rag_payload["count"] = rag.get("count", None)
-            rag_payload["persist_dir"] = rag.get("persist_dir", "")
 
             rag_ok = bool(rag.get("ok", False))
             rag_payload["rag_ok"] = rag_ok
@@ -722,7 +704,7 @@ def build_reply(request: HttpRequest):
             if not rag_ok:
                 # ✅ build_reply：fail-open（仍可用 staff/directive 生成）
                 rag_payload["ok"] = False
-                rag_payload["error"] = rag.get("error") or "rag_search_failed"
+                rag_payload["error"] = rag.get("error") or "search_failed"
                 rag_payload["note"] = "rag_failed"
                 hits_all: List[Dict[str, Any]] = []
             else:

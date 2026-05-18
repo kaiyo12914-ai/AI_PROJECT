@@ -790,7 +790,7 @@ def _env_profile(profile: str, key: str, default: str = "") -> str:
     md_val = (md_overrides.get(prof_key) or "").strip()
     if md_val:
         return md_val
-    # DOC plant profile is now sourced from DB_FACTORY.MD only.
+    # DOC plant profile is now sourced from .env_DB_factory only.
     # Keep global key fallback for compatibility.
     return _env(key, default)
 
@@ -804,7 +804,7 @@ def _env_int_profile(profile: str, key: str, default: int) -> int:
             return int(md_val)
         except Exception:
             pass
-    # DOC plant profile is now sourced from DB_FACTORY.MD only.
+    # DOC plant profile is now sourced from .env_DB_factory only.
     # Keep global key fallback for compatibility.
     return _env_int(key, default)
 
@@ -874,17 +874,17 @@ def _db_factory_md_path() -> Path:
     DB profile override file for DOC plant routing.
     Priority:
     1) DB_FACTORY_MD_PATH env
-    2) <project_root>/DB_FACTORY.MD
-    3) webapps/database/DB_FACTORY.MD
+    2) <project_root>/.env_DB_factory
+    3) webapps/database/.env_DB_factory
     """
     custom = (os.getenv("DB_FACTORY_MD_PATH") or "").strip()
     if custom:
         return Path(custom)
 
-    root_candidate = Path.cwd() / "DB_FACTORY.MD"
+    root_candidate = Path.cwd() / ".env_DB_factory"
     if root_candidate.exists():
         return root_candidate
-    return Path(__file__).resolve().parent / "DB_FACTORY.MD"
+    return Path(__file__).resolve().parent / ".env_DB_factory"
 
 
 def _unquote_env_value(v: str) -> str:
@@ -909,7 +909,7 @@ def _is_db_factory_key_supported(key: str) -> bool:
 
 def _load_db_factory_md_overrides() -> Dict[str, str]:
     """
-    Parse DB-related key/value lines from DB_FACTORY.MD.
+    Parse DB-related key/value lines from .env_DB_factory.
     Supports plain env-style lines anywhere in markdown:
       DOC_DB_205_ORA_HOST=10.29.136.198
       ORA_HOST=10.29.136.198
@@ -950,7 +950,7 @@ def _load_db_factory_md_overrides() -> Dict[str, str]:
 
 def _apply_db_factory_md_env_overrides() -> None:
     """
-    Promote DB_FACTORY.MD values into process env so modules that call
+    Promote .env_DB_factory values into process env so modules that call
     os.getenv directly (outside db_factory) can read the same values.
     """
     data = _load_db_factory_md_overrides()
@@ -959,7 +959,7 @@ def _apply_db_factory_md_env_overrides() -> None:
     for k, v in data.items():
         if not k:
             continue
-        # DB_FACTORY.MD has higher priority than .env for DB keys.
+        # .env_DB_factory has higher priority than .env for DB keys.
         os.environ[k] = str(v or "")
 
 

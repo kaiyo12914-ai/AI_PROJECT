@@ -1,153 +1,91 @@
-# webapps/rag_oracle/retrieve.py
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
-import time
+from typing import Any, Dict, List, Optional
 import re
-import os
-from pathlib import Path
+import time
 
-from django.conf import settings
-
-from webapps.rag_oracle.chroma_store import ChromaStore
 from webapps.rag_oracle import rag_settings as S
-
-# ✅ Oracle lookup (via DBFactory) — 統一走 db_query_*
-from webapps.database.db_factory import db_query_all  # type: ignore
+from webapps.database.db_factory import db_query_all
 
 
-def _safe_list(x: Any) -> List[Any]:
-    return x if isinstance(x, list) else []
-
-
-def _safe_first_2d(x: Any) -> List[Any]:
-    """
-    Chroma query 回傳常見結構是 2D list：[[...]]
-    這裡保守取第一列，取不到就回空 list。
-    """
-    outer = _safe_list(x)
-    if not outer:
-        return []
-    first = outer[0]
-    return first if isinstance(first, list) else []
-
-
-# ============================================================
-# ✅ Chroma persist dir guard (ABS path)
-# - IIS/反代環境 CWD 可能改變；若 persist_dir 使用相對路徑 => 讀到空庫 => hits=0
-# - 這裡把 rag_settings 內常見 persist 變數統一改成 BASE_DIR 下的絕對路徑
-# ============================================================
-_PERSIST_KEYS = (
-    "CHROMA_PERSIST_DIR",
-    "CHROMA_DIR",
-    "CHROMA_PATH",
-    "PERSIST_DIR",
-    "PERSIST_DIRECTORY",
-)
-
-_DEFAULT_REL_PERSIST = "data/chroma"
-
-
-def _as_str(v: Any) -> str:
-    return str(v or "").strip()
-
-
-def _is_abs_path(p: str) -> bool:
-    try:
-        return Path(p).is_absolute()
-    except Exception:
-        return False
-
-
-def _join_base(p: str) -> str:
-    base = Path(getattr(settings, "BASE_DIR", Path("."))).resolve()
-    return str((base / p).resolve())
-
-
-def _normalize_persist_dir(p: str) -> str:
-    p = _as_str(p)
-    if not p:
-        return _join_base(_DEFAULT_REL_PERSIST)
-
-    # 若是相對路徑，統一掛到 BASE_DIR 下，避免 CWD 變動
-    if not _is_abs_path(p):
-        return _join_base(p)
-
-    return str(Path(p).resolve())
-
-
-def _ensure_chroma_persist_dir() -> str:
-    """
-    回傳最終 persist_dir，並同步寫回 rag_settings + env。
-    """
-    # 1) 嘗試從 rag_settings 找到既有 persist 設定
-    raw = ""
-    for k in _PERSIST_KEYS:
-        if hasattr(S, k):
-            raw = _as_str(getattr(S, k))
-            if raw:
-                break
-
-    # 2) 若 settings / env 有明確指定，也允許覆蓋（但仍做 abs）
-    env_p = _as_str(os.getenv("CHROMA_PERSIST_DIR"))
-    if env_p:
-        raw = env_p
-
-    final_dir = _normalize_persist_dir(raw)
-
-    # 3) 同步寫回 rag_settings（不確定你 ChromaStore 用哪個 key，就全寫）
-    for k in _PERSIST_KEYS:
-        try:
-            if hasattr(S, k):
-                setattr(S, k, final_dir)
-        except Exception:
-            pass
-
-    # 4) 同步寫 env（若 ChromaStore / chromadb 有讀 env 的情況）
-    os.environ["CHROMA_PERSIST_DIR"] = final_dir
-
-    return final_dir
-
-
-# ============================================================
-# ✅ Factory code -> name cache (Oracle CT_DEPARTMENT)
-# ============================================================
 _FACTORY_CACHE: Dict[str, Any] = {
     "ts": 0.0,
-    "ttl_sec": 3600.0,  # 1 hour
-    "map": {},          # code -> name
+    "ttl_sec": 3600.0,
+    "map": {},
     "last_err": "",
 }
 
 
-def _load_factory_map_from_oracle() -> Tuple[Dict[str, str], str]:
-    """
-    Load CT_DEPARTMENT.DEPTCODE_FACTORY -> CT_DEPARTMENT.NAME
-    Return (map, err). err=="" means OK.
+def _as_int(v: Any, default: int, *, min_v: Optional[int] = None, max_v: Optional[int] = None) -> int:
+    try:
+        n = int(v)
+    except Exception:
+        n = default
+    if min_v is not None and n < min_v:
+        n = min_v
+    if max_v is not None and n > max_v:
+        n = max_v
+    return n
 
-    ✅ 統一走 DBFactory：db_query_all("oracle", sql)
-    """
+
+def _build_keyword_terms(q: str, *, max_terms: int = 12) -> List[str]:
+    text = (q or "").strip()
+    if not text:
+        return []
+
+    pieces = [
+        p.strip()
+        for p in re.split(r"[\s,，。；;：:、|()（）\[\]{}<>《》「」『』\"'`~!@#$%^&*_+=?！？／\\\-]+", text)
+        if p and p.strip()
+    ]
+
+    terms: List[str] = []
+
+    def _push(term: str) -> None:
+        t = (term or "").strip()
+        if not t:
+            return
+        if len(t) > 32:
+            t = t[:32]
+        if len(t) < 2:
+            return
+        if t not in terms:
+            terms.append(t)
+
+    for p in pieces:
+        _push(p)
+        has_cjk = bool(re.search(r"[\u4e00-\u9fff]", p))
+        if has_cjk and len(p) >= 8:
+            step = 2
+            size = 4
+            for i in range(0, max(1, len(p) - size + 1), step):
+                _push(p[i : i + size])
+                if len(terms) >= max_terms:
+                    break
+        if len(terms) >= max_terms:
+            break
+
+    if not terms and text:
+        _push(text)
+
+    return terms[:max_terms]
+
+
+def _load_factory_map_from_oracle() -> tuple[Dict[str, str], str]:
     sql = """
-        SELECT
-            TRIM(DEPTCODE_FACTORY) AS CODE,
-            TRIM(NAME) AS NAME
+        SELECT TRIM(DEPTCODE_FACTORY) AS CODE, TRIM(NAME) AS NAME
         FROM CT_DEPARTMENT
         WHERE DEPTCODE_FACTORY IS NOT NULL
           AND DEPT_STATUS='Y'
     """
-
     m: Dict[str, str] = {}
     try:
         rows = db_query_all("oracle", sql) or []
         for row in rows:
-            if not row:
-                continue
-            code = row[0] if len(row) > 0 else ""
-            name = row[1] if len(row) > 1 else ""
-            c = (str(code or "").strip())
-            n = (str(name or "").strip())
-            if c and n:
-                m[c] = n
+            code = str((row[0] if len(row) > 0 else "") or "").strip()
+            name = str((row[1] if len(row) > 1 else "") or "").strip()
+            if code and name:
+                m[code] = name
         return m, ""
     except Exception as e:
         return {}, str(e)
@@ -160,7 +98,7 @@ def _get_factory_map() -> Dict[str, str]:
     m = _FACTORY_CACHE.get("map") if isinstance(_FACTORY_CACHE.get("map"), dict) else {}
 
     if m and (now - ts) < ttl:
-        return m  # cached OK
+        return m
 
     new_map, err = _load_factory_map_from_oracle()
     if new_map:
@@ -174,71 +112,65 @@ def _get_factory_map() -> Dict[str, str]:
     return m or {}
 
 
-def _extract_factory_code(meta: Dict[str, Any]) -> str:
-    code = (
-        (meta.get("dept_factory_code") or "")
-        or (meta.get("dept") or "")
-        or (meta.get("DeptCode_Factory") or "")
-    )
-    return str(code or "").strip()
-
-
-_FACTORY_LINE_RE = re.compile(r"(廠別：)\s*([^\n\r]+)")
-
-
-def _rewrite_snippet_factory(snippet: str, factory_display: str) -> str:
-    s = snippet or ""
-    if not s:
-        return s
-
-    def _repl(m: re.Match) -> str:
-        prefix = m.group(1)
-        return f"{prefix}{factory_display}"
-
-    return _FACTORY_LINE_RE.sub(_repl, s, count=1)
-
-
-# ============================================================
-# API: rag_search
-# ============================================================
 def rag_search(
     q: str,
     k: int | None = None,
     where: Optional[Dict[str, Any]] = None,
     include_documents: bool = True,
 ) -> Dict[str, Any]:
-    """
-    Minimal RAG retrieval (UI debug friendly):
-    - Query Chroma
-    - Return sources (ids + metadatas + distances + optional snippets)
-    """
     query = (q or "").strip()
     if not query:
-        # ✅ 仍回 debug info（含 persist_dir），方便看目前指向哪個庫
-        persist_dir = _ensure_chroma_persist_dir()
         return {
             "ok": True,
             "answer": "",
             "sources": [],
             "top_k": 0,
-            "collection": S.CHROMA_COLLECTION,
+            "source_table": S.PG_RAG_TABLE,
             "count": 0,
-            "persist_dir": persist_dir,
+            "backend": "postgres",
         }
 
-    top_k = int(k if k is not None else getattr(S, "TOP_K", 10) or 10)
-    if top_k <= 0:
-        top_k = int(getattr(S, "TOP_K", 10) or 10)
-    top_k = min(top_k, 50)
+    top_k = _as_int(k if k is not None else S.TOP_K, S.TOP_K, min_v=1, max_v=50)
+    terms = _build_keyword_terms(query, max_terms=12)
+    if not terms:
+        return {
+            "ok": True,
+            "answer": "",
+            "sources": [],
+            "top_k": top_k,
+            "source_table": S.PG_RAG_TABLE,
+            "count": 0,
+            "backend": "postgres",
+        }
 
-    # ✅ 關鍵：先固定 persist_dir（ABS）再初始化 store，避免 IIS/反代 CWD 影響
-    persist_dir = _ensure_chroma_persist_dir()
+    where_parts: List[str] = []
+    where_params: List[str] = []
+    score_parts: List[str] = []
+    score_params: List[str] = []
 
-    store = ChromaStore()
+    for t in terms:
+        like = f"%{t}%"
+        cond = (
+            "(directive ILIKE %s OR title ILIKE %s OR case_name ILIKE %s "
+            "OR status ILIKE %s OR dept_name ILIKE %s)"
+        )
+        where_parts.append(cond)
+        where_params.extend([like, like, like, like, like])
+        score_parts.append(f"(CASE WHEN {cond} THEN 1 ELSE 0 END)")
+        score_params.extend([like, like, like, like, like])
+
+    sql = (
+        "SELECT doc_id, case_id, item_no, case_name, title, directive, status, dept_name, updated_at, "
+        f"({ ' + '.join(score_parts) }) AS hit_score "
+        f"FROM {S.PG_RAG_TABLE} "
+        f"WHERE {' OR '.join(where_parts)} "
+        "ORDER BY hit_score DESC, updated_at DESC NULLS LAST LIMIT %s"
+    )
+
+    params = tuple(score_params + where_params + [top_k])
 
     try:
-        count = store.count()
-        res = store.query(query, k=top_k, where=where, include_documents=include_documents)
+        rows = db_query_all("postgresql", sql, params) or []
     except Exception as e:
         return {
             "ok": False,
@@ -246,80 +178,80 @@ def rag_search(
             "answer": "（RAG：查詢失敗）",
             "sources": [],
             "top_k": top_k,
-            "collection": S.CHROMA_COLLECTION,
+            "source_table": S.PG_RAG_TABLE,
             "count": 0,
-            "persist_dir": persist_dir,
+            "backend": "postgres",
         }
 
-    ids_0 = _safe_first_2d(res.get("ids"))
-    metas_0 = _safe_first_2d(res.get("metadatas"))
-    dists_0 = _safe_first_2d(res.get("distances"))
-    docs_0 = _safe_first_2d(res.get("documents")) if include_documents else []
-
-    # 取最小共同長度，避免任何一個欄位短於其他造成 IndexError
-    n_items = min(
-        len(ids_0),
-        len(metas_0),
-        len(dists_0) if dists_0 else len(ids_0),
-        len(docs_0) if docs_0 else len(ids_0),
-    )
-
-    # ✅ lazy-load oracle factory map once per request (cached by TTL)
     factory_map = _get_factory_map()
 
     sources: List[Dict[str, Any]] = []
-    for i in range(n_items):
-        meta = metas_0[i] or {}
-        if not isinstance(meta, dict):
-            meta = {}
+    for idx, row in enumerate(rows, start=1):
+        doc_id = row[0] if len(row) > 0 else ""
+        case_id = row[1] if len(row) > 1 else ""
+        item_no = row[2] if len(row) > 2 else ""
+        case_name = row[3] if len(row) > 3 else ""
+        title = row[4] if len(row) > 4 else ""
+        directive = row[5] if len(row) > 5 else ""
+        status = row[6] if len(row) > 6 else ""
+        dept_name = row[7] if len(row) > 7 else ""
+        updated_at = row[8] if len(row) > 8 else None
+        hit_score = row[9] if len(row) > 9 else 0
 
-        # ✅ chunk_no 對齊：優先 chunk_no，否則 fallback item_no 或 CHUNK_NO 欄位名
-        chunk_no = (
-            meta.get("chunk_no")
-            or meta.get("item_no")
-            or meta.get(getattr(S, "CHUNK_NO", "CHUNK_NO"), "")
-            or ""
-        )
+        factory_code = ""
+        for token in (str(dept_name or "").split(), [str(dept_name or "")]):
+            if isinstance(token, list):
+                for part in token:
+                    part = (part or "").strip()
+                    if part in factory_map:
+                        factory_code = part
+                        break
+            if factory_code:
+                break
 
-        # ✅ factory code -> name
-        factory_code = _extract_factory_code(meta)
         factory_name = factory_map.get(factory_code, "") if factory_code else ""
-        factory_display = (
-            factory_name + (f"（{factory_code}）" if factory_name and factory_code else "")
-            or factory_code
-        )
+        dist = 0.1 + ((idx - 1) * 0.01)
 
-        # ✅ enrich metadata for UI / downstream
-        if factory_code and "dept_factory_code" not in meta:
-            meta["dept_factory_code"] = factory_code
-        if factory_name and "dept_factory_name" not in meta:
-            meta["dept_factory_name"] = factory_name
-
-        snippet = (docs_0[i] if i < len(docs_0) else "")
-        if factory_display:
-            snippet = _rewrite_snippet_factory(snippet, factory_display)
+        snippet = ""
+        if include_documents:
+            snippet = (
+                f"會議名稱：{case_name}\n"
+                f"指裁示內容：{directive}\n"
+                f"辦理情形/擬答：{status}\n"
+                f"主辦單位：{dept_name}"
+            )
 
         sources.append(
             {
-                "id": ids_0[i],
-                "distance": dists_0[i] if i < len(dists_0) else None,
-                "doc_id": meta.get("doc_id", "") or meta.get(getattr(S, "DOC_ID", "DOC_ID"), ""),
-                "doc_type": meta.get("doc_type", "") or meta.get(getattr(S, "DOC_TYPE", "DOC_TYPE"), ""),
-                "title": meta.get("title", "") or meta.get(getattr(S, "TITLE", "TITLE"), ""),
-                "chunk_no": chunk_no,
+                "id": str(doc_id or ""),
+                "distance": dist,
+                "doc_id": str(doc_id or ""),
+                "doc_type": "meeting_record",
+                "title": str(title or ""),
+                "chunk_no": str(item_no or ""),
                 "snippet": snippet,
-                "metadata": meta,
-                # ✅ optional convenience fields
+                "metadata": {
+                    "case_id": str(case_id or ""),
+                    "item_no": str(item_no or ""),
+                    "case_name": str(case_name or ""),
+                    "title": str(title or ""),
+                    "directive": str(directive or ""),
+                    "status": str(status or ""),
+                    "dept_name": str(dept_name or ""),
+                    "updated_at": updated_at.isoformat() if updated_at else "",
+                    "hit_score": hit_score,
+                    "dept_factory_code": factory_code,
+                    "dept_factory_name": factory_name,
+                },
                 "dept_factory_code": factory_code,
                 "dept_factory_name": factory_name,
             }
         )
 
     if not sources:
-        # ✅ 這裡把 persist_dir / count 一併提示，方便你一眼判斷是不是打到空庫
-        answer = f"（RAG：找不到相似內容；collection={S.CHROMA_COLLECTION}；count={count}；persist={persist_dir}）"
+        answer = f"（RAG：找不到相似內容；source_table={S.PG_RAG_TABLE}）"
     else:
-        lines = [f"（RAG 檢索 Top {len(sources)} / k={top_k}；collection={S.CHROMA_COLLECTION}；count={count}；persist={persist_dir}）"]
+        lines = [f"（RAG 檢索 Top {len(sources)} / k={top_k}；source_table={S.PG_RAG_TABLE}）"]
         for n, s in enumerate(sources, start=1):
             lines.append(
                 f"{n}. {s.get('title') or '（無標題）'}"
@@ -335,7 +267,7 @@ def rag_search(
         "answer": answer,
         "sources": sources,
         "top_k": top_k,
-        "collection": S.CHROMA_COLLECTION,
-        "count": count,
-        "persist_dir": persist_dir,
+        "source_table": S.PG_RAG_TABLE,
+        "count": len(sources),
+        "backend": "postgres",
     }

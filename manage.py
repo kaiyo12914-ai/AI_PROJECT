@@ -7,6 +7,11 @@ import sys
 def main():
     """Run administrative tasks."""
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'webproj.settings')
+    if len(sys.argv) > 1 and sys.argv[1] == "runserver":
+        quiet = (os.environ.get("DJANGO_RUNSERVER_QUIET", "0") or "").strip().lower()
+        if quiet in ("1", "true", "yes", "on"):
+            if "--verbosity" not in sys.argv and "-v" not in sys.argv:
+                sys.argv.extend(["--verbosity", "0"])
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
@@ -21,4 +26,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

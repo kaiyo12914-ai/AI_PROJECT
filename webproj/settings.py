@@ -22,11 +22,11 @@ load_dotenv(BASE_DIR_RESOLVED / ".env")
 
 def _load_db_factory_md_into_environ(base_dir: Path) -> None:
     """
-    Allow DB-related settings to be moved from .env into DB_FACTORY.MD.
-    DB_FACTORY.MD values override .env for supported keys.
+    Allow DB-related settings to be moved from .env into .env_DB_factory.
+    .env_DB_factory values override .env for supported keys.
     """
     custom = (os.getenv("DB_FACTORY_MD_PATH") or "").strip()
-    p = Path(custom) if custom else (base_dir / "DB_FACTORY.MD")
+    p = Path(custom) if custom else (base_dir / ".env_DB_factory")
     if not p.exists():
         return
     try:
@@ -392,11 +392,9 @@ STATICFILES_DIRS = [str(p) for p in _potential_static_dirs if p.exists() and p.r
 PIPER_OUTPUT_DIR = MEDIA_ROOT / "tts"
 STT_OUTPUT_DIR = MEDIA_ROOT / "stt"
 
-# RAG / Chroma
-RAG_CHROMA_DIR = env_str("RAG_CHROMA_DIR", f"{_PROJECT_ROOT_STR}\\chroma\\rag")
-CHROMA_PERSIST_DIR = env_str("CHROMA_PERSIST_DIR", f"{_PROJECT_ROOT_STR}\\chroma")
-CHROMA_DIR = env_str("CHROMA_DIR", f"{_PROJECT_ROOT_STR}\\chroma")
-RAG_CHROMA_COLLECTION = env_str("RAG_CHROMA_COLLECTION", "cm_qna")
+# RAG (PostgreSQL)
+RAG_BACKEND = env_str("RAG_BACKEND", "postgres").lower()
+RAG_PG_TABLE = env_str("RAG_PG_TABLE", "public.meeting_records")
 RAG_TOP_K = env_int("RAG_TOP_K", 10)
 
 # 知識庫與 Mock 資料
@@ -624,6 +622,8 @@ LOGGING = {
     "root": {"handlers": ["console"], "level": LOG_LEVEL},
     "loggers": {
         "django.security.csrf": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+        "django.server": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+        "django.utils.autoreload": {"handlers": ["console"], "level": "WARNING", "propagate": False},
     },
 }
 

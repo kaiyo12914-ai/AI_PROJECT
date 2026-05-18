@@ -43,6 +43,7 @@ venv3.12/**
 whispercpp/**
 staticfiles/**
 media/**
+no_use/**
 
 # 壓縮檔
 *.ZIP
