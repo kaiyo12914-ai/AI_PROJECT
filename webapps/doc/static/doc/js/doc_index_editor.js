@@ -206,9 +206,39 @@
         .trim();
     }
 
+    function isCjkChar(ch) {
+      return /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/.test(ch || "");
+    }
+
+    function mergeWrappedLine(prev, next) {
+      const a = String(prev || "").trim();
+      const b = String(next || "").trim();
+      if (!a) return b;
+      if (!b) return a;
+
+      const aLast = a.slice(-1);
+      const bFirst = b.slice(0, 1);
+
+      // CJK line-wrap continuation: do not inject spaces/newlines.
+      if (isCjkChar(aLast) && isCjkChar(bFirst)) {
+        return a + b;
+      }
+      // If previous ends with CJK punctuation, continue directly.
+      if (/[，。、；：！？）】」』]/.test(aLast)) {
+        return a + b;
+      }
+      // Latin word-wrap continuation keeps one space.
+      if (/[A-Za-z0-9]$/.test(a) && /^[A-Za-z0-9]/.test(b)) {
+        return `${a} ${b}`;
+      }
+      return `${a}\n${b}`;
+    }
+
     function pushCurrent() {
       if (!current) return;
-      const body = String((current.lines || []).join("\n")).trim();
+      let body = String((current.lines || []).join("\n")).trim();
+      // Fix accidental spaces created by wrapped Chinese lines, e.g. "並 宣導" -> "並宣導".
+      body = body.replace(/([\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF])\s+([\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF])/g, "$1$2");
       if (body) {
         items.push({
           id: `focus_${items.length + 1}`,
@@ -276,7 +306,15 @@
       }
 
       if (current) {
-        current.lines.push(stripLeadingOrdinal(line));
+        const piece = stripLeadingOrdinal(line);
+        if (piece) {
+          if (current.lines.length === 0) {
+            current.lines.push(piece);
+          } else {
+            const lastIdx = current.lines.length - 1;
+            current.lines[lastIdx] = mergeWrappedLine(current.lines[lastIdx], piece);
+          }
+        }
         continue;
       }
 

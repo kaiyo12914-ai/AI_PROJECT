@@ -40,7 +40,7 @@ def chat(request: HttpRequest):
     """
     POST /api/chat/
     Body: {"prompt": "...", "enable_rag": true?}
-    Response: {"reply": "...", "backend": "..."}  或 {"error": "..."}
+    Response: {"reply": "...", "backend": "..."}  ??{"error": "..."}
     """
     if request.method != "POST":
         return _json_error("Method not allowed", status=405)
@@ -50,12 +50,12 @@ def chat(request: HttpRequest):
     if not prompt:
         return _json_error("prompt is required", status=400)
 
-    # 可選：允許前端控制是否啟用 RAG
+    # ?舫嚗?閮勗?蝡舀?嗆?血???RAG
     enable_rag = data.get("enable_rag", True)
     enable_rag = bool(enable_rag)
 
-    # 可選：允許前端傳入 timeout/temperature（不傳就用 services 的預設）
-    # 注意：避免亂塞造成型別錯誤，做個保守轉型
+    # ?舫嚗?閮勗?蝡臬??timeout/temperature嚗??喳停??services ??閮哨?
+    # 瘜冽?嚗??憛???航炊嚗???摰???
     temperature = data.get("temperature", None)
     timeout = data.get("timeout", None)
     try:
@@ -67,8 +67,8 @@ def chat(request: HttpRequest):
     except Exception:
         timeout = 120
 
-    # 若你有需要自訂 context / chroma 位置，可以在這裡塞 config
-    # 平常可不傳（讓 services 自動用 settings/env/base_dir 推斷）
+    # ?乩???閬閮?context / postgres rag 雿蔭嚗隞亙?ㄐ憛?config
+    # 撟喳虜?臭??喉?霈?services ?芸???settings/env/base_dir ?冽嚗?
     config = LLMServiceConfig()
 
     try:
@@ -83,7 +83,7 @@ def chat(request: HttpRequest):
     except ValueError as ve:
         return _json_error(str(ve), status=400)
     except Exception as e:
-        # 不把內部錯誤細節全丟給前端，避免洩漏
+        # 銝??折?航炊蝝啁??其?蝯血?蝡荔??踹?瘣拇?
         return _json_error("internal error", status=500, detail=repr(e))
 
 
@@ -92,7 +92,7 @@ def translate(request: HttpRequest):
     """
     POST /api/translate/
     Body: {"text":"...", "source_lang":"auto", "target_lang":"zh-Hant"}
-    Response: {"translated":"...", "backend":"..."}  或 {"error": "..."}
+    Response: {"translated":"...", "backend":"..."}  ??{"error": "..."}
     """
     if request.method != "POST":
         return _json_error("Method not allowed", status=405)
@@ -129,3 +129,4 @@ def translate(request: HttpRequest):
         return _json_error(str(ve), status=400)
     except Exception as e:
         return _json_error("internal error", status=500, detail=repr(e))
+
