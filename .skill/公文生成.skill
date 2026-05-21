@@ -1,0 +1,134 @@
+# ?蟡??賹?.skill v2
+
+Version: 2.0.0
+Last-Updated: 2026-05-20
+Owner: DOC subsystem
+Purpose: AI agent executable spec for official document draft generation.
+
+## 0. Scope
+- Applies to `webapps/doc` generation flow.
+- Supported doc types: `order_draft` (??, `submit_draft` (??, `letter_draft` (??.
+- Output sections MUST be: `??謑?蹍??`?蹍?蟡?`.
+
+## 1. Input Contract
+- Required:
+  - `doc_type`: `order_draft | submit_draft | letter_draft`
+  - `stage2_facts`: non-empty list
+  - `incoming_level`: `from_direct_superior | from_superior | from_peer | from_subordinate | general`
+- Optional:
+  - `incoming_text`
+  - `reference_text`
+  - `fixed_quote` (normally extracted from `stage2_facts`)
+  - `signer_self_ref` (`?????| ??? | ????選)
+
+## 2. Priority Rules (Hard Order)
+1. `fixed_quote` MUST be `?方??`.
+2. `??????` MUST be the final explain point.
+3. `?豲???..???request excerpt MUST be in `?方??哨? or `?方???.
+4. Action single-point formatting MUST remove numbering.
+5. Command-tone cleanup MUST run before final output.
+
+## 3. Level Mapping
+- `from_direct_superior | from_superior`: use `????垢?????瑞飭?...`
+- `from_peer`: use `????城??方?????...`
+- `from_subordinate`: use `?????謘????????...`
+- `general` or unknown: use `???????縈?...`
+
+## 4. Generation Flow
+1. Validate input contract.
+2. Parse facts from `stage2_facts`.
+3. Build base draft (LLM or existing generator path).
+4. Normalize sections (`??謑/`?方?`/`?蟡?`).
+5. Enforce explain rules:
+   - Put fixed quote into point 1.
+   - Inject request excerpt into point 2 or 3.
+   - Merge existing explain points and candidate points into one scoring pool.
+   - Select top scored points (except research-opinion slot).
+   - Place `??????` at the final point.
+6. Build `??????` with exactly two semantics:
+   - level relation clause
+   - concrete actions (`??扔` `?賹?` `?豯止鼓` `?詨謇菔??伍?`)
+7. Normalize action section:
+   - single point -> no `??蹍?   - multiple points -> numbered list, max 2 points
+8. Run quality gate checks.
+9. Return draft text and structured sections.
+
+## 5. Writing Rules
+- MUST NOT keep incoming command words in internal response tone:
+  - banned tokens: `?ｇ??梢３??`?ｇ?貔???`?謕?` `?ｇ?朣???- MUST keep `?豲???..???as neutral summary, not command replay.
+- MUST avoid duplicate fixed quote and duplicate research-opinion lines.
+- MUST avoid repeating the same long official reference across sections.
+  - first occurrence keeps full reference
+  - subsequent occurrences use short alias (`?殉?瘣?..?賹?/?滿 or `?謍減迤??謍堊鼓...?貕?
+- MUST remove non-owner obligations from `??????` and `?蟡?`.
+  - example forbidden clause: `???????鼎??獢?????????..`
+  - keep only current unit-owned actions.
+- MUST evaluate `?嚗??綜童?` and `?謕??綜童?` in the same ranking pool.
+- MUST NOT treat `?嚗??綜童?` as unconditional keep (except fixed quote and research-opinion constraints).
+- SHOULD keep each explain point concise and actionable.
+
+## 6. Doc-Type Templates
+- `order_draft`:
+  - Subject: `??暸??????}{???}...???鞎?蹐?  - Explain: 4-point structure preferred.
+  - Action: single or max two points.
+- `submit_draft`:
+  - Subject: `?瞍祇?擏?}??..????僚?瑞??蹐?  - Explain and action follow same constraints.
+- `letter_draft`:
+  - Subject: `???{???}?ｇ???箸??鈭佗?蹐?  - Explain usually 3-point structure; keep same hard constraints.
+
+## 7. Action Rules
+- MUST: if action has one point, output as one sentence without `??蹍?
+- MUST: if action has more than one point, use `??蹍?`?哨?蹍?
+- SHOULD: keep at most 2 action points.
+
+## 8. Error Codes
+- `E_STAGE2_FACTS_EMPTY`: no checked facts.
+- `E_INVALID_DOC_TYPE`: doc type not supported.
+- `E_FIXED_QUOTE_MISSING`: fixed quote required but unavailable.
+- `E_LEVEL_UNKNOWN`: incoming level cannot be resolved.
+- `E_VALIDATION_FAILED`: post-generation quality gate failed.
+
+## 9. Quality Gate (Machine-Checkable)
+- Q1: explain point 1 contains `fixed_quote`.
+- Q2: request excerpt `?豲???..???appears in point 2 or 3.
+- Q3: `??????` appears exactly once and is final explain point.
+- Q4: research-opinion line contains all four keywords:
+  - `??扔` `?賹?` `?豯止鼓` `?詨謇琛
+- Q5: output does not contain banned command tokens.
+- Q6: single-point action does not contain `??蹍?
+- Q7: `??????` and `?蟡?` do not include non-owner obligation patterns:
+  - `???????鼎??獢???..`
+  - `?????獢???..`
+  - `?謅??獢???..`
+- Q8: explain body points are selected by unified scoring of existing + candidate pool,
+  and are not purely existing-point carry-over.
+- Q9: repeated long references are collapsed:
+  - same full reference SHOULD appear once
+  - repeats SHOULD be replaced by short alias
+
+## 10. Positive/Negative Examples
+- Positive action single-point:
+  - `?蟡??奕??鞎?綽?????????獢??????貔?寡??豯止鼓?蹐?- Negative action single-point:
+  - `?蟡??垢??蹓??鞎?綽?????????獢??????貔?寡??豯止鼓?蹐?- Positive research opinion:
+  - `?謜蹓?????穿?????垢?????瑞飭?????對??????扔?????????綜竣??璇?????漸朣????唳??撢蹐?- Negative research opinion:
+  - `?謜蹓?????穿??ｇ??梢３?壇蹐?- Positive fixed quote placement:
+  - `??蹓?...?賹隤３銵?(??????蹐?- Negative fixed quote placement:
+  - fixed quote appears in point 2 or later.
+
+## 11. Code Anchors
+- `webapps/doc/views_generate.py`:
+  - `api_generate`
+  - `_force_explain_first_quote`
+  - `_inject_request_excerpt_to_explain_mid`
+  - `_build_dynamic_research_opinion`
+  - `_ensure_research_opinion_quality`
+  - `_normalize_single_point_action`
+  - `_is_single_point_action`
+- `webapps/doc/views_parse.py`:
+  - `_format_focus_summary_v3`
+  - `_extract_attachment_title`
+
+- 隤芣?銝/鈭??隤芣?銝靽?摰瘜?嚗牧??銝???摰?交?+摮?+?車嚗?敺神???摮??蒂?唾膩隞餃?鈭祕/蝭?/????
+- 說明二去重刪除規則：若說明二僅重述法源（如「依第一點/依前揭字號/如附呈」）且無新增任務語意，應直接刪除。
+- 說明段結構規則：即使刪除說明二，最終仍須補齊四項（說明一~四），其中說明四固定為「研處意見」。
+- 說明補位規則：若說明二或三缺漏，應補入「案件事實/要求」與「執行重點摘述」之具體內容，不得以空泛法源轉述充數。

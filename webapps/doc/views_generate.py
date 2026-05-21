@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from typing import Any, Dict, Optional, Tuple
@@ -32,6 +33,8 @@ from webapps.doc.views_helpers import (
     _postprocess_official_style,
     _save_template_with_conflict_policy_v2,
 )
+
+logger = logging.getLogger(__name__)
 
 _FULL_SUBORDINATE_UNIT_RE = re.compile(
     r"(?:國防部)?軍備局(?:生產製造中心|生製中心)\s*(第[○〇０0一二三四五六七八九十\d]{1,4}廠)"
@@ -283,12 +286,183 @@ def _is_single_point_action(action_text: str) -> bool:
     t = (action_text or "").strip()
     if not t:
         return False
+    # Count only leading list markers per line; continuation lines are not new points.
+    marker_lines = re.findall(
+        r"(?m)^\s*(?:\([一二三四五六七八九十]+\)|[一二三四五六七八九十]+、)\s*",
+        t,
+    )
+    if len(marker_lines) >= 2:
+        return False
+    if len(marker_lines) == 1:
+        return True
     marks = re.findall(r"\([一二三四五六七八九十]+\)|[一二三四五六七八九十]+、", t)
     if len(marks) >= 2:
         return False
-    if "\n" in t:
-        return False
     return True
+
+
+def _check_quality_gate_readonly(
+    *,
+    explain_text: str,
+    action_text: str,
+    fixed_quote: str,
+) -> dict:
+    """
+    Stage-1 integration: read-only quality gate check.
+    Does not block output; only returns pass/fail details for logging/observability.
+    """
+    explain = (explain_text or "").strip()
+    action = (action_text or "").strip()
+    quote = (fixed_quote or "").strip()
+    violations: list[str] = []
+
+    rows = [ln.strip() for ln in explain.splitlines() if ln.strip()]
+    first_line = rows[0] if rows else ""
+    explain_joined = "\n".join(rows)
+
+    if quote and quote not in first_line:
+        violations.append("Q1_FIXED_QUOTE_NOT_IN_POINT1")
+
+    opinion_rows = [ln for ln in rows if "研處意見" in ln]
+    if len(opinion_rows) != 1:
+        violations.append("Q3_RESEARCH_OPINION_COUNT_INVALID")
+    elif rows and rows[-1] != opinion_rows[0]:
+        violations.append("Q3_RESEARCH_OPINION_NOT_LAST")
+
+    has_request_excerpt = any(("針對「" in ln or '針對"' in ln) for ln in rows)
+    if not has_request_excerpt:
+        violations.append("Q2_REQUEST_EXCERPT_MISSING")
+
+    banned = ("請照辦", "請查照", "務請", "請辦理")
+    if any(x in explain_joined or x in action for x in banned):
+        violations.append("Q5_BANNED_COMMAND_TONE")
+
+    if _is_single_point_action(action) and "一、" in action:
+        violations.append("Q6_SINGLE_ACTION_NUMBERED")
+
+    return {
+        "mode": "readonly",
+        "passed": len(violations) == 0,
+        "violations": violations,
+    }
+
+
+def _reduce_explain_point12_overlap(explain_text: str) -> str:
+    """
+    說明一/二去重策略：
+    - 說明一：保留完整法源（日期/字號/奉/依）。
+    - 說明二：若重複完整法源片段，改為「依前揭字號」並保留任務內容。
+    """
+    t = (explain_text or "").strip()
+    if not t:
+        return ""
+    rows = [ln.strip() for ln in t.splitlines() if ln.strip()]
+    if len(rows) < 2:
+        return t
+
+    def _body(line: str) -> str:
+        return re.sub(r"^\s*[一二三四五六七八九十]+、\s*", "", line).strip()
+
+    b1 = _body(rows[0])
+    b2 = _body(rows[1])
+    if not b1 or not b2:
+        return t
+
+    # Extract long legal-reference-like segment from point1.
+    ref_m = re.search(r"(民國.*?字第.*?號[令函]?|字第.*?號[令函]?)", b1)
+    ref = (ref_m.group(1) if ref_m else "").strip()
+
+    # If point2 duplicates legal reference, compress it.
+    if ref and ref in b2:
+        b2 = b2.replace(ref, "前揭字號")
+    b2 = re.sub(r"依據?\s*前揭字號", "依前揭字號", b2)
+    b2 = re.sub(r"依\s*前揭字號", "依前揭字號", b2)
+
+    # If still too similar, force point2 to avoid legal-reference clone.
+    k1 = re.sub(r"[\s，。、；：:（）()]", "", b1)
+    k2 = re.sub(r"[\s，。、；：:（）()]", "", b2)
+    if k1 and k2 and (k1 in k2 or k2 in k1):
+        b2 = re.sub(r"(民國.*?號[令函]?|字第.*?號[令函]?)", "前揭字號", b2)
+        if not b2.startswith("依前揭字號"):
+            b2 = f"依前揭字號，{b2}".strip("，")
+
+    # 去除法源克隆後，若說明二不再具有任務必要語意，直接刪除
+    b2_clean = re.sub(r"(依前揭字號[，,、]?)", "", b2)
+    b2_clean = re.sub(r"(前揭字號[，,、]?)", "", b2_clean)
+    b2_clean = re.sub(r"(民國.*?號[令函]?|字第.*?號[令函]?)", "", b2_clean)
+    b2_clean = re.sub(r"[，。、；：:（）()\s]", "", b2_clean)
+    task_kw = ("辦理", "執行", "完成", "提報", "管制", "宣導", "查核", "整備", "盤點", "回報", "期限", "時限", "對象", "範圍")
+    has_task_semantics = any(k in b2 for k in task_kw)
+    pure_ref_patterns = (
+        "依第一點",
+        "依前揭",
+        "前揭字號",
+        "如附呈",
+        "奉前揭",
+    )
+    is_pure_reference_sentence = any(p in b2 for p in pure_ref_patterns) and (len(b2_clean) < 20)
+    if (not has_task_semantics) or len(b2_clean) < 10 or is_pure_reference_sentence:
+        del rows[1]
+        return "\n".join(rows).strip()
+
+    rows[1] = re.sub(r"^\s*[一二三四五六七八九十]+、\s*.*$", f"二、{b2}", rows[1])
+    # 重新編號，避免刪除後號次斷裂
+    marks = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"]
+    out = []
+    for i, ln in enumerate(rows):
+        body = re.sub(r"^\s*[一二三四五六七八九十]+、\s*", "", ln).strip()
+        if body:
+            out.append(f"{marks[i]}、{body}")
+    return "\n".join(out).strip()
+
+
+def _ensure_explain_four_points(explain_text: str) -> str:
+    """
+    說明段固定補齊四項：
+    一、法源依據
+    二、案件事實/要求
+    三、執行重點/先期摘述
+    四、研處意見
+    """
+    t = (explain_text or "").strip()
+    if not t:
+        return t
+    rows = [ln.strip() for ln in t.splitlines() if ln.strip()]
+    if not rows:
+        return t
+
+    def _body(line: str) -> str:
+        return re.sub(r"^\s*[一二三四五六七八九十]+、\s*", "", line).strip()
+
+    bodies = [_body(x) for x in rows if _body(x)]
+    if not bodies:
+        return t
+
+    # Find research-opinion row
+    ro_idx = -1
+    for i, b in enumerate(bodies):
+        if "研處意見" in b:
+            ro_idx = i
+            break
+    if ro_idx < 0:
+        bodies.append("研處意見：請就執行計畫、分工期程、回報節點及風險管控措施綜整辦理。")
+        ro_idx = len(bodies) - 1
+
+    pre = bodies[:ro_idx]
+    ro = bodies[ro_idx]
+
+    while len(pre) < 3:
+        if len(pre) == 1:
+            pre.append("依前揭字號，就本案辦理對象、範圍及期程完成作業規劃。")
+        elif len(pre) == 2:
+            pre.append("針對來文要求已先期完成執行重點摘述，並納入後續管制。")
+        else:
+            pre.append("奉相關來文辦理。")
+
+    pre = pre[:3]
+    out_bodies = pre + [ro]
+    marks = ["一", "二", "三", "四"]
+    return "\n".join([f"{marks[i]}、{out_bodies[i]}" for i in range(4)]).strip()
 
 
 def _force_action_multiline_and_cap2(action_text: str) -> str:
@@ -450,9 +624,9 @@ def _parse_explain_points(explain_text: str) -> list[str]:
     rows = [ln.strip() for ln in t.splitlines() if ln.strip()]
     pts: list[str] = []
     for ln in rows:
-        m = re.match(r"^\([一二三四五六七八九十]+\)\s*(.+)$", ln)
+        m = re.match(r"^(?:\(([一二三四五六七八九十]+)\)|([一二三四五六七八九十]+)、)\s*(.+)$", ln)
         if m:
-            pts.append((m.group(1) or "").strip())
+            pts.append((m.group(3) or "").strip())
         elif pts:
             pts[-1] = f"{pts[-1]} {ln}".strip()
     if not pts and t:
@@ -653,7 +827,8 @@ def _merge_explain_with_attachment_candidates(
     max_points: int = 4,
 ) -> str:
     """
-    當模型說明點數不足時，從勾選重點補足至最多四點（最後一點保留研處意見）。
+    將既有點位與候選點位放入同一評分池，再擇優保留至最多四點
+    （最後一點保留研處意見）。
     """
     pts = _parse_explain_points(explain_text)
     if not pts:
@@ -668,19 +843,34 @@ def _merge_explain_with_attachment_candidates(
             body_pts.append(p)
 
     candidates = _extract_candidates_from_attachments(attachments_text)
+    # Build a unified pool: existing points + candidate points.
+    # Keep existing points as part of competition (with a small tie-break boost),
+    # not unconditional keep.
+    pool: list[tuple[str, int, int, str]] = []
+    # origin: "existing" | "candidate", score, ordinal, text
+    for i, x in enumerate(body_pts):
+        pool.append(("existing", _score_explain_point(x) + 1, i, x))
+    for i, x in enumerate(candidates):
+        pool.append(("candidate", _score_explain_point(x), i, x))
+
+    deduped: list[tuple[str, int, int, str]] = []
+    seen = set()
+    for origin, score, ordinal, text in pool:
+        k = re.sub(r"\s+", "", text or "")
+        if not k or k in seen:
+            continue
+        seen.add(k)
+        deduped.append((origin, score, ordinal, text))
+
     scored = sorted(
-        [(i, _score_explain_point(x), x) for i, x in enumerate(candidates)],
-        key=lambda x: (x[1], -x[0]),
+        deduped,
+        key=lambda row: (row[1], 1 if row[0] == "existing" else 0, -row[2]),
         reverse=True,
     )
-    seen = {re.sub(r"\s+", "", p) for p in body_pts}
-    for _i, _s, cand in scored:
-        k = re.sub(r"\s+", "", cand)
-        if k in seen:
-            continue
-        body_pts.append(cand)
-        seen.add(k)
-        if len(body_pts) >= max(1, max_points - 1):
+    selected_body: list[str] = []
+    for _origin, _score, _ord, text in scored:
+        selected_body.append(text)
+        if len(selected_body) >= max(1, max_points - 1):
             break
 
     if not opinion:
@@ -688,7 +878,7 @@ def _merge_explain_with_attachment_candidates(
     if not opinion.startswith("研處意見"):
         opinion = f"研處意見：{opinion}"
 
-    final_pts = body_pts[: max(1, max_points - 1)] + [opinion]
+    final_pts = selected_body[: max(1, max_points - 1)] + [opinion]
     marks = ["一", "二", "三", "四"]
     return "\n".join([f"({marks[i]}) {p}" for i, p in enumerate(final_pts[:4])]).strip()
 
@@ -993,6 +1183,22 @@ def _fallback_subject_from_text(draft_text: str, default: str = "（未提供主
     return (first or "").strip() or default
 
 
+def _subject_to_single_line(subject_text: str) -> str:
+    """
+    Keep full subject content while normalizing wrapped lines into one line.
+    Avoid truncation caused by taking only the first line.
+    """
+    s = _safe_str(subject_text).strip()
+    if not s:
+        return ""
+    parts = [x.strip() for x in s.splitlines() if x and x.strip()]
+    if not parts:
+        return ""
+    out = " ".join(parts)
+    out = re.sub(r"\s{2,}", " ", out).strip()
+    return out
+
+
 def _sanitize_stage1_points_for_stage2(attachments_text: str) -> str:
     """
     Stage isolation contract:
@@ -1096,6 +1302,30 @@ def _sanitize_stage2_facts(facts: Any, incoming_text: str = "") -> str:
     return "\n".join(out).strip()
 
 
+def _remove_non_owner_obligations(text: str) -> str:
+    """
+    Remove obligations that are directed to external/global recipients,
+    not the current handling unit's own responsibilities.
+    """
+    t = _safe_str(text).strip()
+    if not t:
+        return ""
+    out = t
+    patterns = [
+        r"全軍連級以上單位應[^，。；;\n]*",
+        r"各(?:級)?單位應[^，。；;\n]*",
+        r"受文單位應[^，。；;\n]*",
+        r"所屬單位應[^，。；;\n]*",
+    ]
+    for p in patterns:
+        out = re.sub(p, "", out)
+    out = re.sub(r"[，,、]{2,}", "，", out)
+    out = re.sub(r"^[，,、\s]+", "", out)
+    out = re.sub(r"[，,、\s]+$", "", out)
+    out = re.sub(r"\s{2,}", " ", out).strip()
+    return out
+
+
 def _extract_fixed_quote_from_stage2_facts(facts: Any) -> str:
     if not isinstance(facts, list):
         return ""
@@ -1122,6 +1352,14 @@ def _extract_subject_from_requirement(requirement: str) -> str:
 
 
 def _force_explain_first_quote(explain_text: str, fixed_quote: str) -> str:
+    def _norm_for_compare(s: str) -> str:
+        x = (s or "").strip()
+        x = re.sub(r"^【?擬稿說明第一點固定引述】?\s*[:：]\s*", "", x)
+        x = x.replace("（", "(").replace("）", ")")
+        x = x.replace("，", ",").replace("。", ".").replace("：", ":")
+        x = re.sub(r"[\s,，。.:：;；()（）\"'「」『』、]", "", x)
+        return x
+
     t = (explain_text or "").strip()
     q = (fixed_quote or "").strip()
     if not q:
@@ -1131,10 +1369,10 @@ def _force_explain_first_quote(explain_text: str, fixed_quote: str) -> str:
     # Remove duplicated same quote in other points.
     lines = [ln.strip() for ln in t.splitlines() if ln.strip()]
     cleaned: list[str] = []
-    q_norm = re.sub(r"\s+", "", q)
+    q_norm = _norm_for_compare(q)
     for ln in lines:
-        body = re.sub(r"^\([一二三四五六七八九十]+\)\s*", "", ln).strip()
-        body_norm = re.sub(r"\s+", "", body)
+        body = re.sub(r"^(?:\([一二三四五六七八九十]+\)|[一二三四五六七八九十]+、)\s*", "", ln).strip()
+        body_norm = _norm_for_compare(body)
         if q_norm and q_norm in body_norm:
             continue
         cleaned.append(body)
@@ -1364,7 +1602,100 @@ def _ensure_research_opinion_last_cn(explain_text: str, max_points: int = 4) -> 
     return "\n".join([f"{marks[i]}、{out_pts[i]}" for i in range(min(len(out_pts), 4))]).strip()
 
 
-def _build_dynamic_research_opinion(source_facts_text: str) -> str:
+def _extract_incoming_request_fact(source_facts_text: str) -> str:
+    """
+    Prefer a concrete incoming request/requirement sentence from parsed facts.
+    """
+    facts = _extract_candidates_from_attachments(source_facts_text)
+    if not facts:
+        return ""
+
+    req_patterns = (
+        r"(請|務請|希照|應|須|應即|應於|應遵照|辦理|執行|查照|落實|完成|回報|提報|備查)",
+    )
+    for f in facts:
+        s = (f or "").strip()
+        if len(s) < 10:
+            continue
+        if "研處意見" in s:
+            continue
+        if any(re.search(p, s) for p in req_patterns):
+            return s.rstrip("。")
+
+    # Fallback: first meaningful fact.
+    for f in facts:
+        s = (f or "").strip()
+        if len(s) >= 12 and "研處意見" not in s:
+            return s.rstrip("。")
+    return ""
+
+
+def _neutralize_incoming_directive_phrases(text: str) -> str:
+    """
+    Remove/normalize incoming expectation wording (e.g. 請照辦) into neutral factual phrasing.
+    """
+    s = (text or "").strip()
+    if not s:
+        return ""
+    s = re.sub(r"(，|、)?\s*請照辦\s*", " ", s)
+    s = re.sub(r"(，|、)?\s*請(?:查照|辦理|配合辦理)\s*", " ", s)
+    s = re.sub(r"(，|、)?\s*務請\s*", " ", s)
+    s = re.sub(r"\s{2,}", " ", s).strip(" ，、。")
+    return s
+
+
+def _inject_request_excerpt_to_explain_mid(explain_text: str, source_facts_text: str, max_points: int = 4) -> str:
+    """
+    Put request excerpt in explain point 2 or 3 (before research-opinion point).
+    """
+    pts = _parse_explain_points(explain_text)
+    if not pts:
+        return explain_text
+
+    req = _extract_incoming_request_fact(source_facts_text)
+    if not req:
+        return explain_text
+
+    req_clean = _neutralize_incoming_directive_phrases(req)
+    req_line = f"針對「{req_clean or req}」先期完成需求摘述與執行重點對應。"
+
+    # Already present -> keep.
+    joined = re.sub(r"\s+", "", " ".join(pts))
+    if re.sub(r"\s+", "", req) in joined or "針對「" in joined:
+        return explain_text
+
+    opinion_idx = None
+    for i, p in enumerate(pts):
+        if "研處意見" in p:
+            opinion_idx = i
+            break
+
+    # target position: point2, or point3 when point2 already occupied by fixed quote/body.
+    insert_at = 1 if len(pts) <= 2 else 2
+    if opinion_idx is not None:
+        insert_at = min(insert_at, opinion_idx)
+
+    pts.insert(insert_at, req_line)
+
+    # Cap points, but keep research-opinion if exists.
+    if len(pts) > max(1, int(max_points)):
+        if opinion_idx is not None:
+            opinion_body = None
+            for p in pts:
+                if "研處意見" in p:
+                    opinion_body = p
+                    break
+            body = [p for p in pts if "研處意見" not in p]
+            body = body[: max(1, int(max_points)) - 1]
+            pts = body + ([opinion_body] if opinion_body else [])
+        else:
+            pts = pts[: max(1, int(max_points))]
+
+    marks = ["一", "二", "三", "四"]
+    return "\n".join([f"({marks[i]}) {pts[i]}" for i in range(min(len(pts), 4))]).strip()
+
+
+def _build_dynamic_research_opinion(source_facts_text: str, incoming_level: str = "", self_ref: str = "本單位") -> str:
     facts = _extract_candidates_from_attachments(source_facts_text)
     picked: list[str] = []
     for f in facts:
@@ -1375,17 +1706,37 @@ def _build_dynamic_research_opinion(source_facts_text: str) -> str:
             continue
         if re.search(r"(研處意見|擬辦|請核示|請鑒核)", s):
             continue
-        picked.append(s.rstrip("。"))
+        s2 = _neutralize_incoming_directive_phrases(s.rstrip("。"))
+        s2 = _remove_non_owner_obligations(s2)
+        if not s2:
+            continue
+        picked.append(s2)
         if len(picked) >= 2:
             break
+    level = (incoming_level or "").strip().lower()
+    sref = (self_ref or "").strip() or "本單位"
+    if level in {"from_direct_superior", "from_superior", "superior"}:
+        relation_clause = "依上級來文指示"
+    elif level in {"from_peer", "peer"}:
+        relation_clause = "依同級協調事項"
+    elif level in {"from_subordinate", "subordinate"}:
+        relation_clause = "就所屬單位提報事項"
+    else:
+        relation_clause = "依來文要求"
+
     if not picked:
-        return "研處意見：請依來文與附件事實提出具體執行作為及風險處置。"
+        return f"研處意見：{relation_clause}，{sref}將擬定執行分工與期程，落實辦理並管制回報，併就風險事項滾動管控。"
     if len(picked) == 1:
-        return f"研處意見：就{picked[0]}提出具體處置與執行作為。"
-    return f"研處意見：就{picked[0]}與{picked[1]}提出具體處置及執行作為。"
+        return f"研處意見：{relation_clause}，{sref}將就{picked[0]}提出具體處置作為，明確分工、期程與回報節點，並同步辦理風險管控。"
+    return f"研處意見：{relation_clause}，{sref}將就{picked[0]}及{picked[1]}辦理整備作為，明定分工期程、回報節點及風險管控措施。"
 
 
-def _ensure_research_opinion_quality(explain_text: str, source_facts_text: str) -> str:
+def _ensure_research_opinion_quality(
+    explain_text: str,
+    source_facts_text: str,
+    incoming_level: str = "",
+    self_ref: str = "本單位",
+) -> str:
     t = (explain_text or "").strip()
     if not t:
         return t
@@ -1399,7 +1750,13 @@ def _ensure_research_opinion_quality(explain_text: str, source_facts_text: str) 
         mark, body = m.group(1), m.group(2).strip()
         if "研處意見" in body:
             # Always rewrite by selected case facts to avoid formulaic repetition.
-            body = _build_dynamic_research_opinion(source_facts_text)
+            body = _build_dynamic_research_opinion(
+                source_facts_text,
+                incoming_level=incoming_level,
+                self_ref=self_ref,
+            )
+            body = _neutralize_incoming_directive_phrases(body)
+            body = _remove_non_owner_obligations(body)
             body = re.sub(r"請核示[。\.]?", "", body).strip()
             if not body.endswith("。"):
                 body += "。"
@@ -1611,8 +1968,8 @@ def api_generate(request: HttpRequest):
                 _extract_subject_from_requirement(requirement)
                 or _fallback_subject_from_text(draft_text)
             )
-        # 主旨必須單行；避免章節切段失敗時把說明/擬辦誤併入主旨。
-        subject_one_line = _safe_str(draft_sections.get("subject")).splitlines()[0].strip()
+        # 主旨必須單行；合併換行片段，避免只取第一行造成截斷。
+        subject_one_line = _subject_to_single_line(_safe_str(draft_sections.get("subject")))
         if subject_one_line:
             draft_sections["subject"] = subject_one_line
         draft_sections["explain"] = _dedupe_explain_points(_safe_str(draft_sections.get("explain")))
@@ -1629,6 +1986,11 @@ def api_generate(request: HttpRequest):
             _safe_str(draft_sections.get("explain")),
             fixed_quote,
         )
+        draft_sections["explain"] = _inject_request_excerpt_to_explain_mid(
+            _safe_str(draft_sections.get("explain")),
+            attachments_text_clean,
+            max_points=4,
+        )
         draft_sections["explain"] = _convert_ordinal_parentheses_to_cn(
             _safe_str(draft_sections.get("explain"))
         )
@@ -1639,6 +2001,8 @@ def api_generate(request: HttpRequest):
         draft_sections["explain"] = _ensure_research_opinion_quality(
             _safe_str(draft_sections.get("explain")),
             attachments_text_clean,
+            incoming_level=incoming_level,
+            self_ref=signer_self_ref,
         )
         draft_sections["explain"] = _prune_optional_plan_terms_in_research_opinion(
             _safe_str(draft_sections.get("explain"))
@@ -1648,6 +2012,10 @@ def api_generate(request: HttpRequest):
         )
         draft_sections["explain"] = _dedupe_research_opinion_points(
             _safe_str(draft_sections.get("explain"))
+        )
+        draft_sections["explain"] = _force_explain_first_quote(
+            _safe_str(draft_sections.get("explain")),
+            fixed_quote,
         )
         draft_sections["explain"] = _prune_fragmented_explain_points(
             _safe_str(draft_sections.get("explain")),
@@ -1659,6 +2027,12 @@ def api_generate(request: HttpRequest):
             max_points=4,
         )
         draft_sections["explain"] = _normalize_explain_unit_names_by_point(
+            _safe_str(draft_sections.get("explain"))
+        )
+        draft_sections["explain"] = _reduce_explain_point12_overlap(
+            _safe_str(draft_sections.get("explain"))
+        )
+        draft_sections["explain"] = _ensure_explain_four_points(
             _safe_str(draft_sections.get("explain"))
         )
             
@@ -1694,6 +2068,7 @@ def api_generate(request: HttpRequest):
             execution_context,
             max_points=2,
         )
+        action_text = _remove_non_owner_obligations(action_text)
         action_text = _normalize_subordinate_unit_short_name(action_text)
         draft_sections["action"] = action_text
 
@@ -1703,6 +2078,19 @@ def api_generate(request: HttpRequest):
         else:
             action_block = f"擬辦：\n{action_text}"
         final_text = f"主旨：{draft_sections.get('subject')}\n\n說明：\n{draft_sections.get('explain')}\n\n{action_block}"
+
+        quality_gate = _check_quality_gate_readonly(
+            explain_text=_safe_str(draft_sections.get("explain")),
+            action_text=action_text,
+            fixed_quote=fixed_quote,
+        )
+        if quality_gate.get("passed"):
+            logger.info("[DOC_SKILL_QG][readonly] passed")
+        else:
+            logger.warning(
+                "[DOC_SKILL_QG][readonly] violations=%s",
+                ",".join(quality_gate.get("violations", [])),
+            )
 
         return JsonResponse({
             "ok": True,
@@ -1714,6 +2102,7 @@ def api_generate(request: HttpRequest):
                 "signer_org_label": signer_org_label,
                 "execution_unit": execution_context.get("execution_unit"),
                 "execution_relation": execution_context.get("relation"),
+                "quality_gate": quality_gate,
             },
         }, status=200)
 
