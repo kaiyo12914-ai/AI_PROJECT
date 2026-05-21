@@ -502,6 +502,37 @@ def _force_action_multiline_and_cap2(action_text: str) -> str:
     return f"一、{items[0]}\n二、{items[1]}"
 
 
+def _final_strip_single_action_marker(action_text: str) -> str:
+    """
+    最終防線：若擬辦實際僅一點，強制移除前導點次（如 一、/(一)）。
+    """
+    t = (action_text or "").strip()
+    if not t:
+        return ""
+    # Count list markers in whole action text. If only one marker exists, treat as single-point.
+    marker_count = len(
+        re.findall(r"(?m)^\s*(?:\([一二三四五六七八九十]+\)|[一二三四五六七八九十]+、)\s*", t)
+    )
+    if marker_count != 1:
+        return t
+    # Remove exactly one leading marker at text start (or first non-empty line start).
+    t = re.sub(r"(?m)^\s*\([一二三四五六七八九十]+\)\s*", "", t, count=1).strip()
+    t = re.sub(r"(?m)^\s*[一二三四五六七八九十]+、\s*", "", t, count=1).strip()
+    return t
+
+
+def _normalize_approval_phrase(text: str) -> str:
+    """
+    統一核示後用語：
+    - 請核示後 / 核示後 / 請核後 -> 奉核後
+    """
+    t = (text or "").strip()
+    if not t:
+        return ""
+    t = re.sub(r"(請核示後|核示後|請核後)", "奉核後", t)
+    return t
+
+
 def _ensure_research_opinion_label(explain_text: str) -> str:
     """
     強制確保說明(四)帶有「研處意見：」字樣。
@@ -2060,6 +2091,7 @@ def api_generate(request: HttpRequest):
         action_text = _remove_ni_word_in_action(action_text)
         action_text = _force_action_sentence_for_single_point(action_text)
         action_text = _force_action_multiline_and_cap2(action_text)
+        action_text = _final_strip_single_action_marker(action_text)
         action_text = _apply_execution_context_to_action(action_text, execution_context, doc_type)
         action_text = _sanitize_action_grounding(
             action_text,
@@ -2068,8 +2100,10 @@ def api_generate(request: HttpRequest):
             execution_context,
             max_points=2,
         )
+        action_text = _normalize_approval_phrase(action_text)
         action_text = _remove_non_owner_obligations(action_text)
         action_text = _normalize_subordinate_unit_short_name(action_text)
+        action_text = _final_strip_single_action_marker(action_text)
         draft_sections["action"] = action_text
 
         # 最終合成純文字版，確保換行清晰

@@ -372,6 +372,84 @@ def _extract_attachment_points(
     summary_text = _ensure_focus_numbered(summary_raw, max_points=20)
     summary_text = _postprocess_focus_points(summary_text, max_points=20)
     points = _collect_focus_point_candidates(summary_text)
+
+    def _extract_attachment_title(text: str) -> str:
+        """
+        從附件原文擷取主標題（優先抓「主旨:」；其次抓第一個非 metadata 行）。
+        """
+        lines = [(_compact_spaced_cjk(x or "").strip()) for x in (text or "").splitlines() if (x or "").strip()]
+        if not lines:
+            return ""
+
+        # 0) 正文大標題硬匹配（優先）：...注意事項 / ...要點 / ...規定
+        for ln in lines[:220]:
+            n = re.sub(r"[\s\u3000]+", "", ln)
+            if len(n) < 8 or len(n) > 64:
+                continue
+            if re.match(r"^(主旨|說明|附件|受文者|發文日期|發文字號|速別|密等|編號)[:：]", n):
+                continue
+            if re.match(r"^[一二三四五六七八九十]+\s*[、.．:]", n):
+                continue
+            if re.search(r"(注意事項|要點|規定)$", n):
+                return re.sub(r"[,，。．\s]+$", "", n).strip()
+
+        # 1) 主旨行（含 OCR 空白變體）
+        for ln in lines[:120]:
+            n = re.sub(r"[\s\u3000]+", "", ln)
+            if n.startswith("\u4e3b\u65e8\uff1a") or n.startswith("\u4e3b\u65e8:"):
+                val = n.split("：", 1)[1] if "：" in n else (n.split(":", 1)[1] if ":" in n else "")
+                val = re.sub(r"[,，。．\s]+$", "", val).strip()
+                if val:
+                    return val
+
+        # 2) fallback：第一個不是 metadata 的行
+        meta_heads = (
+            "\u53d7\u6587\u6a5f\u95dc", "\u767c\u6587\u65e5\u671f", "\u767c\u6587\u5b57\u865f",
+            "\u901f\u5225", "\u5bc6\u7b49", "\u9644\u4ef6", "\u8aaa\u660e",
+            "\u53d7\u6587\u8005", "\u6a94\u865f", "\u4fdd\u5b58\u5e74\u9650",
+            "\u7de8\u865f", "\u672c\u4ef6", "\u6b63\u672c", "\u526f\u672c", "\u6284\u9001",
+        )
+        headline_candidates: List[str] = []
+        for ln in lines[:160]:
+            n = re.sub(r"[\s\u3000]+", "", ln)
+            if any(n.startswith(h + "：") or n.startswith(h + ":") for h in meta_heads):
+                continue
+            if len(n) < 6:
+                continue
+            # Skip numbered bullets/section markers (一、/(一)/1.)
+            if re.match(r"^[一二三四五六七八九十]+\s*[、.．:]", n):
+                continue
+            if re.match(r"^[\(（][一二三四五六七八九十\d]+[\)）]", n):
+                continue
+            if re.match(r"^\d+\s*[、.．:]", n):
+                continue
+            # Prefer headline-like lines: medium length, mostly CJK, no colon.
+            cjk_cnt = len(re.findall(r"[\u4e00-\u9fff]", n))
+            if cjk_cnt >= 8 and ("：" not in n and ":" not in n) and 8 <= len(n) <= 48:
+                headline_candidates.append(n)
+                continue
+            # Fallback candidate
+            headline_candidates.append(n)
+        if headline_candidates:
+            # Prefer body-title semantics over incoming subject style.
+            def _score_title(x: str) -> tuple:
+                cjk = len(re.findall(r"[\u4e00-\u9fff]", x))
+                has_keyword = 1 if re.search(r"(注意事項|要點|規定|計畫|通報)", x) else 0
+                bad_start = 1 if re.match(r"^(呈|奉|本件|請|依據|依)", x) else 0
+                # rank: keyword first, then non-bad-start, then CJK count/length
+                return (has_keyword, -bad_start, cjk, len(x))
+
+            headline_candidates.sort(key=_score_title, reverse=True)
+            picked = headline_candidates[0]
+            return re.sub(r"[,，。．\s]+$", "", picked).strip()
+        return ""
+
+    title = _extract_attachment_title(combined)
+    if title:
+        title_key = _normalize_point_text(title)
+        if title_key and not any(_normalize_point_text(p) == title_key for p in points):
+            points = [title] + points
+
     return prompt, points[:max_points]
 
 
