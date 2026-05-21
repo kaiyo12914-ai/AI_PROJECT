@@ -400,3 +400,18 @@ DEV_LOGIN_NAME=
 - New feature work MUST be implemented in split modules, not appended into oversized files.
 - Temporary exception is allowed only for generated files or third-party vendored files, and must be documented in PR/commit note.
 - Violating this rule is `MUST NOT MERGE`.
+
+## No Docker Rule (Mandatory)
+- This project MUST NOT use Docker, Docker Compose, Dockerfile, containerized PostgreSQL, or containerized app deployment.
+- All development, test, and deployment instructions MUST target local Windows/WSL execution with a directly installed PostgreSQL service.
+- PostgreSQL connection settings MUST use `127.0.0.1` or an explicit intranet host/IP, not Docker service names such as `postgres`.
+- Do not add `Dockerfile`, `docker-compose.yml`, `.dockerignore`, container orchestration scripts, or Docker-based README instructions.
+- If a requested feature mentions Docker, adapt it to local/non-container deployment and document the local equivalent.
+- Violating this rule is `MUST NOT MERGE`.
+## Integrated Subsystem Rule (Mandatory)
+- New subsystems MUST be integrated into the existing `H:\AI\AI_TOOLS` Django project, normally under `webapps/<subsystem>`.
+- Do not create a second Django project, second `manage.py`, second `config/settings.py`, subsystem-local `.env`, or subsystem-local `requirements.txt`.
+- Runtime settings MUST be read from the repository root `.env` through `webproj/settings.py`.
+- Python dependencies MUST be merged into the repository root `requirements.txt`.
+- Subsystem URLs MUST be mounted from `webproj/urls.py` and must not hijack existing global `/api/` routes unless explicitly approved.
+- Violating this rule is `MUST NOT MERGE`.

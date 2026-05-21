@@ -41,6 +41,7 @@ urlpatterns = [
     path("projectnotes/", include("webapps.projectnotes.urls")),
     path("formalize/", include("webapps.document_formalize.urls")),
     path("videolearning/", include("webapps.videolearning.urls")),
+    path("digital-twin-kb/", include("webapps.digital_twin_kb.urls")),
 
     # ============================================================
     # Portal (single canonical entry)

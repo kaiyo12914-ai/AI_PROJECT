@@ -1,0 +1,224 @@
+{% load static %}
+{% load custom_tags %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>數位雙生 RAG 知識庫平台</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="stylesheet" href="{% custom_static 'digital_twin_kb/css/index.css' %}">
+  <!-- 全專案共用 apiurl_factory -->
+  <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
+  <!-- 入口腳本一律使用 defer 載入，禁止以 module 當作頁面入口 -->
+  <script defer src="{% custom_static 'digital_twin_kb/js/index.js' %}"></script>
+</head>
+<body data-base-url="{{ request.script_name }}" class="dt-theme">
+  <!-- CSRF Token 注入 -->
+  <input type="hidden" id="csrf_token" value="{{ csrf_token }}">
+
+  <div class="dt-app-container">
+    <!-- Header 頂部 -->
+    <header class="dt-header">
+      <div class="dt-header-left">
+        <div class="dt-logo">
+          <svg viewBox="0 0 24 24" class="logo-icon">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div class="logo-text">
+            <h2>DIGITAL TWIN</h2>
+            <span>pgvector RAG Knowledge Base</span>
+          </div>
+        </div>
+      </div>
+      <div class="dt-header-right">
+        <a href="/" class="btn-back">
+          <svg viewBox="0 0 24 24" class="btn-icon">
+            <path d="M19 12H5M12 19l-7-7 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          返回功能入口
+        </a>
+      </div>
+    </header>
+
+    <!-- Main 內容區 -->
+    <main class="dt-main-grid">
+      <!-- 左側：RAG 智能問答 -->
+      <section class="dt-card dt-chat-panel">
+        <div class="dt-card-header">
+          <div class="dt-header-title">
+            <span class="pulse-dot"></span>
+            <h3>雙生智能 RAG 對話系統</h3>
+          </div>
+          <div class="chat-config-toggle">
+            <button id="btn-toggle-config" class="btn-icon-only" title="進階檢索設定">
+              <svg viewBox="0 0 24 24"><path d="M19.4 15a1.6 1.6 0 0 1 .2 1v1.1l-1 1a1.6 1.6 0 0 1-1 .2h-1.1a1.6 1.6 0 0 1-1-.2l-1-1a1.6 1.6 0 0 1-.2-1v-1.1a1.6 1.6 0 0 1 .2-1l1-1a1.6 1.6 0 0 1 1-.2h1.1a1.6 1.6 0 0 1 1 .2zM6 15a1.6 1.6 0 0 1 .2 1v1.1l-1 1a1.6 1.6 0 0 1-1 .2H3.1a1.6 1.6 0 0 1-1-.2l-1-1a1.6 1.6 0 0 1-.2-1v-1.1a1.6 1.6 0 0 1 .2-1l1-1a1.6 1.6 0 0 1 1-.2H5a1.6 1.6 0 0 1 1 .2zM12 3a1.6 1.6 0 0 1 .2 1v1.1l-1 1a1.6 1.6 0 0 1-1 .2H9.1a1.6 1.6 0 0 1-1-.2l-1-1a1.6 1.6 0 0 1-.2-1V4a1.6 1.6 0 0 1 .2-1l1-1a1.6 1.6 0 0 1 1-.2h1.1a1.6 1.6 0 0 1 1 .2z" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- 進階檢索面板 -->
+        <div id="chat-config-panel" class="dt-sub-panel hidden">
+          <div class="config-row">
+            <div class="config-field">
+              <label for="top_k_select">相似 Chunk 數量 (Top K)</label>
+              <div class="slider-container">
+                <input type="range" id="top_k_select" min="1" max="15" value="5">
+                <span id="top_k_value">5</span>
+              </div>
+            </div>
+            <div class="config-field">
+              <label for="sec_level_select">使用者安全等級 (Security Level)</label>
+              <div class="slider-container">
+                <input type="range" id="sec_level_select" min="1" max="5" value="1">
+                <span id="sec_level_value">1</span>
+              </div>
+            </div>
+          </div>
+          <div class="config-row">
+            <div class="config-field">
+              <label for="topic_filter">主題過濾 (Topic Filter)</label>
+              <input type="text" id="topic_filter" placeholder="例：無人機, 半導體 (留空代表不限)">
+            </div>
+          </div>
+        </div>
+
+        <!-- 聊天對話流 -->
+        <div class="dt-chat-messages" id="chat-flow">
+          <div class="chat-bubble bot-message">
+            <div class="bubble-content">
+              您好！我是您的**數位雙生智能知識助手**。我能基於已上傳的製造業規範、ISA-95 模型、或工業流程文件為您進行精準的向量檢索與 RAG 問答。
+              <br><br>
+              請在下方輸入您想查詢的工業知識或雙生流程。
+            </div>
+            <span class="bubble-time">AI 助手</span>
+          </div>
+        </div>
+
+        <!-- 對話輸入 -->
+        <div class="dt-chat-input-area">
+          <div class="input-wrapper">
+            <textarea id="chat-input" placeholder="請輸入問題 (例如：無人機數位雙生的 Level 4 層級主要定義為何？)..." rows="1"></textarea>
+            <button id="btn-send-chat" class="btn-primary" title="發送問答">
+              <svg viewBox="0 0 24 24" class="send-icon"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 右側：Ingest 與文檔管理 -->
+      <section class="dt-card dt-admin-panel">
+        <div class="dt-card-header">
+          <div class="dt-header-title">
+            <svg viewBox="0 0 24 24" class="panel-icon"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+            <h3>知識庫 Ingestion 與資產庫</h3>
+          </div>
+        </div>
+
+        <!-- Ingestion 控制台 -->
+        <div class="dt-admin-actions">
+          <!-- 批量匯入 -->
+          <div class="action-card">
+            <h4>1. 伺服器預設資料夾</h4>
+            <p>批量自動分類與 Ingest 製造業與數位雙生相關示範文檔。</p>
+            <button id="btn-ingest-folder" class="btn-secondary btn-full">
+              <svg viewBox="0 0 24 24" class="btn-icon"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+              一鍵批量匯入資料夾
+            </button>
+          </div>
+
+          <!-- 單檔上傳 -->
+          <div class="action-card">
+            <h4>2. 新增工業文檔</h4>
+            <form id="upload-form" class="dt-upload-form">
+              <div class="upload-fields-row">
+                <input type="text" id="upload-topic" placeholder="文件主題 (例：無人機規範)" required>
+                <select id="upload-sec-level">
+                  <option value="1">等級 1 (公開/一般)</option>
+                  <option value="2">等級 2 (內部限制)</option>
+                  <option value="3">等級 3 (機密)</option>
+                  <option value="4">等級 4 (高度機密)</option>
+                  <option value="5">等級 5 (極度機密)</option>
+                </select>
+              </div>
+              <div class="drag-drop-zone" id="drop-zone">
+                <svg viewBox="0 0 24 24" class="upload-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                <span class="upload-text">拖曳 PDF 檔案至此或點擊選取</span>
+                <input type="file" id="file-input" accept=".pdf" class="hidden">
+              </div>
+              <div id="selected-file-info" class="file-info hidden">
+                <span id="file-name-display"></span>
+                <button type="button" id="btn-cancel-file" class="btn-text-danger">取消</button>
+              </div>
+              <button type="submit" id="btn-submit-upload" class="btn-primary btn-full margin-top-sm" disabled>
+                確認並解析文件
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Ingestion Job 狀態面板 -->
+        <div id="job-status-panel" class="job-status-card hidden">
+          <div class="job-header">
+            <h5>後台解析工作狀態</h5>
+            <span id="job-status-badge" class="badge">處理中</span>
+          </div>
+          <div class="job-progress">
+            <div id="job-progress-bar" class="progress-bar" style="width: 0%"></div>
+          </div>
+          <p id="job-progress-desc">等待開始...</p>
+        </div>
+
+        <!-- ISA-95 雙生層級概覽統計 -->
+        <div class="action-card">
+          <h4>3. 數位雙生層級分佈 (ISA-95)</h4>
+          <div class="dt-categories-grid" id="categories-container">
+            <div class="loading-spinner">載入統計資料中...</div>
+          </div>
+        </div>
+
+        <!-- 知識庫文檔列表 -->
+        <div class="dt-doc-list-section">
+          <div class="section-title-row">
+            <h4>4. 已匯入文檔資產庫</h4>
+            <button id="btn-refresh-docs" class="btn-refresh" title="重新整理">
+              <svg viewBox="0 0 24 24"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l.73-2.73" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+            </button>
+          </div>
+          <div class="dt-table-wrapper">
+            <table class="dt-table">
+              <thead>
+                <tr>
+                  <th>標題</th>
+                  <th>主題 (Topic)</th>
+                  <th>安全等級</th>
+                  <th>雙生 Level</th>
+                  <th>處理時間</th>
+                </tr>
+              </thead>
+              <tbody id="documents-table-body">
+                <tr>
+                  <td colspan="5" class="text-center font-muted">載入文檔庫中...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Chunks 彈窗 Modal -->
+  <div id="chunks-modal" class="dt-modal hidden">
+    <div class="dt-modal-content">
+      <div class="dt-modal-header">
+        <h3 id="modal-doc-title">文檔 Chunk 段落</h3>
+        <button id="btn-close-modal" class="btn-close">&times;</button>
+      </div>
+      <div class="dt-modal-body" id="modal-chunks-container">
+        <!-- Chunks list -->
+      </div>
+    </div>
+  </div>
+</body>
+</html>

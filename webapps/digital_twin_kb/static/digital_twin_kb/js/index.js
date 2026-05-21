@@ -1,0 +1,528 @@
+/* webapps/digital_twin_kb/static/digital_twin_kb/js/index.js */
+document.addEventListener("DOMContentLoaded", () => {
+  // 基礎變數與 UI 綁定
+  const csrfToken = document.getElementById("csrf_token")?.value || "";
+  const chatInput = document.getElementById("chat-input");
+  const btnSendChat = document.getElementById("btn-send-chat");
+  const chatFlow = document.getElementById("chat-flow");
+  const btnToggleConfig = document.getElementById("btn-toggle-config");
+  const chatConfigPanel = document.getElementById("chat-config-panel");
+  const topKSelect = document.getElementById("top_k_select");
+  const topKValue = document.getElementById("top_k_value");
+  const secLevelSelect = document.getElementById("sec_level_select");
+  const secLevelValue = document.getElementById("sec_level_value");
+  const topicFilter = document.getElementById("topic_filter");
+
+  // Ingest 與管理綁定
+  const btnIngestFolder = document.getElementById("btn-ingest-folder");
+  const uploadForm = document.getElementById("upload-form");
+  const dropZone = document.getElementById("drop-zone");
+  const fileInput = document.getElementById("file-input");
+  const selectedFileInfo = document.getElementById("selected-file-info");
+  const fileNameDisplay = document.getElementById("file-name-display");
+  const btnCancelFile = document.getElementById("btn-cancel-file");
+  const btnSubmitUpload = document.getElementById("btn-submit-upload");
+  const uploadTopic = document.getElementById("upload-topic");
+  const uploadSecLevel = document.getElementById("upload-sec-level");
+
+  // Job 狀態與資料表綁定
+  const jobStatusPanel = document.getElementById("job-status-panel");
+  const jobProgressBar = document.getElementById("job-progress-bar");
+  const jobStatusBadge = document.getElementById("job-status-badge");
+  const jobProgressDesc = document.getElementById("job-progress-desc");
+  const categoriesContainer = document.getElementById("categories-container");
+  const documentsTableBody = document.getElementById("documents-table-body");
+  const btnRefreshDocs = document.getElementById("btn-refresh-docs");
+
+  // Modal 綁定
+  const chunksModal = document.getElementById("chunks-modal");
+  const btnCloseModal = document.getElementById("btn-close-modal");
+  const modalDocTitle = document.getElementById("modal-doc-title");
+  const modalChunksContainer = document.getElementById("modal-chunks-container");
+
+  let activePollInterval = null;
+
+  // apiurl helper (基於 apiurl_factory.js 提供的 base-url)
+  function getApiUrl(path) {
+    if (typeof window.apiurl === "function") {
+      return window.apiurl(path);
+    }
+    // Fallback: 讀取 dataset
+    const base = document.body.dataset.baseUrl || "";
+    const cleanPath = path.startsWith("/") ? path : "/" + path;
+    return base + cleanPath;
+  }
+
+  // ==========================================
+  // 1. UI 互動與配置展開
+  // ==========================================
+  btnToggleConfig.addEventListener("click", () => {
+    chatConfigPanel.classList.toggle("hidden");
+  });
+
+  topKSelect.addEventListener("input", (e) => {
+    topKValue.textContent = e.target.value;
+  });
+
+  secLevelSelect.addEventListener("input", (e) => {
+    secLevelValue.textContent = e.target.value;
+  });
+
+  // 自動調整 Textarea 高度
+  chatInput.addEventListener("input", () => {
+    chatInput.style.height = "auto";
+    chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + "px";
+  });
+
+  // ==========================================
+  // 2. RAG 智能問答
+  // ==========================================
+  function appendMessage(content, type, sources = []) {
+    const bubble = document.createElement("div");
+    bubble.className = `chat-bubble ${type}-message`;
+
+    let sourcesHtml = "";
+    if (sources && sources.length > 0) {
+      sourcesHtml = `
+        <div class="chat-sources-block">
+          <div class="sources-header">
+            <svg viewBox="0 0 24 24" style="width:12px;height:12px;"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+            依據來源 (${sources.length} 個 Chunks)
+          </div>
+          <div class="sources-list">
+            ${sources.map((s, idx) => `
+              <div class="source-item">
+                <div class="source-meta">
+                  <span class="source-title">#${idx + 1} ${escapeHtml(s.document_title || "未命名文件")}</span>
+                  <span class="source-score">得分: ${(s.score || s.similarity || 0.0).toFixed(4)}</span>
+                </div>
+                <div class="source-excerpt">「${escapeHtml(s.content ? s.content.substring(0, 150) + "..." : "")}」</div>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      `;
+    }
+
+    bubble.innerHTML = `
+      <div class="bubble-content">
+        ${formatMarkdown(content)}
+        ${sourcesHtml}
+      </div>
+      <span class="bubble-time">${type === "user" ? "使用者" : "AI 助手"}</span>
+    `;
+
+    chatFlow.appendChild(bubble);
+    chatFlow.scrollTop = chatFlow.scrollHeight;
+  }
+
+  function handleSendChat() {
+    const question = chatInput.value.trim();
+    if (!question) return;
+
+    chatInput.value = "";
+    chatInput.style.height = "auto";
+
+    // 1. 渲染使用者對話泡泡
+    appendMessage(question, "user");
+
+    // 2. 渲染等待狀態
+    const waitingBubble = document.createElement("div");
+    waitingBubble.className = "chat-bubble bot-message";
+    waitingBubble.innerHTML = `
+      <div class="bubble-content">
+        <div class="loading-spinner">檢索 pgvector 知識庫中，請稍候...</div>
+      </div>
+      <span class="bubble-time">AI 助手</span>
+    `;
+    chatFlow.appendChild(waitingBubble);
+    chatFlow.scrollTop = chatFlow.scrollHeight;
+
+    // 3. 發送 API 請求
+    const payload = {
+      question: question,
+      top_k: parseInt(topKSelect.value),
+      user_security_level: parseInt(secLevelSelect.value),
+      filters: {}
+    };
+
+    const topicVal = topicFilter.value.trim();
+    if (topicVal) {
+      payload.filters.topic = topicVal;
+    }
+
+    fetch(getApiUrl("digital-twin-kb/api/ask/"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrfToken
+      },
+      body: JSON.stringify(payload)
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("對話 API 錯誤");
+        return res.json();
+      })
+      .then((data) => {
+        waitingBubble.remove();
+        appendMessage(data.answer, "bot", data.sources || []);
+      })
+      .catch((err) => {
+        waitingBubble.remove();
+        appendMessage("檢索失敗或連線逾時，請檢查環境設定是否支援 LLM。", "bot");
+      });
+  }
+
+  btnSendChat.addEventListener("click", handleSendChat);
+  chatInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendChat();
+    }
+  });
+
+  // ==========================================
+  // 3. 一鍵批量匯入預設資料夾
+  // ==========================================
+  btnIngestFolder.addEventListener("click", () => {
+    if (!confirm("確定要掃描伺服器預設資料夾並執行 pgvector Ingestion 嗎？這需要數十秒至數分鐘。")) {
+      return;
+    }
+
+    btnIngestFolder.disabled = true;
+    btnIngestFolder.innerHTML = `<span class="loading-spinner">匯入處理中...</span>`;
+
+    fetch(getApiUrl("digital-twin-kb/api/ingest/"), {
+      method: "POST",
+      headers: {
+        "X-CSRFToken": csrfToken
+      }
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("匯入觸發失敗");
+        return res.json();
+      })
+      .then((data) => {
+        alert("已經成功建立後台 Ingestion 工作！您可以隨時監控進度。");
+        // 開始輪詢進度
+        showJobProgress(data.job_id);
+      })
+      .catch((err) => {
+        alert("批量匯入失敗：" + err.message);
+      })
+      .finally(() => {
+        btnIngestFolder.disabled = false;
+        btnIngestFolder.innerHTML = `
+          <svg viewBox="0 0 24 24" class="btn-icon"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+          一鍵批量匯入資料夾
+        `;
+      });
+  });
+
+  // ==========================================
+  // 4. 單檔上傳互動與 API 上傳
+  // ==========================================
+  dropZone.addEventListener("click", () => {
+    fileInput.click();
+  });
+
+  fileInput.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      handleSelectedFile(file);
+    }
+  });
+
+  // 拖拽事件
+  ["dragenter", "dragover"].forEach((eventName) => {
+    dropZone.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      dropZone.classList.add("dragover");
+    }, false);
+  });
+
+  ["dragleave", "drop"].forEach((eventName) => {
+    dropZone.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      dropZone.classList.remove("dragover");
+    }, false);
+  });
+
+  dropZone.addEventListener("drop", (e) => {
+    const dt = e.dataTransfer;
+    const file = dt.files[0];
+    if (file && file.name.endsWith(".pdf")) {
+      fileInput.files = dt.files;
+      handleSelectedFile(file);
+    } else {
+      alert("只支援上傳 PDF 格式的文件！");
+    }
+  });
+
+  function handleSelectedFile(file) {
+    fileNameDisplay.textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+    selectedFileInfo.classList.remove("hidden");
+    dropZone.classList.add("hidden");
+    btnSubmitUpload.disabled = false;
+  }
+
+  btnCancelFile.addEventListener("click", () => {
+    fileInput.value = "";
+    selectedFileInfo.classList.add("hidden");
+    dropZone.classList.remove("hidden");
+    btnSubmitUpload.disabled = true;
+  });
+
+  uploadForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    btnSubmitUpload.disabled = true;
+    btnSubmitUpload.textContent = "上傳並解析中...";
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("topic", uploadTopic.value.trim());
+    formData.append("security_level", parseInt(uploadSecLevel.value));
+    formData.append("uploaded_by", "管理者");
+
+    fetch(getApiUrl("digital-twin-kb/api/upload/"), {
+      method: "POST",
+      headers: {
+        "X-CSRFToken": csrfToken
+      },
+      body: formData
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("文件上傳失敗");
+        return res.json();
+      })
+      .then((data) => {
+        alert("文件上傳並切割 Ingest 成功！");
+        // 恢復上傳表單
+        btnCancelFile.click();
+        uploadTopic.value = "";
+        // 重新載入統計與文檔列表
+        loadStats();
+        loadDocuments();
+      })
+      .catch((err) => {
+        alert("上傳失敗：" + err.message);
+      })
+      .finally(() => {
+        btnSubmitUpload.disabled = false;
+        btnSubmitUpload.textContent = "確認並解析文件";
+      });
+  });
+
+  // ==========================================
+  // 5. 後台工作狀態輪詢 (Job Polling)
+  // ==========================================
+  function showJobProgress(jobId) {
+    if (activePollInterval) clearInterval(activePollInterval);
+
+    jobStatusPanel.classList.remove("hidden");
+
+    function poll() {
+      fetch(getApiUrl(`digital-twin-kb/api/ingestion-jobs/${jobId}/`))
+        .then((res) => res.json())
+        .then((data) => {
+          const status = data.status.toLowerCase();
+          const progress = data.progress || 0;
+
+          jobProgressBar.style.width = `${progress}%`;
+          jobStatusBadge.className = `badge ${status}`;
+          jobStatusBadge.textContent = data.status;
+
+          let desc = `目前進度: ${progress}% - ${data.error_message || "正在提取文字並寫入 pgvector 向量..."}`;
+          jobProgressDesc.textContent = desc;
+
+          if (status === "completed" || status === "failed") {
+            clearInterval(activePollInterval);
+            setTimeout(() => {
+              jobStatusPanel.classList.add("hidden");
+              loadStats();
+              loadDocuments();
+            }, 3000);
+          }
+        })
+        .catch(() => {
+          clearInterval(activePollInterval);
+        });
+    }
+
+    poll();
+    activePollInterval = setInterval(poll, 2000);
+  }
+
+  // 檢查是否有正在進行的 active jobs
+  function checkActiveJobs() {
+    fetch(getApiUrl("digital-twin-kb/api/ingestion-jobs/"))
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.length > 0) {
+          // 尋找處理中的第一個 job
+          const running = data.find(j => j.status === "PROCESSING" || j.status === "PENDING");
+          if (running) {
+            showJobProgress(running.job_id);
+          }
+        }
+      });
+  }
+
+  // ==========================================
+  // 6. 統計與文檔庫加載
+  // ==========================================
+  function loadStats() {
+    fetch(getApiUrl("digital-twin-kb/api/categories/"))
+      .then((res) => res.json())
+      .then((data) => {
+        categoriesContainer.innerHTML = "";
+        if (!data || data.length === 0) {
+          categoriesContainer.innerHTML = `<div class="font-muted text-center" style="grid-column:1/-1;">尚無層級統計資料</div>`;
+          return;
+        }
+
+        data.forEach((cat) => {
+          const card = document.createElement("div");
+          card.className = "category-mini-card";
+          card.innerHTML = `
+            <div class="cat-level">LEVEL ${cat.twin_level}</div>
+            <div class="cat-count">${cat.doc_count || 0}</div>
+            <div class="cat-desc">${escapeHtml(cat.name)}</div>
+          `;
+          categoriesContainer.appendChild(card);
+        });
+      })
+      .catch(() => {
+        categoriesContainer.innerHTML = `<div class="text-center font-muted">加載統計失敗</div>`;
+      });
+  }
+
+  function loadDocuments() {
+    documentsTableBody.innerHTML = `<tr><td colspan="5" class="text-center font-muted">載入中...</td></tr>`;
+
+    fetch(getApiUrl("digital-twin-kb/api/documents/"))
+      .then((res) => res.json())
+      .then((data) => {
+        documentsTableBody.innerHTML = "";
+        if (!data || data.length === 0) {
+          documentsTableBody.innerHTML = `<tr><td colspan="5" class="text-center font-muted">知識庫目前是空的</td></tr>`;
+          return;
+        }
+
+        data.forEach((doc) => {
+          const tr = document.createElement("tr");
+
+          const dateStr = doc.created_at ? new Date(doc.created_at).toLocaleString() : "未知";
+          const scoreLevel = doc.security_level || 1;
+
+          tr.innerHTML = `
+            <td>
+              <a class="dt-table-link doc-title-btn" data-id="${doc.document_id}" data-title="${escapeHtml(doc.title)}">
+                ${escapeHtml(doc.title)}
+              </a>
+            </td>
+            <td>${escapeHtml(doc.topic || "一般")}</td>
+            <td>等級 ${scoreLevel}</td>
+            <td>Level ${doc.twin_level || "未分類"}</td>
+            <td>${dateStr}</td>
+          `;
+          documentsTableBody.appendChild(tr);
+        });
+
+        // 綁定查看 Chunks 彈窗事件
+        document.querySelectorAll(".doc-title-btn").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            const docId = btn.getAttribute("data-id");
+            const docTitle = btn.getAttribute("data-title");
+            openChunksModal(docId, docTitle);
+          });
+        });
+      })
+      .catch(() => {
+        documentsTableBody.innerHTML = `<tr><td colspan="5" class="text-center font-muted" style="color:#ff5252">載入文檔庫失敗</td></tr>`;
+      });
+  }
+
+  btnRefreshDocs.addEventListener("click", () => {
+    loadStats();
+    loadDocuments();
+  });
+
+  // ==========================================
+  // 7. Chunks 彈窗模態框 (Modal)
+  // ==========================================
+  function openChunksModal(docId, docTitle) {
+    modalDocTitle.textContent = `文檔切片：《${docTitle}》`;
+    modalChunksContainer.innerHTML = `<div class="loading-spinner">載入 Chunk 切片中...</div>`;
+    chunksModal.classList.remove("hidden");
+
+    fetch(getApiUrl(`digital-twin-kb/api/documents/${docId}/chunks/`))
+      .then((res) => res.json())
+      .then((data) => {
+        modalChunksContainer.innerHTML = "";
+        if (!data || data.length === 0) {
+          modalChunksContainer.innerHTML = `<div class="text-center font-muted">此文檔無任何 Chunk 切片</div>`;
+          return;
+        }
+
+        data.forEach((chunk) => {
+          const card = document.createElement("div");
+          card.className = "modal-chunk-card";
+          card.innerHTML = `
+            <div class="chunk-card-meta">
+              <span>切片索引: #${chunk.chunk_index}</span>
+              <span>雙生層級: Level ${chunk.twin_level || "未分類"}</span>
+            </div>
+            <div class="chunk-card-content">${escapeHtml(chunk.content)}</div>
+          `;
+          modalChunksContainer.appendChild(card);
+        });
+      })
+      .catch(() => {
+        modalChunksContainer.innerHTML = `<div class="text-center font-muted" style="color:#ff5252">載入 Chunks 失敗</div>`;
+      });
+  }
+
+  btnCloseModal.addEventListener("click", () => {
+    chunksModal.classList.add("hidden");
+  });
+
+  window.addEventListener("click", (e) => {
+    if (e.target === chunksModal) {
+      chunksModal.classList.add("hidden");
+    }
+  });
+
+  // ==========================================
+  // 8. 輔助函數 (Escape & Markdown)
+  // ==========================================
+  function escapeHtml(text) {
+    if (!text) return "";
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function formatMarkdown(text) {
+    if (!text) return "";
+    let formatted = escapeHtml(text);
+    // 粗體
+    formatted = formatted.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+    // 換行
+    formatted = formatted.replace(/\n/g, "<br>");
+    return formatted;
+  }
+
+  // ==========================================
+  // 初始化加載
+  // ==========================================
+  loadStats();
+  loadDocuments();
+  checkActiveJobs();
+});

@@ -326,6 +326,7 @@ PORTAL_ACL = {
     "pptx": ["ALL_AUTHENTICATED"],
     "tts": ["ALL_AUTHENTICATED"],
     "rag": ["ALL_AUTHENTICATED"],
+    "digital_twin_kb": ["ALL_AUTHENTICATED"],
     "vanna": [
         "DB",
         "中心雲端系統跨廠權限",
@@ -360,6 +361,27 @@ SQL_SERVER_DRIVER = env_str("SQL_SERVER_DRIVER", "ODBC Driver 17 for SQL Server"
 SQL_SERVER_RAG_VIEW = env_str("SQL_SERVER_RAG_VIEW", "dbo.view_rag_cm_qna")
 SQL_SERVER_FETCH_SIZE = env_int("SQL_SERVER_FETCH_SIZE", 200)
 SQL_SERVER_UPSERT_BATCH = env_int("SQL_SERVER_UPSERT_BATCH", 200)
+
+# ============================================================
+# Digital Twin Knowledge Base
+# - Integrated app under webapps.digital_twin_kb.
+# - Uses root .env and root requirements.txt; no standalone project config.
+# ============================================================
+DIGITAL_TWIN_KB_DOCS_DIR = Path(
+    env_str("DIGITAL_TWIN_KB_DOCS_DIR", str(BASE_DIR / "documents" / "digital_twin_kb"))
+)
+DIGITAL_TWIN_KB_STORAGE_DIR = Path(
+    env_str("DIGITAL_TWIN_KB_STORAGE_DIR", str(BASE_DIR / "media" / "digital_twin_kb"))
+)
+DIGITAL_TWIN_KB_EMBEDDING_MODEL = env_str(
+    "DIGITAL_TWIN_KB_EMBEDDING_MODEL",
+    "sentence-transformers/all-MiniLM-L6-v2",
+)
+DIGITAL_TWIN_KB_EMBEDDING_DIMENSIONS = env_int("DIGITAL_TWIN_KB_EMBEDDING_DIMENSIONS", 384)
+DIGITAL_TWIN_KB_TOP_K = env_int("DIGITAL_TWIN_KB_TOP_K", 5)
+DIGITAL_TWIN_KB_LLM_PROVIDER = env_str("DIGITAL_TWIN_KB_LLM_PROVIDER", "ollama")
+DIGITAL_TWIN_KB_OLLAMA_MODEL = env_str("DIGITAL_TWIN_KB_OLLAMA_MODEL", "mistral")
+DIGITAL_TWIN_KB_OPENAI_MODEL = env_str("DIGITAL_TWIN_KB_OPENAI_MODEL", "gpt-4.1")
 
 SYBASE_DSN = env_str("SYBASE_DSN", "")
 SYBASE_HOST = env_str("SYBASE_HOST", "")
@@ -423,6 +445,33 @@ TEXT2PPTX_IMAGE_DIR = env_str("TEXT2PPTX_IMAGE_DIR", str(MEDIA_ROOT / "generated
 TEXT2PPTX_IMAGE_PROVIDER_CMD = env_str("TEXT2PPTX_IMAGE_PROVIDER_CMD", "")
 TEXT2PPTX_IMAGE_PROVIDER_FALLBACK_CMD = env_str("TEXT2PPTX_IMAGE_PROVIDER_FALLBACK_CMD", "")
 TTS_MAX_CHARS = env_int("TTS_MAX_CHARS", 1200)
+
+# 知識庫與 Mock 資料
+API_CONTEXT_PATH = env_str("API_CONTEXT_PATH", f"{_PROJECT_ROOT_STR}\\api\\knowledge\\api.txt")
+MOCK_DB_JSON = env_str("MOCK_DB_JSON", f"{_PROJECT_ROOT_STR}\\SQLTEST_output.json")
+
+# ============================================================
+# Misc
+# ============================================================
+TTS_API_BASE_URL = env_str("TTS_API_BASE_URL", "")
+TTS_API_TIMEOUT = env_int("TTS_API_TIMEOUT", 60)
+OPEN_NOTEBOOK_PORTAL_URL = env_str("OPEN_NOTEBOOK_PORTAL_URL", "http://127.0.0.1:8502")
+
+# ============================================================
+# Sybase query workstation whitelist
+# ============================================================
+DOC_QUERY_ALLOWED_IPS = env_list("DOC_QUERY_ALLOWED_IPS", "127.0.0.1,::1")
+DOC_QUERY_TRUST_X_FORWARDED_FOR = env_bool("DOC_QUERY_TRUST_X_FORWARDED_FOR", default=True)
+
+FILE_CHARSET = env_str("FILE_CHARSET", "cp950")
+TEXT2PPTX_MAX_CHARS = env_int("TEXT2PPTX_MAX_CHARS", 20000)
+TEXT2PPTX_IMAGE_MODE = env_str("TEXT2PPTX_IMAGE_MODE", "mock")
+TEXT2PPTX_IMAGE_TIMEOUT_SEC = env_int("TEXT2PPTX_IMAGE_TIMEOUT_SEC", 30)
+TEXT2PPTX_IMAGE_RETRY = env_int("TEXT2PPTX_IMAGE_RETRY", 2)
+TEXT2PPTX_IMAGE_DIR = env_str("TEXT2PPTX_IMAGE_DIR", str(MEDIA_ROOT / "generated_images" / "text2pptx"))
+TEXT2PPTX_IMAGE_PROVIDER_CMD = env_str("TEXT2PPTX_IMAGE_PROVIDER_CMD", "")
+TEXT2PPTX_IMAGE_PROVIDER_FALLBACK_CMD = env_str("TEXT2PPTX_IMAGE_PROVIDER_FALLBACK_CMD", "")
+TTS_MAX_CHARS = env_int("TTS_MAX_CHARS", 1200)
 TTS_FILE_MAX_MB = env_int("TTS_FILE_MAX_MB", 15)
 
 # ============================================================
@@ -445,6 +494,7 @@ PORTAL_USAGE_CODE_MAP = [
     ("/projectnotes/", "PROJECTNOTES"),
     ("/formalize/", "FORMALIZE"),
     ("/open-notebook/", "OPEN_NOTEBOOK"),
+    ("/digital-twin-kb/", "DIGITAL_TWIN_KB"),
 ]
 
 # ============================================================
@@ -462,6 +512,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "rest_framework",
     "corsheaders",
     "django_extensions",
     "webapps.tts.apps.TtsConfig",
@@ -483,6 +534,7 @@ INSTALLED_APPS = [
     "webapps.projectnotes.apps.ProjectnotesConfig",
     "webapps.document_formalize.apps.DocumentFormalizeConfig",
     "webapps.videolearning.apps.VideolearningConfig",
+    "webapps.digital_twin_kb.apps.DigitalTwinKbConfig",
     "pgvector.django",
     "django.contrib.postgres",
 ]
@@ -523,7 +575,10 @@ ROOT_URLCONF = "webproj.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "webapps" / "doc" / "templates"],
+        "DIRS": [
+            BASE_DIR / "webapps" / "doc" / "templates",
+            BASE_DIR / "webapps" / "digital_twin_kb" / "templates",
+        ],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
