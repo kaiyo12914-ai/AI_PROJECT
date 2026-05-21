@@ -1,101 +1,104 @@
 from __future__ import annotations
 
 import re
+from typing import Callable
 
 
-def _extract_doc_subject(text: str, compact_spaced_cjk):
+SUBJECT_KEY = "主旨"
+STOP_KEYS = [
+    "說明", "附件", "受文者", "發文日期", "發文字號",
+    "檔號", "保存年限", "密等", "速別", "正本", "副本", "抄送",
+]
+
+
+def _norm_line(s: str, compact_spaced_cjk: Callable[[str], str]) -> str:
+    s = compact_spaced_cjk((s or "").strip())
+    return re.sub(r"[\s\u3000]+", "", s)
+
+
+def _starts_with_key(s: str, key: str, compact_spaced_cjk: Callable[[str], str]) -> bool:
+    x = _norm_line(s, compact_spaced_cjk)
+    return x.startswith(key + "：") or x.startswith(key + ":")
+
+
+def _after_colon(s: str, compact_spaced_cjk: Callable[[str], str]) -> str:
+    x = _norm_line(s, compact_spaced_cjk)
+    if "：" in x:
+        return x.split("：", 1)[1]
+    if ":" in x:
+        return x.split(":", 1)[1]
+    return ""
+
+
+def _is_list_start(line: str) -> bool:
+    if re.match(r"^[一二三四五六七八九十]+\s*[、.．:]", line):
+        return True
+    if re.match(r"^\d+\s*[、.．:]", line):
+        return True
+    if re.match(r"^[\(（][一二三四五六七八九十\d]+[\)）]", line):
+        return True
+    return False
+
+
+def _trim_subject_tail(subj: str) -> str:
+    subj = re.sub(r"\s+", "", subj)
+    subj = re.sub(r"[,，。．\s]+$", "", subj)
+    for tail in ("請核示", "請鑒核", "請示"):
+        if subj.endswith(tail):
+            subj = subj[: -len(tail)].rstrip("，,。． ")
+            break
+    return subj
+
+
+def _extract_doc_subject(text: str, compact_spaced_cjk: Callable[[str], str]) -> str:
     lines = [ln.strip() for ln in (text or "").splitlines()]
-
-    K_SUBJ = "\u4e3b\u65e8"
-    STOP_KEYS = [
-        "\u8aaa\u660e", "\u9644\u4ef6", "\u53d7\u6587\u8005", "\u767c\u6587\u65e5\u671f", "\u767c\u6587\u5b57\u865f",
-        "\u6a94\u865f", "\u4fdd\u5b58\u5e74\u9650", "\u5bc6\u7b49", "\u901f\u5225", "\u6b63\u672c", "\u526f\u672c", "\u6284\u9001",
-    ]
-
-    def norm(s: str) -> str:
-        s = compact_spaced_cjk((s or "").strip())
-        return re.sub(r"[\\s\\u3000]+", "", s)
-
-    def starts_key(s: str, k: str) -> bool:
-        x = norm(s)
-        return x.startswith(k + "?") or x.startswith(k + ":")
-
-    def after_colon(s: str) -> str:
-        x = norm(s)
-        if "?" in x:
-            return x.split("?", 1)[1]
-        if ":" in x:
-            return x.split(":", 1)[1]
-        return ""
-
     for i, line in enumerate(lines):
-        if not starts_key(line, K_SUBJ):
+        if not _starts_with_key(line, SUBJECT_KEY, compact_spaced_cjk):
             continue
+
         parts = []
-        first = after_colon(line).strip()
+        first = _after_colon(line, compact_spaced_cjk).strip()
         if first:
             parts.append(first)
+
         for j in range(i + 1, len(lines)):
             ln = (lines[j] or "").strip()
             if not ln:
                 break
-            if any(starts_key(ln, k) for k in STOP_KEYS):
+            if any(_starts_with_key(ln, k, compact_spaced_cjk) for k in STOP_KEYS):
                 break
-            if re.match(r"^[??????????]+\\s*[?.?:]", ln):
+            if _is_list_start(ln):
                 break
-            if re.match(r"^\\d+\\s*[?.?:]", ln):
-                break
-            if re.match(r"^[\\(?][??????????\\d]+[\\)?]", ln):
-                break
-            parts.append(norm(ln))
+            parts.append(_norm_line(ln, compact_spaced_cjk))
 
-        subj = "".join(parts).strip()
-        subj = re.sub(r"\\s+", "", subj)
-        subj = re.sub(r"[,???\\s]+$", "", subj)
-        for tail in ("\u8acb\u6838\u793a", "\u8acb\u9452\u6838", "\u8acb\u793a"):
-            if subj.endswith(tail):
-                subj = subj[: -len(tail)].rstrip("?,?? ")
-                break
-        return subj
+        return _trim_subject_tail("".join(parts).strip())
     return ""
 
 
-def _extract_doc_subject_fallback(text: str, compact_spaced_cjk):
+def _extract_doc_subject_fallback(text: str, compact_spaced_cjk: Callable[[str], str]) -> str:
     lines = [compact_spaced_cjk(x or "").strip() for x in (text or "").splitlines()]
     if not lines:
         return ""
 
-    k_subject = "\u4e3b\u65e8"
-    stop_keys = [
-        "\u8aaa\u660e", "\u9644\u4ef6", "\u53d7\u6587\u8005", "\u767c\u6587\u65e5\u671f", "\u767c\u6587\u5b57\u865f",
-        "\u6a94\u865f", "\u4fdd\u5b58\u5e74\u9650", "\u5bc6\u7b49", "\u901f\u5225", "\u6b63\u672c", "\u526f\u672c", "\u6284\u9001",
-    ]
-
-    def _starts_with_key(s: str, key: str) -> bool:
-        t = re.sub(r"[\\s\\u3000]+", "", s or "")
-        return t.startswith(key + "?") or t.startswith(key + ":")
-
     for i, ln in enumerate(lines):
-        nln = re.sub(r"[\\s\\u3000]+", "", ln or "")
-        if not (nln.startswith(k_subject + "?") or nln.startswith(k_subject + ":")):
+        nln = re.sub(r"[\s\u3000]+", "", ln or "")
+        if not (nln.startswith(SUBJECT_KEY + "：") or nln.startswith(SUBJECT_KEY + ":")):
             continue
-        first = nln.split("?", 1)[1] if "?" in nln else (nln.split(":", 1)[1] if ":" in nln else "")
+
+        first = nln.split("：", 1)[1] if "：" in nln else (nln.split(":", 1)[1] if ":" in nln else "")
         parts = [first] if first else []
+
         for j in range(i + 1, len(lines)):
-            n = re.sub(r"[\\s\\u3000]+", "", (lines[j] or ""))
+            n = re.sub(r"[\s\u3000]+", "", (lines[j] or ""))
             if not n:
                 break
-            if any(n.startswith(k + "?") or n.startswith(k + ":") for k in stop_keys):
+            if any(n.startswith(k + "：") or n.startswith(k + ":") for k in STOP_KEYS):
                 break
-            if re.match(r"^[??????????]+\\s*[?.?:]", n):
-                break
-            if re.match(r"^\\d+\\s*[?.?:]", n):
-                break
-            if re.match(r"^[\\(?][??????????\\d]+[\\)?]", n):
+            if _is_list_start(n):
                 break
             parts.append(n)
-        subj = "".join(parts).strip()
-        subj = re.sub(r"[,???\\s]+$", "", subj)
+
+        subj = _trim_subject_tail("".join(parts).strip())
         if subj:
             return subj
     return ""

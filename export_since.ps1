@@ -204,7 +204,7 @@ if ($null -eq $SinceDate) {
 # -------------------------
 # file patterns
 # -------------------------
-$Exts = @('*.js','*.py','*.html','*.css','*.json','*.txt','*.md','*.sql')
+$Exts = @('*.js','*.py','*.html','*.css','*.json','*.txt','*.md','*.sql','*.skill')
 $ExtSet = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::InvariantCultureIgnoreCase)
 foreach ($e in $Exts) {
   $v = [string]$e

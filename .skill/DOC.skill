@@ -1,0 +1,94 @@
+# 公文生成.skill v2
+
+Version: 2.1.0
+Last-Updated: 2026-05-21
+Owner: DOC 子系統
+Purpose: 提供 AI Agent 於公文草稿生成時的可執行規範。
+
+## 0. 適用範圍
+- 適用模組：`webapps/doc`。
+- 文種：`order_draft`（令）、`submit_draft`（呈）、`letter_draft`（函）。
+- 輸出段落必須包含：`主旨`、`說明`、`擬辦`。
+
+## 1. 輸入契約
+- 必要欄位：
+  - `doc_type`: `order_draft | submit_draft | letter_draft`
+  - `stage2_facts`: 非空清單
+  - `incoming_level`: `from_direct_superior | from_superior | from_peer | from_subordinate | general`
+- 選填欄位：
+  - `incoming_text`
+  - `reference_text`
+  - `fixed_quote`
+  - `signer_self_ref`（例如：本中心、本廠、本單位）
+
+## 2. 高優先規則（硬性）
+1. `fixed_quote` 必須放在說明第一點。
+2. `研處意見` 必須是說明最後一點。
+3. `針對「...」` 需求摘述必須出現在說明第二點或第三點。
+4. 擬辦若只有一點，必須移除點次編號（不得出現 `一、` 或 `(一)`）。
+5. 指令口吻清理必須在最終輸出前完成。
+
+## 3. 來文層級映射
+- `from_direct_superior | from_superior`：以上級來文語意撰寫。
+- `from_peer`：以平行單位協調語意撰寫。
+- `from_subordinate`：以下級回報/請示語意撰寫。
+- `general`：以一般公務中性語意撰寫。
+
+## 4. 生成流程
+1. 驗證輸入契約。
+2. 解析 `stage2_facts`。
+3. 產生基礎草稿（LLM 或既有路徑）。
+4. 段落正規化（主旨/說明/擬辦）。
+5. 套用說明段規則。
+6. 套用擬辦規則。
+7. 執行品質檢核。
+8. 回傳草稿與結構化段落。
+
+## 5. 說明段規則
+- 說明一：法源依據句（可含日期、字號、文種）。
+- 說明二：案件事實/要求（不得重貼完整法源）。
+- 說明三：先期摘述與執行重點對應。
+- 說明四：研處意見（層級關係 + 我方具體作為）。
+
+### 去重與刪除
+- 若說明二僅重述法源（例如：依第一點、依前揭字號、如附呈）且無新增任務語意，應直接刪除。
+- 刪除後仍須補齊說明一至說明四結構。
+- 若法源長句已在說明一出現，後續段落應以「前揭字號」等短代稱替代。
+
+## 6. 擬辦規則
+- 單點擬辦：必須為單句，不得帶編號。
+- 多點擬辦：可用 `一、二、`，最多 2 點。
+- 用語正規化：`請核示後` / `核示後` / `請核後` 一律改為 `奉核後`。
+- 只保留本單位可執行事項，不得帶入非本單位義務句。
+
+## 7. 來文與附件解析規則
+- 附件主標題必須保留為 `附件重點1`（若不存在則補入）。
+- 主標題優先抓附件正文大標，避免誤抓來文主旨句。
+- 既有重點與候選重點應進入同一評分池統一排序（固定引述與研處意見規則除外）。
+
+## 8. 禁用語與語氣
+- 禁止直接命令口吻回放：`請照辦`、`請查照`、`務請`、`請辦理`。
+- 需求摘述應中性轉述，不得原樣命令回放。
+
+## 9. 品質檢核（機器可檢）
+- Q1：說明第一點包含 `fixed_quote`。
+- Q2：`針對「...」` 在說明二或三。
+- Q3：`研處意見` 僅出現一次且在說明最後。
+- Q4：單點擬辦不含編號。
+- Q5：禁用命令詞未出現。
+- Q6：說明一與說明二不得高度重疊（法源克隆需刪除或縮寫）。
+- Q7：若刪除說明二，最終仍維持說明四點完整結構。
+
+## 10. 程式錨點（維護用）
+- `webapps/doc/views_generate.py`
+  - `_check_quality_gate_readonly`
+  - `_reduce_explain_point12_overlap`
+  - `_ensure_explain_four_points`
+  - `_final_strip_single_action_marker`
+  - `_normalize_approval_phrase`
+- `webapps/doc/views_parse.py`
+  - `_extract_attachment_points`
+  - `_extract_attachment_title`
+- `webapps/doc/views_parse_subject.py`
+  - `_extract_doc_subject`
+  - `_extract_doc_subject_fallback`

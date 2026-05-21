@@ -1,4 +1,3 @@
-# webapps/llm/views.py
 from __future__ import annotations
 
 import json
@@ -40,7 +39,7 @@ def chat(request: HttpRequest):
     """
     POST /api/chat/
     Body: {"prompt": "...", "enable_rag": true?}
-    Response: {"reply": "...", "backend": "..."}  ??{"error": "..."}
+    Response: {"reply": "...", "backend": "..."} or {"error": "..."}
     """
     if request.method != "POST":
         return _json_error("Method not allowed", status=405)
@@ -50,12 +49,10 @@ def chat(request: HttpRequest):
     if not prompt:
         return _json_error("prompt is required", status=400)
 
-    # ?舫嚗?閮勗?蝡舀?嗆?血???RAG
-    enable_rag = data.get("enable_rag", True)
-    enable_rag = bool(enable_rag)
+    # Default: enable RAG unless caller explicitly disables it.
+    enable_rag = bool(data.get("enable_rag", True))
 
-    # ?舫嚗?閮勗?蝡臬??timeout/temperature嚗??喳停??services ??閮哨?
-    # 瘜冽?嚗??憛???航炊嚗???摰???
+    # Allow caller override for timeout/temperature with safe fallback values.
     temperature = data.get("temperature", None)
     timeout = data.get("timeout", None)
     try:
@@ -67,8 +64,7 @@ def chat(request: HttpRequest):
     except Exception:
         timeout = 120
 
-    # ?乩???閬閮?context / postgres rag 雿蔭嚗隞亙?ㄐ憛?config
-    # 撟喳虜?臭??喉?霈?services ?芸???settings/env/base_dir ?冽嚗?
+    # Service config loads runtime settings (env/base_dir) centrally.
     config = LLMServiceConfig()
 
     try:
@@ -83,7 +79,6 @@ def chat(request: HttpRequest):
     except ValueError as ve:
         return _json_error(str(ve), status=400)
     except Exception as e:
-        # 銝??折?航炊蝝啁??其?蝯血?蝡荔??踹?瘣拇?
         return _json_error("internal error", status=500, detail=repr(e))
 
 
@@ -92,14 +87,14 @@ def translate(request: HttpRequest):
     """
     POST /api/translate/
     Body: {"text":"...", "source_lang":"auto", "target_lang":"zh-Hant"}
-    Response: {"translated":"...", "backend":"..."}  ??{"error": "..."}
+    Response: {"translated":"...", "backend":"..."} or {"error": "..."}
     """
     if request.method != "POST":
         return _json_error("Method not allowed", status=405)
 
     data = _parse_json_body(request)
-    text = (data.get("text") or "").strip()
-    if not text:
+    text_in = (data.get("text") or "").strip()
+    if not text_in:
         return _json_error("text is required", status=400)
 
     source_lang = (data.get("source_lang") or "auto").strip()
@@ -118,7 +113,7 @@ def translate(request: HttpRequest):
 
     try:
         result = translate_core(
-            text,
+            text_in,
             source_lang=source_lang,
             target_lang=target_lang,
             temperature=temperature,
@@ -129,4 +124,3 @@ def translate(request: HttpRequest):
         return _json_error(str(ve), status=400)
     except Exception as e:
         return _json_error("internal error", status=500, detail=repr(e))
-
