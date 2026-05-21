@@ -752,13 +752,34 @@ def api_parse_attachments_focus(request: HttpRequest):
         )
 
         # 來文說明：直接抽「說明」段落，保留每段完整語義。
-        incoming_desc = _extract_description_paragraphs(washed_incoming_text, max_items=8)
-        incoming_desc = _filter_points_by_anchor_doc_no(incoming_desc, best_meta.get("no", ""))
-        incoming_desc = [x for x in incoming_desc if not _is_address_like_text(x)]
-        incoming_desc = [x for x in incoming_desc if not _is_speed_level_like_text(x)]
+        incoming_desc_raw = _extract_description_paragraphs(washed_incoming_text, max_items=20)
+        # Hard rule:
+        # 1) Preserve all N points from original 說明
+        # 2) Keep original order strictly
+        incoming_desc: List[str] = []
+        for x in incoming_desc_raw:
+            x2 = (x or "").strip()
+            if not x2:
+                continue
+            # parse 路徑：不套用 anchor_doc_no 過濾，避免掉點或亂序
+            # （公文生成路徑仍保留既有規則）
+            if not _is_address_like_text(x2) and not _is_speed_level_like_text(x2):
+                incoming_desc.append(x2)
+                continue
+            incoming_desc.append(x2)
+        # de-duplicate while preserving original order
+        dedup_desc: List[str] = []
+        seen_desc = set()
+        for x in incoming_desc:
+            k = _normalize_point_text(x)
+            if not k or k in seen_desc:
+                continue
+            seen_desc.add(k)
+            dedup_desc.append(x)
+        incoming_desc = dedup_desc[:20]
 
-        # ?????????????????????????????????????????
-        # ??? LLM ???????1..n??????????????????
+        # 說明：保留原始點次順序，避免重排造成語意錯位
+        # 若 LLM 產生點次 1..n，仍需回對原文點次並維持完整輸出
         incoming_prompt = ""
 
 
@@ -792,7 +813,7 @@ def api_parse_attachments_focus(request: HttpRequest):
             incoming_desc=incoming_desc,
             incoming_point1=incoming_point1,
             attachment_points=attachment_points,
-            max_incoming_desc=8,
+            max_incoming_desc=20,
             max_attach=20,
         )
 
