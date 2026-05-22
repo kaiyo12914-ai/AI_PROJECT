@@ -34,6 +34,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const documentsTableBody = document.getElementById("documents-table-body");
   const btnRefreshDocs = document.getElementById("btn-refresh-docs");
 
+  // 歷史 RAG 問答紀錄綁定
+  const qaLogsTableBody = document.getElementById("qa-logs-table-body");
+  const btnRefreshQa = document.getElementById("btn-refresh-qa");
+
   // Modal 綁定
   const chunksModal = document.getElementById("chunks-modal");
   const btnCloseModal = document.getElementById("btn-close-modal");
@@ -93,10 +97,10 @@ document.addEventListener("DOMContentLoaded", () => {
             ${sources.map((s, idx) => `
               <div class="source-item">
                 <div class="source-meta">
-                  <span class="source-title">#${idx + 1} ${escapeHtml(s.document_title || "未命名文件")}</span>
+                  <span class="source-title">#${idx + 1} ${escapeHtml(s.file_name || s.document_title || "未命名文件")}</span>
                   <span class="source-score">得分: ${(s.score || s.similarity || 0.0).toFixed(4)}</span>
                 </div>
-                <div class="source-excerpt">「${escapeHtml(s.content ? s.content.substring(0, 150) + "..." : "")}」</div>
+                <div class="source-excerpt">「${escapeHtml(s.content || s.paragraph ? (s.content || s.paragraph).substring(0, 150) + "..." : "")}」</div>
               </div>
             `).join("")}
           </div>
@@ -166,6 +170,8 @@ document.addEventListener("DOMContentLoaded", () => {
       .then((data) => {
         waitingBubble.remove();
         appendMessage(data.answer, "bot", data.sources || []);
+        // 對話完畢後自動重新載入歷史問答紀錄
+        loadQaLogs();
       })
       .catch((err) => {
         waitingBubble.remove();
@@ -372,7 +378,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ==========================================
-  // 6. 統計與文檔庫加載
+  // 6. 統計、文檔庫、歷史紀錄加載
   // ==========================================
   function loadStats() {
     fetch(getApiUrl("digital-twin-kb/api/categories/"))
@@ -446,9 +452,86 @@ document.addEventListener("DOMContentLoaded", () => {
       });
   }
 
+  // 載入歷史 RAG 問答紀錄
+  function loadQaLogs() {
+    qaLogsTableBody.innerHTML = `<tr><td colspan="4" class="text-center font-muted">載入問答紀錄中...</td></tr>`;
+
+    fetch(getApiUrl("digital-twin-kb/api/qa-logs/"))
+      .then((res) => res.json())
+      .then((data) => {
+        qaLogsTableBody.innerHTML = "";
+        if (!data || data.length === 0) {
+          qaLogsTableBody.innerHTML = `<tr><td colspan="4" class="text-center font-muted">尚無歷史問答紀錄</td></tr>`;
+          return;
+        }
+
+        data.forEach((log) => {
+          const tr = document.createElement("tr");
+          const dateStr = log.created_at ? new Date(log.created_at).toLocaleString() : "未知";
+          const shortQ = log.user_question.length > 22 ? log.user_question.substring(0, 22) + "..." : log.user_question;
+          const chunksCount = log.retrieved_chunks ? log.retrieved_chunks.length : 0;
+
+          tr.innerHTML = `
+            <td>
+              <a class="dt-table-link qalog-review-btn" data-id="${log.query_id}" title="點擊載入此次對話歷史">
+                ${escapeHtml(shortQ)}
+              </a>
+            </td>
+            <td>${escapeHtml(log.asker_id || "anonymous")}</td>
+            <td>${chunksCount} 個 Chunks</td>
+            <td>${dateStr}</td>
+          `;
+          qaLogsTableBody.appendChild(tr);
+        });
+
+        // 綁定歷史對話載入事件
+        document.querySelectorAll(".qalog-review-btn").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            const logId = btn.getAttribute("data-id");
+            reviewQaLog(logId);
+          });
+        });
+      })
+      .catch(() => {
+        qaLogsTableBody.innerHTML = `<tr><td colspan="4" class="text-center font-muted" style="color:#ff5252">載入歷史紀錄失敗</td></tr>`;
+      });
+  }
+
+  // 回溯與還原歷史對話
+  function reviewQaLog(logId) {
+    fetch(getApiUrl(`digital-twin-kb/api/qa-logs/${logId}/`))
+      .then((res) => res.json())
+      .then((data) => {
+        // 清空對話流並渲染歷史對話標記
+        chatFlow.innerHTML = `
+          <div class="chat-bubble bot-message">
+            <div class="bubble-content">
+              已成功載入歷史問答紀錄 (ID: #${data.query_id}，提問者: **${escapeHtml(data.asker_id || "anonymous")}**)。
+              <br><br>
+              這是該次檢索對話的還原狀態。
+            </div>
+            <span class="bubble-time">AI 助手 (歷史回溯)</span>
+          </div>
+        `;
+
+        // 還原使用者當時的提問
+        appendMessage(data.user_question, "user");
+
+        // 還原當時的回答與引用的 Chunks 來源
+        appendMessage(data.answer, "bot", data.cited_sources || []);
+      })
+      .catch(() => {
+        alert("無法載入該筆歷史問答記錄，請確認資料是否依然存在！");
+      });
+  }
+
   btnRefreshDocs.addEventListener("click", () => {
     loadStats();
     loadDocuments();
+  });
+
+  btnRefreshQa.addEventListener("click", () => {
+    loadQaLogs();
   });
 
   // ==========================================
@@ -524,5 +607,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // ==========================================
   loadStats();
   loadDocuments();
+  loadQaLogs(); // 👈 初始化加載歷史問答紀錄
   checkActiveJobs();
 });

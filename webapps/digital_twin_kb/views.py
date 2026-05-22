@@ -71,10 +71,17 @@ class AskView(APIView):
         question = (request.data.get("question") or "").strip()
         if not question:
             return Response({"error": "question is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        asker_id = request.data.get("asker_id", "")
+        if not asker_id and request.user and request.user.is_authenticated:
+            asker_id = request.user.username
+        else:
+            asker_id = asker_id or "anonymous"
+
         result = ask(
             question=question,
             asker_type=request.data.get("asker_type", "user"),
-            asker_id=request.data.get("asker_id", ""),
+            asker_id=asker_id,
             top_k=request.data.get("top_k"),
             user_security_level=int(request.data.get("user_security_level", 1)),
             filters=request.data.get("filters") or {},
