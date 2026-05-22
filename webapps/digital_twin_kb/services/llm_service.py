@@ -1,39 +1,26 @@
-import os
 from django.conf import settings
 from webapps.llm.llm_factory import get_chat_model
 
 NO_DATA_ANSWER = "目前知識庫尚無足夠資料回答此問題。"
 
 
-def _resolve_model_name(model_type: str) -> str | None:
-    """解析並決定要傳給 LLM_FACTORY 的模型名稱，優先讀取子系統專屬設定，其次 Fallback 至專案通用設定"""
-    if model_type == "OLLAMA":
-        model_name = getattr(settings, "DIGITAL_TWIN_KB_OLLAMA_MODEL", None)
-        if not model_name:
-            model_name = os.getenv("OLLAMA_MODEL", None)
-        return model_name
-    elif model_type == "OPENAI":
-        model_name = getattr(settings, "DIGITAL_TWIN_KB_OPENAI_MODEL", None)
-        if not model_name:
-            model_name = os.getenv("OPENAI_MODEL", None)
-        return model_name
-    return None
-
-
 def generate_answer(question: str, context: str) -> str:
     if not context.strip():
         return NO_DATA_ANSWER
 
+    # 優先使用數位雙生子系統專屬的 PROVIDER 設定，否則自動 Fallback 至專案全局 MODEL_TYPE (由 LLM_FACTORY 底層處理)
     provider = getattr(settings, "DIGITAL_TWIN_KB_LLM_PROVIDER", None)
-    if not provider:
-        provider = os.getenv("MODEL_TYPE", "OLLAMA")
-    provider = provider.lower()
-
     if provider in {"", "none", "disabled"}:
         return _fallback_summary(context)
 
-    model_type = provider.upper()  # "OLLAMA", "OPENAI", "LM_STUDIO", etc.
-    model_name = _resolve_model_name(model_type)
+    model_type = provider.upper() if provider else None
+    
+    # 僅讀取 settings 中子系統專屬的模型名稱，其餘 Fallback 與環境變數讀取一律交給 LLM_FACTORY 內部統一決定
+    model_name = None
+    if model_type == "OLLAMA":
+        model_name = getattr(settings, "DIGITAL_TWIN_KB_OLLAMA_MODEL", None)
+    elif model_type == "OPENAI":
+        model_name = getattr(settings, "DIGITAL_TWIN_KB_OPENAI_MODEL", None)
 
     try:
         # 使用 llm_factory 獲取統一的 LangChain Chat Model 實例
@@ -74,15 +61,17 @@ def _fallback_summary(context: str) -> str:
 def generate_general_answer(question: str) -> str:
     """當知識庫查無資料時，由通用 LLM 提供專業回答"""
     provider = getattr(settings, "DIGITAL_TWIN_KB_LLM_PROVIDER", None)
-    if not provider:
-        provider = os.getenv("MODEL_TYPE", "OLLAMA")
-    provider = provider.lower()
-
     if provider in {"", "none", "disabled"}:
         return "目前知識庫尚無足夠資料回答此問題，且未啟用通用 LLM 服務。"
 
-    model_type = provider.upper()  # "OLLAMA", "OPENAI", "LM_STUDIO", etc.
-    model_name = _resolve_model_name(model_type)
+    model_type = provider.upper() if provider else None
+
+    # 僅讀取 settings 中子系統專屬的模型名稱，其餘 Fallback 與環境變數讀取一律交給 LLM_FACTORY 內部統一決定
+    model_name = None
+    if model_type == "OLLAMA":
+        model_name = getattr(settings, "DIGITAL_TWIN_KB_OLLAMA_MODEL", None)
+    elif model_type == "OPENAI":
+        model_name = getattr(settings, "DIGITAL_TWIN_KB_OPENAI_MODEL", None)
 
     try:
         # 使用 llm_factory 獲取統一的 LangChain Chat Model 實例
