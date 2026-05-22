@@ -8,12 +8,15 @@ def generate_answer(question: str, context: str) -> str:
     if not context.strip():
         return NO_DATA_ANSWER
 
-    # 優先使用數位雙生子系統專屬的 PROVIDER 設定，否則自動 Fallback 至專案全局 MODEL_TYPE (由 LLM_FACTORY 底層處理)
+    # 優先使用數位雙生子系統專屬的 PROVIDER 設定，否則自動 Fallback 至專案全局 settings.MODEL_TYPE
     provider = getattr(settings, "DIGITAL_TWIN_KB_LLM_PROVIDER", None)
-    if provider in {"", "none", "disabled"}:
+    if not provider or not provider.strip():
+        provider = getattr(settings, "MODEL_TYPE", "OLLAMA")
+
+    if provider.lower() in {"none", "disabled"}:
         return _fallback_summary(context)
 
-    model_type = provider.upper() if provider else None
+    model_type = provider.upper()
     
     # 僅讀取 settings 中子系統專屬的模型名稱，其餘 Fallback 與環境變數讀取一律交給 LLM_FACTORY 內部統一決定
     model_name = None
@@ -21,6 +24,10 @@ def generate_answer(question: str, context: str) -> str:
         model_name = getattr(settings, "DIGITAL_TWIN_KB_OLLAMA_MODEL", None)
     elif model_type == "OPENAI":
         model_name = getattr(settings, "DIGITAL_TWIN_KB_OPENAI_MODEL", None)
+
+    # 若 settings 載入的模型名稱為空字串，則視為未指定，以讓 LLM_FACTORY 底層進行全局模型 Fallback
+    if not model_name or not model_name.strip():
+        model_name = None
 
     try:
         # 使用 llm_factory 獲取統一的 LangChain Chat Model 實例
@@ -61,10 +68,13 @@ def _fallback_summary(context: str) -> str:
 def generate_general_answer(question: str) -> str:
     """當知識庫查無資料時，由通用 LLM 提供專業回答"""
     provider = getattr(settings, "DIGITAL_TWIN_KB_LLM_PROVIDER", None)
-    if provider in {"", "none", "disabled"}:
+    if not provider or not provider.strip():
+        provider = getattr(settings, "MODEL_TYPE", "OLLAMA")
+
+    if provider.lower() in {"none", "disabled"}:
         return "目前知識庫尚無足夠資料回答此問題，且未啟用通用 LLM 服務。"
 
-    model_type = provider.upper() if provider else None
+    model_type = provider.upper()
 
     # 僅讀取 settings 中子系統專屬的模型名稱，其餘 Fallback 與環境變數讀取一律交給 LLM_FACTORY 內部統一決定
     model_name = None
@@ -72,6 +82,10 @@ def generate_general_answer(question: str) -> str:
         model_name = getattr(settings, "DIGITAL_TWIN_KB_OLLAMA_MODEL", None)
     elif model_type == "OPENAI":
         model_name = getattr(settings, "DIGITAL_TWIN_KB_OPENAI_MODEL", None)
+
+    # 若 settings 載入的模型名稱為空字串，則視為未指定，以讓 LLM_FACTORY 底層進行全局模型 Fallback
+    if not model_name or not model_name.strip():
+        model_name = None
 
     try:
         # 使用 llm_factory 獲取統一的 LangChain Chat Model 實例
