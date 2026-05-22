@@ -24,11 +24,15 @@ def generate_answer(question: str, context: str) -> str:
     if not context.strip():
         return NO_DATA_ANSWER
 
-    provider = getattr(settings, "DIGITAL_TWIN_KB_LLM_PROVIDER", "ollama").lower()
+    provider = getattr(settings, "DIGITAL_TWIN_KB_LLM_PROVIDER", None)
+    if not provider:
+        provider = os.getenv("MODEL_TYPE", "OLLAMA")
+    provider = provider.lower()
+
     if provider in {"", "none", "disabled"}:
         return _fallback_summary(context)
 
-    model_type = provider.upper()  # "OLLAMA" or "OPENAI"
+    model_type = provider.upper()  # "OLLAMA", "OPENAI", "LM_STUDIO", etc.
     model_name = _resolve_model_name(model_type)
 
     try:
@@ -69,11 +73,15 @@ def _fallback_summary(context: str) -> str:
 
 def generate_general_answer(question: str) -> str:
     """當知識庫查無資料時，由通用 LLM 提供專業回答"""
-    provider = getattr(settings, "DIGITAL_TWIN_KB_LLM_PROVIDER", "ollama").lower()
+    provider = getattr(settings, "DIGITAL_TWIN_KB_LLM_PROVIDER", None)
+    if not provider:
+        provider = os.getenv("MODEL_TYPE", "OLLAMA")
+    provider = provider.lower()
+
     if provider in {"", "none", "disabled"}:
         return "目前知識庫尚無足夠資料回答此問題，且未啟用通用 LLM 服務。"
 
-    model_type = provider.upper()  # "OLLAMA" or "OPENAI"
+    model_type = provider.upper()  # "OLLAMA", "OPENAI", "LM_STUDIO", etc.
     model_name = _resolve_model_name(model_type)
 
     try:
