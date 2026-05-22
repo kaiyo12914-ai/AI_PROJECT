@@ -7,11 +7,11 @@
   <title>數位雙生 RAG 知識庫平台</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="stylesheet" href="{% custom_static 'digital_twin_kb/css/index.css' %}?v=3">
+  <link rel="stylesheet" href="{% custom_static 'digital_twin_kb/css/index.css' %}?v=4">
   <!-- 全專案共用 apiurl_factory -->
   <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
   <!-- 入口腳本一律使用 defer 載入，禁止以 module 當作頁面入口 -->
-  <script defer src="{% custom_static 'digital_twin_kb/js/index.js' %}?v=3"></script>
+  <script defer src="{% custom_static 'digital_twin_kb/js/index.js' %}?v=4"></script>
 </head>
 <body data-base-url="{{ request.script_name }}" class="dt-theme">
   <!-- CSRF Token 注入 -->
@@ -48,7 +48,7 @@
         <div class="dt-card-header">
           <div class="dt-header-title">
             <span class="pulse-dot"></span>
-            <h3>雙生智能 RAG 對話系統</h3>
+            <h3>數位孿生 RAG 對話系統</h3>
           </div>
           <div class="chat-config-toggle">
             <button id="btn-toggle-config" class="btn-icon-only" title="進階檢索設定">
