@@ -10,10 +10,13 @@ from .llm_service import NO_DATA_ANSWER, generate_answer
 def ask(question: str, asker_type: str, asker_id: str, top_k: int | None, user_security_level: int, filters: dict):
     query_embedding = embed_text(question)
     rows = similarity_search(query_embedding, top_k or settings.DIGITAL_TWIN_KB_TOP_K, user_security_level, filters)
-    context = _build_context(rows)
-    answer = generate_answer(question, context)
-    if not rows:
-        answer = NO_DATA_ANSWER
+    if rows:
+        context = _build_context(rows)
+        answer = generate_answer(question, context)
+    else:
+        from .llm_service import generate_general_answer
+        answer = generate_general_answer(question)
+
     sources = _build_sources(rows)
     log = QALog.objects.create(
         asker_type=asker_type,
