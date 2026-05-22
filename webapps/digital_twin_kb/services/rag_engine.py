@@ -16,6 +16,8 @@ def ask(question: str, asker_type: str, asker_id: str, top_k: int | None, user_s
     else:
         from .llm_service import generate_general_answer
         answer = generate_general_answer(question)
+        # ✅ 使用者要求：當觸發通用智慧回答時，自動將回答存回知識庫，並備註為「AI生成」以實現自進化知識庫
+        _save_ai_answer_to_kb(question, answer)
 
     sources = _build_sources(rows)
     log = QALog.objects.create(
@@ -35,6 +37,66 @@ def ask(question: str, asker_type: str, asker_id: str, top_k: int | None, user_s
         "retrieved_chunks": rows,
         "similarity_scores": [r["similarity"] for r in rows],
     }
+
+
+def _save_ai_answer_to_kb(question: str, answer: str):
+    """背景將 AI 通用智慧的高質量答案向量化並回存至知識庫中，備註標記為 AI 生成，供未來檢索"""
+    if not answer or "查詢失敗" in answer or "未啟用通用 LLM" in answer or "尚無足夠資料" in answer:
+        return
+    
+    try:
+        from webapps.digital_twin_kb.models import Document, DocumentChunk
+        from django.db.models import Max
+        import logging
+        logger = logging.getLogger("django")
+        
+        # 獲取或建立特殊的 AI 生成文檔
+        ai_doc, created = Document.objects.get_or_create(
+            checksum="ai_generated_kb_document_checksum_v1",
+            defaults={
+                "file_name": "ai_generated_kb.txt",
+                "original_file_name": "AI Generated Knowledge Base",
+                "file_type": "txt",
+                "file_path": "ai_generated_kb",
+                "file_size": len(answer),
+                "source": "AI_GENERATED",
+                "uploaded_by": "ai_agent",
+                "uploaded_by_type": "ai_agent",
+                "topic": "AI Generated",
+                "security_level": 1,
+            }
+        )
+        
+        # 取得下一個 chunk_index
+        max_idx = ai_doc.chunks.aggregate(Max("chunk_index"))["chunk_index__max"]
+        chunk_index = (max_idx or 0) + 1
+        
+        # 組裝具有 "(備註：AI 生成)" 標記的內容，提升未來 RAG 檢索匹配度
+        content = f"問題：{question}\n\n回答：(備註：AI 生成)\n{answer}"
+        embedding = embed_text(content)
+        
+        DocumentChunk.objects.create(
+            document=ai_doc,
+            chunk_index=chunk_index,
+            content=content,
+            page_number=1,
+            section_title="AI Generated Knowledge",
+            twin_level="",
+            isa95_level="",
+            system_type="",
+            topic="AI Generated",
+            security_level=1,
+            embedding=embedding,
+            token_count=len(content) // 4,
+        )
+        # 更新 Document 檔案大小
+        ai_doc.file_size = ai_doc.chunks.count() * 1000
+        ai_doc.save()
+        logger.info(f"[AI SELF-EVOLVING KB] Successfully saved AI generated chunk #{chunk_index} for query: {question}")
+    except Exception as e:
+        import logging
+        logger = logging.getLogger("django")
+        logger.error(f"[AI GENERATED KB SAVE ERROR] {str(e)}")
 
 
 def _build_context(rows: list[dict]) -> str:
