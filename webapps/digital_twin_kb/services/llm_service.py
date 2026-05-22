@@ -10,8 +10,10 @@ def generate_answer(question: str, context: str) -> str:
 
     # 優先使用數位雙生子系統專屬的 PROVIDER 設定，否則自動 Fallback 至專案全局 settings.MODEL_TYPE
     provider = getattr(settings, "DIGITAL_TWIN_KB_LLM_PROVIDER", None)
+    print(f"[DEBUG DIGITAL_TWIN_KB ANSWER] raw provider from settings: {repr(provider)}")
     if not provider or not provider.strip():
         provider = getattr(settings, "MODEL_TYPE", "OLLAMA")
+    print(f"[DEBUG DIGITAL_TWIN_KB ANSWER] resolved provider: {repr(provider)}")
 
     if provider.lower() in {"none", "disabled"}:
         return _fallback_summary(context)
@@ -68,8 +70,10 @@ def _fallback_summary(context: str) -> str:
 def generate_general_answer(question: str) -> str:
     """當知識庫查無資料時，由通用 LLM 提供專業回答"""
     provider = getattr(settings, "DIGITAL_TWIN_KB_LLM_PROVIDER", None)
+    print(f"[DEBUG DIGITAL_TWIN_KB] raw provider from settings: {repr(provider)}")
     if not provider or not provider.strip():
         provider = getattr(settings, "MODEL_TYPE", "OLLAMA")
+    print(f"[DEBUG DIGITAL_TWIN_KB] resolved provider: {repr(provider)}")
 
     if provider.lower() in {"none", "disabled"}:
         return "目前知識庫尚無足夠資料回答此問題，且未啟用通用 LLM 服務。"
