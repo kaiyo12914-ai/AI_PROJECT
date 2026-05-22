@@ -7,11 +7,11 @@
   <title>數位雙生 RAG 知識庫平台</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
-  <link rel="stylesheet" href="{% custom_static 'digital_twin_kb/css/index.css' %}?v=4">
+  <link rel="stylesheet" href="{% custom_static 'digital_twin_kb/css/index.css' %}?v=5">
   <!-- 全專案共用 apiurl_factory -->
   <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
   <!-- 入口腳本一律使用 defer 載入，禁止以 module 當作頁面入口 -->
-  <script defer src="{% custom_static 'digital_twin_kb/js/index.js' %}?v=4"></script>
+  <script defer src="{% custom_static 'digital_twin_kb/js/index.js' %}?v=5"></script>
 </head>
 <body data-base-url="{{ request.script_name }}" class="dt-theme">
   <!-- CSRF Token 注入 -->
@@ -87,9 +87,9 @@
         <div class="dt-chat-messages" id="chat-flow">
           <div class="chat-bubble bot-message">
             <div class="bubble-content">
-              您好！我是您的**數位雙生智能知識助手**。我能基於已上傳的製造業規範、ISA-95 模型、或工業流程文件為您進行精準的向量檢索與 RAG 問答。
+              您好！我是您的**數位孿生智能知識助手**。我能基於已上傳的製造業規範、ISA-95 模型、或工業流程文件為您進行精準的向量檢索與 RAG 問答。
               <br><br>
-              請在下方輸入您想查詢的工業知識或雙生流程。
+              請在下方輸入您想查詢的工業知識或孿生流程。
             </div>
             <span class="bubble-time">AI 助手</span>
           </div>
