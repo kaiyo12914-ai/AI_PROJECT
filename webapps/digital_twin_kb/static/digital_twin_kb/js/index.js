@@ -425,11 +425,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
           const dateStr = doc.created_at ? new Date(doc.created_at).toLocaleString() : "未知";
           const scoreLevel = doc.security_level || 1;
+          const displayTitle = doc.original_file_name || doc.file_name || "無標題";
 
           tr.innerHTML = `
             <td>
-              <a class="dt-table-link doc-title-btn" data-id="${doc.document_id}" data-title="${escapeHtml(doc.title)}">
-                ${escapeHtml(doc.title)}
+              <a class="dt-table-link doc-title-btn" data-id="${doc.document_id}" data-title="${escapeHtml(displayTitle)}">
+                ${escapeHtml(displayTitle)}
               </a>
             </td>
             <td>${escapeHtml(doc.topic || "一般")}</td>
