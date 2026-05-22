@@ -368,10 +368,12 @@ def _make_ollama(temperature: float | None, timeout: int | None, model_name: str
     return LoggedOllama()
 
 
-def _make_openai(temperature: float | None, timeout: int | None,model:str |None=None,base_url:str | None=None):
+def _make_openai(temperature: float | None, timeout: int | None, model: str | None = None, base_url: str | None = None):
     from langchain_openai import ChatOpenAI
 
     api_key = os.getenv("OPENAI_API_KEY")
+    base_url = base_url or os.getenv("OPENAI_BASE_URL")  # 👈 支援從 .env 載入通用 OPENAI_BASE_URL 變數
+
     if not api_key and not base_url:
         # Compatibility path for intranet LM_STUDIO deployments:
         # if caller accidentally routes into OpenAI factory while MODEL_TYPE=LM_STUDIO,
@@ -381,11 +383,11 @@ def _make_openai(temperature: float | None, timeout: int | None,model:str |None=
             base_url = os.getenv("LM_STUDIO_BASE_URL", "http://mpcai.mpc.mil.tw:1234/v1")
             model = model or os.getenv("LM_STUDIO_MODEL", "ministral-3-14b-instruct-2512")
         else:
-            raise RuntimeError("OPENAI_API_KEY 未設定（OpenAI 不可用）")
+            raise RuntimeError("OPENAI_API_KEY 未設定（OpenAI 不可用）。若要連線至本地內網相容 OpenAI 介面之大模型，請配置 OPENAI_BASE_URL 環境變數。")
     
-    # 對於本地推理 (如 LM-Studio)，若無 Key 則使用佔位符
+    # 對於本地推理 (如 LM-Studio、Ollama/v1、內網 OpenAI 相容端點)，若無 Key 則使用佔位符
     if not api_key:
-        api_key = "lm-studio"
+        api_key = "openai-compatible"
 
     model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     if _looks_non_chat_openai_model(model):
