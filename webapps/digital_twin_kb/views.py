@@ -150,14 +150,20 @@ class DirectIngestTextView(APIView):
             import logging
             logger = logging.getLogger("django")
 
+            import hashlib
+            # 計算這段文字的 MD5 作為唯一的 checksum，防重覆錄入，且讓每次不同的錄入在資產庫顯示為獨立一列
+            text_hash = hashlib.md5(text.encode("utf-8")).hexdigest()
+            checksum = f"user_direct_checksum_{text_hash}"
+            display_name = text[:20].replace("\n", " ") + ("..." if len(text) > 20 else "")
+
             # 獲取或建立特殊的「使用者直接錄入」虛擬文件
             user_doc, _ = Document.objects.get_or_create(
-                checksum="user_manual_kb_document_checksum_v1",
+                checksum=checksum,
                 defaults={
-                    "file_name": "user_manual_kb.txt",
-                    "original_file_name": "User Manual Input Knowledge Base",
+                    "file_name": f"user_direct_{text_hash[:8]}.txt",
+                    "original_file_name": f"手動錄入: {display_name}",
                     "file_type": "txt",
-                    "file_path": "user_manual_kb",
+                    "file_path": "user_direct_kb",
                     "file_size": len(text),
                     "source": "USER_INPUT",
                     "uploaded_by": "user",
@@ -191,9 +197,9 @@ class DirectIngestTextView(APIView):
             )
 
             # 更新 Document 大小
-            user_doc.file_size = user_doc.chunks.count() * 1000
+            user_doc.file_size = len(content)
             user_doc.save()
-            logger.info(f"[USER DIRECT INGEST] Successfully saved user chunk #{chunk_index}")
+            logger.info(f"[USER DIRECT INGEST] Successfully saved user chunk #{chunk_index} for doc checksum {checksum[:12]}")
             return Response({"status": "success", "message": "成功將輸入的文字直接作為知識存入 RAG 資料庫！"})
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

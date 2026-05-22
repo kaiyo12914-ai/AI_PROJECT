@@ -50,12 +50,19 @@ def _save_ai_answer_to_kb(question: str, answer: str):
         import logging
         logger = logging.getLogger("django")
         
+        import hashlib
+        # 計算此對話 Q&A 的 MD5 哈希作為唯一的 checksum，防止重覆儲存，且讓每次不同的 AI 解答在資產庫中顯示為獨立一列
+        text_data = f"{question}|||{answer}"
+        text_hash = hashlib.md5(text_data.encode("utf-8")).hexdigest()
+        checksum = f"ai_gen_checksum_{text_hash}"
+        display_name = question[:20].replace("\n", " ") + ("..." if len(question) > 20 else "")
+
         # 獲取或建立特殊的 AI 生成文檔
         ai_doc, created = Document.objects.get_or_create(
-            checksum="ai_generated_kb_document_checksum_v1",
+            checksum=checksum,
             defaults={
-                "file_name": "ai_generated_kb.txt",
-                "original_file_name": "AI Generated Knowledge Base",
+                "file_name": f"ai_gen_{text_hash[:8]}.txt",
+                "original_file_name": f"AI解答: {display_name}",
                 "file_type": "txt",
                 "file_path": "ai_generated_kb",
                 "file_size": len(answer),
@@ -90,9 +97,9 @@ def _save_ai_answer_to_kb(question: str, answer: str):
             token_count=len(content) // 4,
         )
         # 更新 Document 檔案大小
-        ai_doc.file_size = ai_doc.chunks.count() * 1000
+        ai_doc.file_size = len(content)
         ai_doc.save()
-        logger.info(f"[AI SELF-EVOLVING KB] Successfully saved AI generated chunk #{chunk_index} for query: {question}")
+        logger.info(f"[AI SELF-EVOLVING KB] Successfully saved AI generated chunk #{chunk_index} for query checksum {checksum[:12]}")
     except Exception as e:
         import logging
         logger = logging.getLogger("django")
