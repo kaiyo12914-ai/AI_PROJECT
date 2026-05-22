@@ -2,7 +2,7 @@ import platform
 
 from django.conf import settings
 from django.utils.decorators import method_decorator
-from rest_framework import status, viewsets
+from rest_framework import status, viewsets, mixins
 from rest_framework.decorators import action, api_view
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
@@ -108,7 +108,12 @@ class DigitalTwinCategoryViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 @method_decorator(require_node("digital_twin_kb", api=True), name="dispatch")
-class QALogViewSet(viewsets.ReadOnlyModelViewSet):
+class QALogViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet
+):
     queryset = QALog.objects.all().order_by("-created_at")
     serializer_class = QALogSerializer
 

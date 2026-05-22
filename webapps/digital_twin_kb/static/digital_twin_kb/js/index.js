@@ -487,6 +487,9 @@ document.addEventListener("DOMContentLoaded", () => {
               <button class="btn-ingest-qa-row" data-id="${log.query_id}" title="手動將此問答存入知識庫">
                 📥 存入 RAG
               </button>
+              <button class="btn-delete-qa-row" data-id="${log.query_id}" title="刪除此筆問答紀錄">
+                🗑️ 刪除
+              </button>
             </td>
           `;
           qaLogsTableBody.appendChild(tr);
@@ -506,6 +509,17 @@ document.addEventListener("DOMContentLoaded", () => {
             e.stopPropagation();
             const logId = btn.getAttribute("data-id");
             ingestQaLogToKb(logId, btn);
+          });
+        });
+
+        // 綁定刪除紀錄事件
+        document.querySelectorAll(".btn-delete-qa-row").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const logId = btn.getAttribute("data-id");
+            if (confirm("確定要刪除此筆問答紀錄嗎？")) {
+              deleteQaLog(logId, btn);
+            }
           });
         });
       })
@@ -542,6 +556,34 @@ document.addEventListener("DOMContentLoaded", () => {
         alert("回存知識庫失敗：" + err.message);
       })
       .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = oldText;
+      });
+  }
+
+  // 刪除問答紀錄
+  function deleteQaLog(logId, btn) {
+    btn.disabled = true;
+    const oldText = btn.innerHTML;
+    btn.innerHTML = "🗑️ 刪除中...";
+
+    fetch(getApiUrl(`digital-twin-kb/api/qa-logs/${logId}/`), {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrfToken
+      }
+    })
+      .then((res) => {
+        if (res.ok || res.status === 204) {
+          alert("成功刪除該筆問答紀錄！");
+          loadQaLogs();
+        } else {
+          throw new Error("刪除失敗");
+        }
+      })
+      .catch((err) => {
+        alert("刪除問答紀錄失敗：" + err.message);
         btn.disabled = false;
         btn.innerHTML = oldText;
       });
