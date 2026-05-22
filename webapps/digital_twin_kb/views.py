@@ -136,6 +136,69 @@ class IngestQALogView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@method_decorator(require_node("digital_twin_kb", api=True), name="dispatch")
+class DirectIngestTextView(APIView):
+    def post(self, request):
+        text = (request.data.get("text") or "").strip()
+        if not text:
+            return Response({"error": "text is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            from webapps.digital_twin_kb.models import Document, DocumentChunk
+            from webapps.digital_twin_kb.services.embedding_service import embed_text
+            from django.db.models import Max
+            import logging
+            logger = logging.getLogger("django")
+
+            # 獲取或建立特殊的「使用者直接錄入」虛擬文件
+            user_doc, _ = Document.objects.get_or_create(
+                checksum="user_manual_kb_document_checksum_v1",
+                defaults={
+                    "file_name": "user_manual_kb.txt",
+                    "original_file_name": "User Manual Input Knowledge Base",
+                    "file_type": "txt",
+                    "file_path": "user_manual_kb",
+                    "file_size": len(text),
+                    "source": "USER_INPUT",
+                    "uploaded_by": "user",
+                    "uploaded_by_type": "user",
+                    "topic": "User Direct Input",
+                    "security_level": 1,
+                }
+            )
+
+            # 取得下一個 chunk_index
+            max_idx = user_doc.chunks.aggregate(Max("chunk_index"))["chunk_index__max"]
+            chunk_index = (max_idx or 0) + 1
+
+            # 組裝具有標記的內容
+            content = f"使用者直接錄入知識：\n{text}"
+            embedding = embed_text(content)
+
+            DocumentChunk.objects.create(
+                document=user_doc,
+                chunk_index=chunk_index,
+                content=content,
+                page_number=1,
+                section_title="User Direct Knowledge",
+                twin_level="",
+                isa95_level="",
+                system_type="",
+                topic="User Direct Input",
+                security_level=1,
+                embedding=embedding,
+                token_count=len(content) // 4,
+            )
+
+            # 更新 Document 大小
+            user_doc.file_size = user_doc.chunks.count() * 1000
+            user_doc.save()
+            logger.info(f"[USER DIRECT INGEST] Successfully saved user chunk #{chunk_index}")
+            return Response({"status": "success", "message": "成功將輸入的文字直接作為知識存入 RAG 資料庫！"})
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 from django.shortcuts import render
 from django.middleware.csrf import get_token
 

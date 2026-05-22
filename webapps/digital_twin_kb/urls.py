@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 from webapps.digital_twin_kb.views import (
     AskView,
     DigitalTwinCategoryViewSet,
+    DirectIngestTextView,
     DocumentViewSet,
     IngestDocsView,
     IngestQALogView,
@@ -27,6 +28,7 @@ urlpatterns = [
     path("api/health/", health, name="health"),
     path("api/ingest/", IngestDocsView.as_view(), name="ingest"),
     path("api/ingest-qa-log/", IngestQALogView.as_view(), name="ingest-qa-log"),
+    path("api/direct-ingest-text/", DirectIngestTextView.as_view(), name="direct-ingest-text"),
     path("api/upload/", UploadDocumentView.as_view(), name="upload"),
     path("api/ask/", AskView.as_view(), name="ask"),
     path("api/", include(router.urls)),

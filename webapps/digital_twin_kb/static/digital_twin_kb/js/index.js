@@ -4,6 +4,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const csrfToken = document.getElementById("csrf_token")?.value || "";
   const chatInput = document.getElementById("chat-input");
   const btnSendChat = document.getElementById("btn-send-chat");
+  const btnDirectIngest = document.getElementById("btn-direct-ingest");
   const chatFlow = document.getElementById("chat-flow");
   const btnToggleConfig = document.getElementById("btn-toggle-config");
   const chatConfigPanel = document.getElementById("chat-config-panel");
@@ -180,6 +181,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   btnSendChat.addEventListener("click", handleSendChat);
+  btnDirectIngest.addEventListener("click", handleDirectIngest);
   chatInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -647,6 +649,50 @@ document.addEventListener("DOMContentLoaded", () => {
     // 換行
     formatted = formatted.replace(/\n/g, "<br>");
     return formatted;
+  }
+
+  // 直接將輸入框文字存入 RAG 知識庫
+  function handleDirectIngest() {
+    const text = chatInput.value.trim();
+    if (!text) {
+      alert("請先在對話框中輸入您想要直接寫入 RAG 知識庫的內容！");
+      return;
+    }
+
+    if (!confirm("確定要將輸入框中的這段文字，計算向量並「直接存入 RAG 知識庫」中嗎？\n\n(此操作不會呼叫 LLM 進行問答)")) {
+      return;
+    }
+
+    btnDirectIngest.disabled = true;
+    const oldText = btnDirectIngest.innerHTML;
+    btnDirectIngest.innerHTML = "⏳ 正在直接存入 RAG...";
+
+    fetch(getApiUrl("digital-twin-kb/api/direct-ingest-text/"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrfToken
+      },
+      body: JSON.stringify({ text: text })
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("存入失敗");
+        return res.json();
+      })
+      .then((data) => {
+        alert(data.message || "成功將內容直接存入 RAG 知識庫！");
+        chatInput.value = ""; // 清空輸入框
+        chatInput.style.height = "auto";
+        loadDocuments();
+        loadCategories();
+      })
+      .catch((err) => {
+        alert("存入失敗：" + err.message);
+      })
+      .finally(() => {
+        btnDirectIngest.disabled = false;
+        btnDirectIngest.innerHTML = oldText;
+      });
   }
 
   // ==========================================

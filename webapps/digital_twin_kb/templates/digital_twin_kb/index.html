@@ -98,9 +98,14 @@
         <!-- 對話輸入 -->
         <div class="dt-chat-input-area">
           <div class="input-wrapper">
-            <textarea id="chat-input" placeholder="請輸入問題 (例如：無人機數位雙生的 Level 4 層級主要定義為何？)..." rows="1"></textarea>
+            <textarea id="chat-input" placeholder="請輸入問題或要錄入的知識 (例如：一號機台異常代碼 E-102 代表過熱)..." rows="1"></textarea>
             <button id="btn-send-chat" class="btn-primary" title="發送問答">
               <svg viewBox="0 0 24 24" class="send-icon"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+          <div class="chat-input-actions">
+            <button id="btn-direct-ingest" class="btn-secondary btn-small" title="將上方輸入框的文字直接作為知識存入 RAG 資料庫">
+              📥 將輸入文字直接存入 RAG
             </button>
           </div>
         </div>
