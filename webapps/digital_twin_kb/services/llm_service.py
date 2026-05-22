@@ -1,7 +1,23 @@
+import os
 from django.conf import settings
 from webapps.llm.llm_factory import get_chat_model
 
 NO_DATA_ANSWER = "目前知識庫尚無足夠資料回答此問題。"
+
+
+def _resolve_model_name(model_type: str) -> str | None:
+    """解析並決定要傳給 LLM_FACTORY 的模型名稱，優先讀取子系統專屬設定，其次 Fallback 至專案通用設定"""
+    if model_type == "OLLAMA":
+        model_name = getattr(settings, "DIGITAL_TWIN_KB_OLLAMA_MODEL", None)
+        if not model_name:
+            model_name = os.getenv("OLLAMA_MODEL", None)
+        return model_name
+    elif model_type == "OPENAI":
+        model_name = getattr(settings, "DIGITAL_TWIN_KB_OPENAI_MODEL", None)
+        if not model_name:
+            model_name = os.getenv("OPENAI_MODEL", None)
+        return model_name
+    return None
 
 
 def generate_answer(question: str, context: str) -> str:
@@ -13,12 +29,7 @@ def generate_answer(question: str, context: str) -> str:
         return _fallback_summary(context)
 
     model_type = provider.upper()  # "OLLAMA" or "OPENAI"
-    if model_type == "OLLAMA":
-        model_name = getattr(settings, "DIGITAL_TWIN_KB_OLLAMA_MODEL", "mistral")
-    elif model_type == "OPENAI":
-        model_name = getattr(settings, "DIGITAL_TWIN_KB_OPENAI_MODEL", getattr(settings, "OPENAI_MODEL", "gpt-4o-mini"))
-    else:
-        model_name = None
+    model_name = _resolve_model_name(model_type)
 
     try:
         # 使用 llm_factory 獲取統一的 LangChain Chat Model 實例
@@ -63,12 +74,7 @@ def generate_general_answer(question: str) -> str:
         return "目前知識庫尚無足夠資料回答此問題，且未啟用通用 LLM 服務。"
 
     model_type = provider.upper()  # "OLLAMA" or "OPENAI"
-    if model_type == "OLLAMA":
-        model_name = getattr(settings, "DIGITAL_TWIN_KB_OLLAMA_MODEL", "mistral")
-    elif model_type == "OPENAI":
-        model_name = getattr(settings, "DIGITAL_TWIN_KB_OPENAI_MODEL", getattr(settings, "OPENAI_MODEL", "gpt-4o-mini"))
-    else:
-        model_name = None
+    model_name = _resolve_model_name(model_type)
 
     try:
         # 使用 llm_factory 獲取統一的 LangChain Chat Model 實例
