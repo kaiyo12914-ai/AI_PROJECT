@@ -454,14 +454,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // 載入歷史 RAG 問答紀錄
   function loadQaLogs() {
-    qaLogsTableBody.innerHTML = `<tr><td colspan="4" class="text-center font-muted">載入問答紀錄中...</td></tr>`;
+    qaLogsTableBody.innerHTML = `<tr><td colspan="5" class="text-center font-muted">載入問答紀錄中...</td></tr>`;
 
     fetch(getApiUrl("digital-twin-kb/api/qa-logs/"))
       .then((res) => res.json())
       .then((data) => {
         qaLogsTableBody.innerHTML = "";
         if (!data || data.length === 0) {
-          qaLogsTableBody.innerHTML = `<tr><td colspan="4" class="text-center font-muted">尚無歷史問答紀錄</td></tr>`;
+          qaLogsTableBody.innerHTML = `<tr><td colspan="5" class="text-center font-muted">尚無歷史問答紀錄</td></tr>`;
           return;
         }
 
@@ -480,6 +480,11 @@ document.addEventListener("DOMContentLoaded", () => {
             <td>${escapeHtml(log.asker_id || "anonymous")}</td>
             <td>${chunksCount} 個 Chunks</td>
             <td>${dateStr}</td>
+            <td class="text-center">
+              <button class="btn-ingest-qa-row" data-id="${log.query_id}" title="手動將此問答存入知識庫">
+                📥 存入 RAG
+              </button>
+            </td>
           `;
           qaLogsTableBody.appendChild(tr);
         });
@@ -491,9 +496,51 @@ document.addEventListener("DOMContentLoaded", () => {
             reviewQaLog(logId);
           });
         });
+
+        // 綁定手動回存知識庫事件
+        document.querySelectorAll(".btn-ingest-qa-row").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const logId = btn.getAttribute("data-id");
+            ingestQaLogToKb(logId, btn);
+          });
+        });
       })
       .catch(() => {
-        qaLogsTableBody.innerHTML = `<tr><td colspan="4" class="text-center font-muted" style="color:#ff5252">載入歷史紀錄失敗</td></tr>`;
+        qaLogsTableBody.innerHTML = `<tr><td colspan="5" class="text-center font-muted" style="color:#ff5252">載入歷史紀錄失敗</td></tr>`;
+      });
+  }
+
+  // 手動回存問答紀錄至 RAG 知識庫
+  function ingestQaLogToKb(logId, btn) {
+    btn.disabled = true;
+    const oldText = btn.innerHTML;
+    btn.innerHTML = "⏳ 處理中...";
+
+    fetch(getApiUrl("digital-twin-kb/api/ingest-qa-log/"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrfToken
+      },
+      body: JSON.stringify({ query_id: logId })
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("回存失敗");
+        return res.json();
+      })
+      .then((data) => {
+        alert(data.message || "成功將對話紀錄手動回存至知識庫！");
+        // 重新載入文檔庫與統計
+        loadDocuments();
+        loadCategories();
+      })
+      .catch((err) => {
+        alert("回存知識庫失敗：" + err.message);
+      })
+      .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = oldText;
       });
   }
 

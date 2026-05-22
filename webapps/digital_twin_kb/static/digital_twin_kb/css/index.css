@@ -244,6 +244,33 @@ body.dt-theme {
   color: var(--text-primary);
 }
 
+.btn-ingest-qa-row {
+  background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-green) 100%);
+  border: none;
+  color: #040814;
+  font-size: 0.725rem;
+  font-weight: 600;
+  padding: 0.35rem 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.btn-ingest-qa-row:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 0 8px rgba(0, 242, 254, 0.45);
+}
+
+.btn-ingest-qa-row:disabled {
+  background: var(--text-muted) !important;
+  color: var(--text-primary) !important;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 /* Grid Layout */
 .dt-main-grid {
   display: grid;

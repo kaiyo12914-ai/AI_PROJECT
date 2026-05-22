@@ -119,6 +119,23 @@ class IngestionJobViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = IngestionJobSerializer
 
 
+@method_decorator(require_node("digital_twin_kb", api=True), name="dispatch")
+class IngestQALogView(APIView):
+    def post(self, request):
+        query_id = request.data.get("query_id")
+        if not query_id:
+            return Response({"error": "query_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            log = QALog.objects.get(query_id=query_id)
+            from webapps.digital_twin_kb.services.rag_engine import _save_ai_answer_to_kb
+            _save_ai_answer_to_kb(log.user_question, log.answer)
+            return Response({"status": "success", "message": "成功將對話紀錄手動回存至知識庫中！"})
+        except QALog.DoesNotExist:
+            return Response({"error": "對話紀錄不存在"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 from django.shortcuts import render
 from django.middleware.csrf import get_token
 
