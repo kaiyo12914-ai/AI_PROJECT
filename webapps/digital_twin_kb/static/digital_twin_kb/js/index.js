@@ -535,7 +535,7 @@ document.addEventListener("DOMContentLoaded", () => {
         alert(data.message || "成功將對話紀錄手動回存至知識庫！");
         // 重新載入文檔庫與統計
         loadDocuments();
-        loadCategories();
+        loadStats();
       })
       .catch((err) => {
         alert("回存知識庫失敗：" + err.message);
@@ -684,7 +684,7 @@ document.addEventListener("DOMContentLoaded", () => {
         chatInput.value = ""; // 清空輸入框
         chatInput.style.height = "auto";
         loadDocuments();
-        loadCategories();
+        loadStats();
       })
       .catch((err) => {
         alert("存入失敗：" + err.message);
