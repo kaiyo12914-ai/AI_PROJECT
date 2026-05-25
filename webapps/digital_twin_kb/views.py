@@ -32,6 +32,7 @@ def health(request):
             "framework": "Django REST Framework",
             "python_version": platform.python_version(),
             "embedding_model": settings.DIGITAL_TWIN_KB_EMBEDDING_MODEL,
+            "embedding_enabled": bool(getattr(settings, "DIGITAL_TWIN_KB_ENABLE_EMBEDDING", True)),
         }
     )
 

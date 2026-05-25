@@ -87,27 +87,7 @@ document.addEventListener("DOMContentLoaded", () => {
     bubble.className = `chat-bubble ${type}-message`;
 
     let sourcesHtml = "";
-    if (sources && sources.length > 0) {
-      sourcesHtml = `
-        <div class="chat-sources-block">
-          <div class="sources-header">
-            <svg viewBox="0 0 24 24" style="width:12px;height:12px;"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
-            依據來源 (${sources.length} 個 Chunks)
-          </div>
-          <div class="sources-list">
-            ${sources.map((s, idx) => `
-              <div class="source-item">
-                <div class="source-meta">
-                  <span class="source-title">#${idx + 1} ${escapeHtml(s.file_name || s.document_title || "未命名文件")}</span>
-                  <span class="source-score">得分: ${(s.score || s.similarity || 0.0).toFixed(4)}</span>
-                </div>
-                <div class="source-excerpt">「${escapeHtml(s.content || s.paragraph ? (s.content || s.paragraph).substring(0, 150) + "..." : "")}」</div>
-              </div>
-            `).join("")}
-          </div>
-        </div>
-      `;
-    }
+    // 依使用者要求，依據來源 (Chunks) 均免列出，避免佔過多版面
 
     bubble.innerHTML = `
       <div class="bubble-content">
@@ -136,7 +116,7 @@ document.addEventListener("DOMContentLoaded", () => {
     waitingBubble.className = "chat-bubble bot-message";
     waitingBubble.innerHTML = `
       <div class="bubble-content">
-        <div class="loading-spinner">檢索 pgvector 知識庫中，請稍候...</div>
+        <div class="loading-spinner">檢索 RAG知識庫中</div>
       </div>
       <span class="bubble-time">AI 助手</span>
     `;

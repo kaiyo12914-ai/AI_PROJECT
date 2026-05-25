@@ -1,4 +1,6 @@
 from django.conf import settings
+import re
+import math
 
 from webapps.digital_twin_kb.models import Document, QALog
 from webapps.digital_twin_kb.services.embedding_service import embed_text
@@ -10,6 +12,7 @@ from .llm_service import NO_DATA_ANSWER, generate_answer
 def ask(question: str, asker_type: str, asker_id: str, top_k: int | None, user_security_level: int, filters: dict):
     query_embedding = embed_text(question)
     rows = similarity_search(query_embedding, top_k or settings.DIGITAL_TWIN_KB_TOP_K, user_security_level, filters)
+    rows = _sanitize_rows_for_json(rows)
     if rows:
         context = _build_context(rows)
         answer = generate_answer(question, context)
@@ -19,6 +22,7 @@ def ask(question: str, asker_type: str, asker_id: str, top_k: int | None, user_s
         # ✅ 使用者要求：當觸發通用智慧回答時，自動將回答存回知識庫，並備註為「AI生成」以實現自進化知識庫
         _save_ai_answer_to_kb(question, answer)
 
+    answer = _strip_noise_source_block(answer)
     sources = _build_sources(rows)
     log = QALog.objects.create(
         asker_type=asker_type,
@@ -33,10 +37,51 @@ def ask(question: str, asker_type: str, asker_id: str, top_k: int | None, user_s
         "query_id": log.query_id,
         "question": question,
         "answer": answer,
-        "sources": sources,
-        "retrieved_chunks": rows,
+        "sources": [],
+        "retrieved_chunks": [],
         "similarity_scores": [r["similarity"] for r in rows],
     }
+
+
+def _safe_float(v) -> float:
+    try:
+        f = float(v)
+    except Exception:
+        return 0.0
+    if not math.isfinite(f):
+        return 0.0
+    return f
+
+
+def _sanitize_rows_for_json(rows: list[dict]) -> list[dict]:
+    cleaned = []
+    for row in rows:
+        item = dict(row)
+        item["similarity"] = _safe_float(item.get("similarity", 0.0))
+        cleaned.append(item)
+    return cleaned
+
+
+def _strip_noise_source_block(answer: str) -> str:
+    """
+    Remove noisy citation blocks like:
+    '依據來源 (5 個 Chunks)' and subsequent '#1 ...' list items.
+    """
+    if not answer:
+        return answer
+
+    # Remove section from '依據來源 (N 個 Chunks)' to the next blank-line section or end.
+    cleaned = re.sub(
+        r"(?:^|\n)\s*依據來源\s*\(\s*\d+\s*個\s*Chunks\s*\)\s*(?:\n|$)(?:[\s\S]*?)(?=(?:\n\s*\n\S)|\Z)",
+        "\n",
+        answer,
+        flags=re.IGNORECASE,
+    )
+
+    # Also remove lines beginning with '#<n>' that often follow noisy source dumps.
+    cleaned = re.sub(r"^\s*#\d+\s+.*(?:\n[^\n]*)?", "", cleaned, flags=re.MULTILINE)
+
+    return cleaned.strip() or answer.strip()
 
 
 def _save_ai_answer_to_kb(question: str, answer: str):
