@@ -694,6 +694,8 @@ LOGGING = {
         "django.security.csrf": {"handlers": ["console"], "level": "WARNING", "propagate": False},
         "django.server": {"handlers": ["console"], "level": "WARNING", "propagate": False},
         "django.utils.autoreload": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+        "httpx": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+        "httpcore": {"handlers": ["console"], "level": "WARNING", "propagate": False},
     },
 }
 

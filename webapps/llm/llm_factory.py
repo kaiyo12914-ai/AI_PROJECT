@@ -392,7 +392,7 @@ def _make_openai(temperature: float | None, timeout: int | None, model: str | No
     model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     if _looks_non_chat_openai_model(model):
         fallback_chat_model = (os.getenv("OPENAI_CHAT_MODEL") or "gpt-4.1").strip()
-        logger.warning("[LLM] OPENAI_MODEL=%s is non-chat; fallback to chat model=%s", model, fallback_chat_model)
+        logger.debug("[LLM] OPENAI_MODEL=%s is non-chat; fallback to chat model=%s", model, fallback_chat_model)
         model = fallback_chat_model
 
     # ✅ 改：支援 MODEL_TEMPERATURE / MODEL_TIMEOUT fallback
