@@ -231,6 +231,17 @@ CORS_ALLOW_ALL_ORIGINS = True
 MODEL_TYPE = env_str("MODEL_TYPE", "OPENAI").upper()
 MODEL_TIMEOUT = env_int("MODEL_TIMEOUT", 120)
 
+# Enforce provider policy by environment.
+# Keep os.environ in sync because llm_factory reads from environment variables.
+if ENV_NAME == "INT":
+    MODEL_TYPE = "LM_STUDIO"
+    os.environ["MODEL_TYPE"] = MODEL_TYPE
+    if not (os.getenv("LM_STUDIO_MODEL") or "").strip():
+        os.environ["LM_STUDIO_MODEL"] = "gemma-4"
+elif ENV_NAME == "EXT":
+    MODEL_TYPE = "OPENAI"
+    os.environ["MODEL_TYPE"] = MODEL_TYPE
+
 # ============================================================
 # OpenAI
 # ============================================================
@@ -381,8 +392,11 @@ DIGITAL_TWIN_KB_EMBEDDING_DIMENSIONS = env_int("DIGITAL_TWIN_KB_EMBEDDING_DIMENS
 DIGITAL_TWIN_KB_ENABLE_EMBEDDING = env_bool("DIGITAL_TWIN_KB_ENABLE_EMBEDDING", True)
 DIGITAL_TWIN_KB_TOP_K = env_int("DIGITAL_TWIN_KB_TOP_K", 5)
 DIGITAL_TWIN_KB_LLM_PROVIDER = env_str("DIGITAL_TWIN_KB_LLM_PROVIDER", "")
-DIGITAL_TWIN_KB_OLLAMA_MODEL = env_str("DIGITAL_TWIN_KB_OLLAMA_MODEL", "")
 DIGITAL_TWIN_KB_OPENAI_MODEL = env_str("DIGITAL_TWIN_KB_OPENAI_MODEL", "")
+if ENV_NAME == "INT" and not DIGITAL_TWIN_KB_LLM_PROVIDER:
+    DIGITAL_TWIN_KB_LLM_PROVIDER = "LM_STUDIO"
+elif ENV_NAME == "EXT" and not DIGITAL_TWIN_KB_LLM_PROVIDER:
+    DIGITAL_TWIN_KB_LLM_PROVIDER = "OPENAI"
 
 SYBASE_DSN = env_str("SYBASE_DSN", "")
 SYBASE_HOST = env_str("SYBASE_HOST", "")

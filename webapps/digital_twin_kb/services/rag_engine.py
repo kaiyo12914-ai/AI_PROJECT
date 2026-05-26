@@ -1,6 +1,7 @@
 from django.conf import settings
 import re
 import math
+import logging
 
 from webapps.digital_twin_kb.models import Document, QALog
 from webapps.digital_twin_kb.services.embedding_service import embed_text
@@ -8,17 +9,27 @@ from webapps.digital_twin_kb.services.vector_store_pgvector import similarity_se
 
 from .llm_service import NO_DATA_ANSWER, generate_answer
 
+logger = logging.getLogger("django")
+
 
 def ask(question: str, asker_type: str, asker_id: str, top_k: int | None, user_security_level: int, filters: dict):
-    query_embedding = embed_text(question)
-    rows = similarity_search(query_embedding, top_k or settings.DIGITAL_TWIN_KB_TOP_K, user_security_level, filters)
-    rows = _sanitize_rows_for_json(rows)
+    history_block = _build_history_block(asker_type, asker_id, keep_last_rounds=5, max_total_chars=3000)
+    rows = []
+    retrieval_error = ""
+    try:
+        query_embedding = embed_text(question)
+        rows = similarity_search(query_embedding, top_k or settings.DIGITAL_TWIN_KB_TOP_K, user_security_level, filters)
+        rows = _sanitize_rows_for_json(rows)
+    except Exception as exc:
+        retrieval_error = str(exc)
+        logger.warning("[DTKB] retrieval failed, fallback to general answer: %s", retrieval_error)
+
     if rows:
-        context = _build_context(rows)
-        answer = generate_answer(question, context)
+        context = _limit_text(_build_context(rows), 10000)
+        answer = generate_answer(question, context, history_block=history_block)
     else:
         from .llm_service import generate_general_answer
-        answer = generate_general_answer(question)
+        answer = generate_general_answer(question, history_block=history_block)
         # ✅ 使用者要求：當觸發通用智慧回答時，自動將回答存回知識庫，並備註為「AI生成」以實現自進化知識庫
         _save_ai_answer_to_kb(question, answer)
 
@@ -31,7 +42,7 @@ def ask(question: str, asker_type: str, asker_id: str, top_k: int | None, user_s
         filters=filters or {},
         retrieved_chunks=rows,
         answer=answer,
-        cited_sources=sources,
+        cited_sources=sources if not retrieval_error else [{"warning": f"retrieval_failed: {retrieval_error[:200]}"}],
     )
     return {
         "query_id": log.query_id,
@@ -51,6 +62,58 @@ def _safe_float(v) -> float:
     if not math.isfinite(f):
         return 0.0
     return f
+
+
+def _limit_text(text: str, max_chars: int) -> str:
+    if not text:
+        return ""
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars] + "\n...(truncated)..."
+
+
+def _build_history_block(asker_type: str, asker_id: str, keep_last_rounds: int = 5, max_total_chars: int = 3000) -> str:
+    if not asker_id:
+        return ""
+    logs = list(
+        QALog.objects.filter(asker_type=asker_type, asker_id=asker_id)
+        .order_by("-created_at")
+        .values("user_question", "answer")[:20]
+    )
+    if not logs:
+        return ""
+    logs = list(reversed(logs))
+    recent = logs[-keep_last_rounds:]
+    older = logs[:-keep_last_rounds]
+
+    older_summary = _summarize_older_rounds(older, max_chars=1200)
+    recent_lines = []
+    for i, item in enumerate(recent, start=1):
+        q = _limit_text((item.get("user_question") or "").strip(), 220)
+        a = _limit_text((item.get("answer") or "").strip(), 380)
+        recent_lines.append(f"Round {i} Q: {q}\nRound {i} A: {a}")
+
+    parts = []
+    if older_summary:
+        parts.append("Older Summary:\n" + older_summary)
+    if recent_lines:
+        parts.append("Recent 5 Rounds:\n" + "\n\n".join(recent_lines))
+    return _limit_text("\n\n".join(parts), max_total_chars)
+
+
+def _summarize_older_rounds(rounds: list[dict], max_chars: int = 1200) -> str:
+    if not rounds:
+        return ""
+    points = []
+    for item in rounds:
+        q = (item.get("user_question") or "").strip()
+        a = (item.get("answer") or "").strip()
+        if not q and not a:
+            continue
+        q1 = _limit_text(q.replace("\n", " "), 120)
+        a1 = _limit_text(a.replace("\n", " "), 160)
+        points.append(f"- Q:{q1} | A:{a1}")
+    return _limit_text("\n".join(points), max_chars)
 
 
 def _sanitize_rows_for_json(rows: list[dict]) -> list[dict]:

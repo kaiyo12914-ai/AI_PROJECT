@@ -25,6 +25,8 @@ from webapps.englishchat.repository import EnglishChatQuestionBankRepository
 TOPICS = ["meeting", "phone", "restaurant", "travel", "shopping", "school", "fitness", "hospital", "weather", "self_intro"]
 MODES = ["fill_blank", "reorder", "translation"]
 LEVELS = ["beginner", "intermediate", "advanced"]
+EXAM_PROFILES = ["toeic_coca", "toefl_coca", "mixed"]
+
 GENERATED_PREFIX = "ai-toeic-coca-"
 DEFAULT_QUESTIONS_PER_COMBO = 1
 DEFAULT_SORT_ORDER_BASE = 100
@@ -48,7 +50,7 @@ class ComboResult:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="產生 TOEIC/COCA 題目並寫入 englishchat_question_bank。")
+    parser = argparse.ArgumentParser(description="Generate EnglishChat question-bank rows with TOEIC/TOEFL profiles.")
     parser.add_argument("--questions-per-combo", type=int, default=DEFAULT_QUESTIONS_PER_COMBO)
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--timeout", type=int, default=120)
@@ -57,6 +59,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--topics", nargs="*", choices=TOPICS)
     parser.add_argument("--modes", nargs="*", choices=MODES)
     parser.add_argument("--levels", nargs="*", choices=LEVELS)
+    parser.add_argument("--exam-profile", choices=EXAM_PROFILES, default="mixed")
     return parser.parse_args()
 
 
@@ -65,94 +68,75 @@ def build_prompt(
     mode: str,
     level: str,
     requested_count: int,
+    exam_profile: str = "mixed",
     banned_signatures: Sequence[str] | None = None,
 ) -> str:
-    beginner_translation_hint = ""
-    beginner_level_hint = ""
+    exam_prompt_map = {
+        "toeic_coca": "Generate TOEIC-style practical English (business + daily), guided by common COCA usage.",
+        "toefl_coca": "Generate TOEFL-style English (academic + campus + lecture), guided by common COCA usage.",
+        "mixed": "Generate a balanced mix of TOEIC and TOEFL styles, guided by common COCA usage.",
+    }
+    exam_instruction = exam_prompt_map.get(exam_profile, exam_prompt_map["mixed"])
+
+    beginner_rule = ""
     if level == "beginner":
-        beginner_level_hint = """
-beginner 題目請額外遵守以下簡化規則：
-- 難度請對齊 CEFR A1/A2。
-- 字彙優先參考 Oxford 3000、NGSL 高頻字、GEPT 初級、國中基礎英文常見用字。
-- 題型風格可參考 GEPT 初級、國中英文、初級 ESL 練習題。
-- 保留 TOEIC/生活情境，但句子必須改寫成初學者也能理解的簡單英文。
-- 優先使用日常高頻動詞，例如 `be`, `have`, `go`, `like`, `want`, `need`, `work`, `call`, `eat`, `come`。
-- 句子盡量短，避免複句、被動語態、假設語氣、關係子句、分詞構句與過度商務化字彙。
-- 一題只考一個重點，不要同時考多個文法或多層語意推理。
-- fill_blank 盡量以單字或短片語為答案。
-- reorder 盡量控制在 4 到 6 個 words/chunks。
-- translation 只出單句，句意要直接、清楚、自然。
-"""
-    if mode == "translation" and level == "beginner":
-        beginner_translation_hint = """
-6. beginner 的 translation 題型必須提供額外提示：
-   - `patterns_json` 至少要有 3 個簡短提示。
-   - 內容必須包含：
-     1. 一個句型提示，
-     2. 一個關鍵動詞片語，
-     3. 一個單字或文法提示。
-   - `explanation_zh` 必須用繁體中文清楚說明主詞、動詞型態，以及一個關鍵用字。
-   - `sample_answer` 應保持簡短、基礎。
-"""
+        beginner_rule = (
+            "Beginner constraints: CEFR A1-A2 vocabulary and grammar; short, clear sentences; "
+            "avoid advanced idioms and dense clauses."
+        )
+
     banned_clause = ""
     if banned_signatures:
         banned_preview = "\n".join(f"- {sig}" for sig in list(banned_signatures)[:30])
-        banned_clause = f"\n10. Avoid generating questions that match these existing signatures:\n{banned_preview}\n"
+        banned_clause = f"\nAvoid these existing signatures:\n{banned_preview}\n"
 
     return f"""
-請產生 {requested_count} 題 TOEIC 風格英文練習題，語言要貼近日常實用英文，並參考 COCA 常見用法。
+You are generating question-bank rows for English learning.
+{exam_instruction}
 
-主題：{topic}
-題型：{mode}（fill_blank / reorder / translation）
-難度：{level}（beginner / intermediate / advanced）
+topic={topic}
+mode={mode}
+level={level}
+count={requested_count}
+{beginner_rule}
 
-只能回傳 JSON array。
-第一個字必須是 `[`，最後一個字必須是 `]`。
-不要使用 markdown。
-不要加入任何額外說明、前言、結語、註解或 code fence。
-不要輸出 ```json 或 ```。
-每一題都必須保留所有 key，不可以省略欄位。
-若某欄位該題型不使用，請填 `""` 或 `[]`，不要填 null。
-除了 JSON array 之外，不要輸出任何文字。
-[
-  {{
-    "prompt_text": "題目文字",
-    "choices_json": ["選項A", "選項B", "選項C"],
-    "words_json": ["word1", "word2"],
-    "answer_text": "正確答案",
-    "explanation_zh": "繁體中文解析",
-    "pattern_text": "目標句型",
-    "zh_prompt": "中文題目",
-    "sample_answer": "英文參考答案",
-    "patterns_json": ["提示1", "提示2", "提示3"]
-  }}
-]
+Return ONLY a valid JSON array (no markdown, no code fence, no extra text).
+Must return EXACTLY {requested_count} objects.
 
-規則：
-1. fill_blank：
-   - `prompt_text` 必須且只能包含一個 `____`。
-   - `choices_json` 至少要有 3 個選項。
-   - `words_json` 必須是 []。
-   - `answer_text`、`explanation_zh`、`pattern_text` 必填。
-2. reorder：
-   - `prompt_text` 必填。
-   - `words_json` 至少要有 3 個打亂順序的單字或片語。
-   - `choices_json` 必須是 []（強制規則，不可放任何選項）。
-   - 若 `choices_json` 不是 []，視為格式錯誤。
-   - `answer_text`、`explanation_zh`、`pattern_text` 必填。
-3. translation：
-   - `zh_prompt`、`sample_answer`、`explanation_zh` 必填。
-   - `explanation_zh` 至少 12 個字，需說明關鍵句型或文法重點。
-   - `choices_json` 與 `words_json` 應為 []。
-   - `patterns_json` 應提供對學習者有幫助的提示。
-4. 每一題都必須符合指定難度。
-5. 避免重複題與近似題。
-6. 題目內容必須自然、可用於真實情境，不要出現奇怪或生硬的英文。
-7. `requested_count` 是 {requested_count}，請輸出剛好 {requested_count} 個 array 元素，不多也不少。
-8. 若你差點想輸出說明文字，請刪除，只保留合法 JSON array。
-9. 若 level 是 beginner，請優先以初級英文教材風格出題，而不是標準 TOEIC 中高難度句型。
-{beginner_level_hint}
-{beginner_translation_hint}
+Each object must include these keys:
+- prompt_text (string)
+- choices_json (array of strings)
+- words_json (array of strings)
+- answer_text (string)
+- explanation_zh (string)
+- pattern_text (string)
+- zh_prompt (string)
+- sample_answer (string)
+- patterns_json (array of strings)
+
+Mode rules:
+1) fill_blank
+- prompt_text must contain exactly one "____"
+- choices_json must contain >= 3 options
+- words_json must be []
+- answer_text and pattern_text must be non-empty
+
+2) reorder
+- prompt_text must be non-empty
+- words_json must contain >= 3 chunks
+- choices_json must be []
+- answer_text and pattern_text must be non-empty
+
+3) translation
+- zh_prompt and sample_answer must be non-empty
+- choices_json must be []
+- words_json must be []
+- patterns_json must contain >= 3 items when level=beginner, else >= 1
+- explanation_zh must be non-empty
+
+All items must be mutually different in content.
+Do not use null.
+Do not leave empty strings in required fields.
 {banned_clause}
 """.strip()
 
@@ -173,12 +157,12 @@ def normalize_string_list(value: Any, field_name: str) -> List[str]:
 
 
 def build_translation_explanation_fallback(sample_answer: str, patterns: Sequence[str]) -> str:
-    pattern_text = "、".join([normalize_text(p) for p in patterns if normalize_text(p)][:2])
-    if pattern_text:
-        return f"此句建議使用「{pattern_text}」等句型，請注意語序與動詞形式。"
+    hints = " / ".join([normalize_text(p) for p in patterns if normalize_text(p)][:2])
+    if hints:
+        return f"Use these grammar hints: {hints}."
     if sample_answer:
-        return "此句請對照參考答案，注意主詞、動詞與語序是否正確。"
-    return "請使用自然且正確的英文語序完成翻譯。"
+        return "Use the sample answer as the core sentence pattern."
+    return "Provide a concise and grammatically correct translation."
 
 
 def question_signature(item: Dict[str, Any]) -> str:
@@ -222,9 +206,15 @@ def validate_item(item: Any, topic: str, mode: str, level: str, sort_order: int)
         "sort_order": sort_order,
     }
 
-    # Auto-fix for reorder mode: choices_json must always be empty.
     if mode == "reorder":
         normalized["choices_json"] = []
+    if not normalized["pattern_text"] and mode in {"fill_blank", "reorder"}:
+        normalized["pattern_text"] = normalized["prompt_text"] or f"{mode} pattern"
+    if not normalized["explanation_zh"]:
+        if normalized["answer_text"]:
+            normalized["explanation_zh"] = f"Correct answer: {normalized['answer_text']}."
+        elif normalized["sample_answer"]:
+            normalized["explanation_zh"] = f"Sample answer: {normalized['sample_answer']}."
     if mode == "translation" and not normalized["explanation_zh"]:
         normalized["explanation_zh"] = build_translation_explanation_fallback(
             normalized["sample_answer"],
@@ -235,8 +225,8 @@ def validate_item(item: Any, topic: str, mode: str, level: str, sort_order: int)
         raise QuestionGenerationError("explanation_zh is required.")
 
     if mode == "fill_blank":
-        if "____" not in normalized["prompt_text"]:
-            raise QuestionGenerationError("fill_blank prompt_text must contain ____.")
+        if normalized["prompt_text"].count("____") != 1:
+            raise QuestionGenerationError("fill_blank prompt_text must contain exactly one ____.")
         if len(normalized["choices_json"]) < 3:
             raise QuestionGenerationError("fill_blank choices_json must contain at least 3 choices.")
         if normalized["words_json"]:
@@ -247,7 +237,7 @@ def validate_item(item: Any, topic: str, mode: str, level: str, sort_order: int)
         if not normalized["prompt_text"]:
             raise QuestionGenerationError("reorder prompt_text is required.")
         if len(normalized["words_json"]) < 3:
-            raise QuestionGenerationError("reorder words_json must contain at least 3 words.")
+            raise QuestionGenerationError("reorder words_json must contain at least 3 chunks.")
         if not normalized["answer_text"] or not normalized["pattern_text"]:
             raise QuestionGenerationError("reorder requires answer_text and pattern_text.")
     elif mode == "translation":
@@ -256,7 +246,7 @@ def validate_item(item: Any, topic: str, mode: str, level: str, sort_order: int)
         required_pattern_count = 3 if level == "beginner" else 1
         if len(normalized["patterns_json"]) < required_pattern_count:
             raise QuestionGenerationError(
-                f"translation patterns_json must contain at least {required_pattern_count} pattern hints."
+                f"translation patterns_json must contain at least {required_pattern_count} hints."
             )
     else:
         raise QuestionGenerationError(f"Unsupported mode: {mode}")
@@ -303,40 +293,68 @@ def generate_combo_questions(
     mode: str,
     level: str,
     requested_count: int,
+    exam_profile: str,
     temperature: float,
     timeout: int,
     banned_signatures: Sequence[str] | None = None,
 ) -> Tuple[List[Dict[str, Any]], int]:
-    prompt = build_prompt(topic, mode, level, requested_count, banned_signatures=banned_signatures)
-    try:
-        raw_items = invoke_json_array(
-            prompt,
-            purpose=f"generate_question_bank:{topic}:{mode}:{level}",
-            temperature=temperature,
-            timeout=timeout,
-            max_retries=3,
-            retry_delay=2.0,
+    _ = banned_signatures  # kept for backward-compatible function signature
+    collected: List[Dict[str, Any]] = []
+    collected_sigs: set[str] = set()
+    skipped_duplicates = 0
+
+    rounds = max(2, requested_count + 1)
+    for _round in range(rounds):
+        need = requested_count - len(collected)
+        if need <= 0:
+            break
+        prompt = build_prompt(
+            topic=topic,
+            mode=mode,
+            level=level,
+            requested_count=need,
+            exam_profile=exam_profile,
+            banned_signatures=None,
         )
-    except EnglishChatLLMError as exc:
-        raise QuestionGenerationError(str(exc)) from exc
+        try:
+            raw_items = invoke_json_array(
+                prompt,
+                purpose=f"generate_question_bank:{topic}:{mode}:{level}",
+                temperature=temperature,
+                timeout=timeout,
+                max_retries=3,
+                retry_delay=2.0,
+            )
+        except EnglishChatLLMError as exc:
+            raise QuestionGenerationError(str(exc)) from exc
 
-    validated_items = []
-    for index, item in enumerate(raw_items, start=1):
-        validated_items.append(validate_item(item, topic, mode, level, DEFAULT_SORT_ORDER_BASE + index - 1))
-    existing = set(banned_signatures or [])
-    filtered_items: List[Dict[str, Any]] = []
-    filtered_out_existing = 0
-    for item in validated_items:
-        if question_signature(item) in existing:
-            filtered_out_existing += 1
-            continue
-        filtered_items.append(item)
+        for index, item in enumerate(raw_items, start=1):
+            try:
+                normalized = validate_item(
+                    item=item,
+                    topic=topic,
+                    mode=mode,
+                    level=level,
+                    sort_order=DEFAULT_SORT_ORDER_BASE + len(collected) + index - 1,
+                )
+            except QuestionGenerationError:
+                skipped_duplicates += 1
+                continue
+            sig = question_signature(normalized)
+            if sig in collected_sigs:
+                skipped_duplicates += 1
+                continue
+            collected.append(normalized)
+            collected_sigs.add(sig)
+            if len(collected) >= requested_count:
+                break
 
-    unique_items, skipped_duplicates = dedupe_items(filtered_items)
-    skipped_duplicates += filtered_out_existing
+    unique_items, extra_skipped = dedupe_items(collected)
+    skipped_duplicates += extra_skipped
+
     if len(unique_items) < requested_count:
         raise QuestionGenerationError(
-            f"Expected {requested_count} unique questions but received {len(unique_items)} after dedupe; "
+            f"Expected {requested_count} unique questions but received {len(unique_items)} after retries; "
             f"skipped_duplicates={skipped_duplicates}."
         )
     return unique_items[:requested_count], skipped_duplicates
@@ -345,7 +363,8 @@ def generate_combo_questions(
 def write_report(report_dir: Path, summary: Dict[str, Any]) -> Path:
     report_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    report_path = report_dir / f"toeic_coca_generation_{timestamp}.json"
+    profile = str(summary.get("exam_profile") or "mixed")
+    report_path = report_dir / f"{profile}_generation_{timestamp}.json"
     report_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     return report_path
 
@@ -368,33 +387,26 @@ def run_generation(args: argparse.Namespace) -> Tuple[Dict[str, Any], int]:
             for level in levels:
                 combo = ComboResult(topic=topic, mode=mode, level=level, requested_count=args.questions_per_combo)
                 combo_results.append(combo)
-                print(f"產生組合中 topic={topic} mode={mode} level={level}")
+                print(f"Generating combo topic={topic} mode={mode} level={level}")
                 try:
                     existing_rows = repo.fetch_questions(topic_key=topic, mode=mode, level=level)
                     banned_signatures = [question_signature(row) for row in existing_rows]
                     items, skipped_duplicates = generate_combo_questions(
-                        topic,
-                        mode,
-                        level,
-                        args.questions_per_combo,
-                        args.temperature,
-                        args.timeout,
+                        topic=topic,
+                        mode=mode,
+                        level=level,
+                        requested_count=args.questions_per_combo,
+                        exam_profile=args.exam_profile,
+                        temperature=args.temperature,
+                        timeout=args.timeout,
                         banned_signatures=banned_signatures,
                     )
-                    keep_ids = [item["question_id"] for item in items]
                     combo.skipped_duplicates = skipped_duplicates
 
                     if not args.dry_run:
                         for item in items:
                             repo.upsert_question(item)
                             combo.inserted_or_updated += 1
-                        combo.deactivated = repo.deactivate_generated_questions(
-                            topic_key=topic,
-                            mode=mode,
-                            level=level,
-                            keep_question_ids=keep_ids,
-                            generated_prefix=GENERATED_PREFIX,
-                        )
                     else:
                         combo.inserted_or_updated = len(items)
 
@@ -411,11 +423,12 @@ def run_generation(args: argparse.Namespace) -> Tuple[Dict[str, Any], int]:
                             "error": str(exc),
                         }
                     )
-                    print(f"組合失敗 topic={topic} mode={mode} level={level}: {exc}")
+                    print(f"Combo failed topic={topic} mode={mode} level={level}: {exc}")
 
     summary = {
         "generated_at": datetime.now().isoformat(),
         "dry_run": args.dry_run,
+        "exam_profile": args.exam_profile,
         "questions_per_combo": args.questions_per_combo,
         "totals": {
             "combos": len(combo_results),
@@ -437,14 +450,14 @@ def main() -> int:
 
     totals = summary["totals"]
     print(
-        "產生完成 "
+        "Done "
         f"combos={totals['combos']} "
         f"upserts={totals['upserts']} "
         f"deactivated={totals['deactivated']} "
         f"skipped_duplicates={totals['skipped_duplicates']} "
         f"failures={totals['failures']}"
     )
-    print(f"報告已寫入 {report_path}")
+    print(f"Report written: {report_path}")
     return exit_code
 
 

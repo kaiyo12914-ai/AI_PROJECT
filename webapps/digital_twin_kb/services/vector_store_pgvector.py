@@ -1,5 +1,6 @@
-from django.db import connection
+import time
 import math
+from django.db import connection
 
 from webapps.digital_twin_kb.models import DocumentChunk
 
@@ -54,10 +55,23 @@ def similarity_search(query_embedding: list[float], top_k: int, user_security_le
         ORDER BY embedding <=> %(embedding)s::vector
         LIMIT %(top_k)s
     """
-    with connection.cursor() as cursor:
-        cursor.execute(sql, params)
-        cols = [col[0] for col in cursor.description]
-        return [dict(zip(cols, row)) for row in cursor.fetchall()]
+    retries = 2
+    retry_delay_sec = 0.25
+    statement_timeout_ms = 8000
+    last_exc = None
+    for attempt in range(retries + 1):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SET LOCAL statement_timeout = %s", [statement_timeout_ms])
+                cursor.execute(sql, params)
+                cols = [col[0] for col in cursor.description]
+                return [dict(zip(cols, row)) for row in cursor.fetchall()]
+        except Exception as exc:
+            last_exc = exc
+            if attempt >= retries:
+                break
+            time.sleep(retry_delay_sec * (attempt + 1))
+    raise last_exc
 
 
 def save_chunk_embedding(chunk: DocumentChunk, embedding: list[float]):

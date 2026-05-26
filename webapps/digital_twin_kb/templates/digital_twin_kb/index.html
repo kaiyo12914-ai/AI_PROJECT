@@ -4,7 +4,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
-  <title>數位雙生 RAG 知識庫平台</title>
+  <title>數位孿生 RAG 知識庫平台</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
   <link rel="stylesheet" href="{% custom_static 'digital_twin_kb/css/index.css' %}?v=11">
@@ -98,7 +98,7 @@
         <!-- 對話輸入 -->
         <div class="dt-chat-input-area">
           <div class="input-wrapper">
-            <textarea id="chat-input" placeholder="請輸入問題或要錄入的知識 (例如：一號機台異常代碼 E-102 代表過熱)..." rows="1"></textarea>
+            <textarea id="chat-input" placeholder="請輸入問題或要錄入的知識 (例如：數位孿生的核心技術)..." rows="1"></textarea>
             <button id="btn-send-chat" class="btn-primary" title="發送問答">
               <svg viewBox="0 0 24 24" class="send-icon"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
@@ -125,7 +125,7 @@
           <!-- 批量匯入 -->
           <div class="action-card">
             <h4>1. 伺服器預設資料夾</h4>
-            <p>批量自動分類與 Ingest 製造業與數位雙生相關示範文檔。</p>
+            <p>批量自動分類與 Ingest 製造業與數位孿生相關示範文檔。</p>
             <button id="btn-ingest-folder" class="btn-secondary btn-full">
               <svg viewBox="0 0 24 24" class="btn-icon"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" fill="none" stroke="currentColor" stroke-width="2"/></svg>
               一鍵批量匯入資料夾
@@ -175,7 +175,7 @@
 
         <!-- ISA-95 雙生層級概覽統計 -->
         <div class="action-card">
-          <h4>3. 數位雙生層級分佈 (ISA-95)</h4>
+          <h4>3. 數位孿生層級分佈 (ISA-95)</h4>
           <div class="dt-categories-grid" id="categories-container">
             <div class="loading-spinner">載入統計資料中...</div>
           </div>

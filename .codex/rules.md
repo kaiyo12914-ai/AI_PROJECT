@@ -1,417 +1,103 @@
-# AI_TOOLS 撠?閬?嚗rimary Rules嚗?
+# AI_TOOLS 專案規範（Primary Rules）
 
-?湔?交?嚗?026-04-20  
-?拍蝭?嚗H:\AI\AI_TOOLS`
-
----
-
-## 1) Mandatory Startup Rule嚗?甈⊥ session 敹?嚗?
-1. ?脣?砍?獢?嚗洵銝甇亙?????`/.codex/rules.md`??
-2. 銝頝喲?嚗??舀霈?嗡? rules 瑼隞??
-3. `/.codex/rules.md` ?箏銝閬?靘?嚗?獢?桅?銝??雁霅瑞洵鈭遢 `rules.md`??
-4. 霈摰瑼?嚗?????`H:\AI\openclaw-workspace\LONG_TERM_MEMORY.md`??
-5. 瘥?session ???`H:\AI\openclaw-workspace` 撱箇?撌乩?閮?瑼?
-   - 瑼?嚗AI_TOOLS_撌乩?閮?_YYYY-MM-DD.md`
+最後更新：2026-05-25  
+專案根目錄：`H:\AI\AI_TOOLS`
 
 ---
 
-## 2) 銝?游?銋敹???MUST NOT MERGE嚗?
+## 1) 啟動必讀（Mandatory Startup Rule）
+1. 每次進入本專案工作前，必讀 `/.codex/rules.md`。
+2. 若全域規則與本專案規則衝突，以本檔為準。
+3. 每次 session 也要讀取：`H:\AI\openclaw-workspace\LONG_TERM_MEMORY.md`。
+4. 重要決策與操作紀錄請寫入 `H:\AI\openclaw-workspace`（檔名建議：`AI_TOOLS_<主題>_YYYY-MM-DD.md`）。
+
+---
+
+## 2) 不可違反規則（MUST NOT MERGE）
 
 ### 2.1 URL / Proxy Prefix
-1. Django URL 敹??舀 proxy prefix嚗?憒?`/djangoai/...`嚗?
-2. ?垢 API 頝臬?銝敺蝙??`apiurl()` ?Ｙ?嚗??舐′撖怎?撠楝敺?
-3. 銝??middleware 撠?HTML/JS ???批捆??銝脫??prefix??
-4. `PROXY_PREFIX`?FORCE_SCRIPT_NAME`?PROXY_PREFIX_WRITE_SCRIPT_NAME` 敹?銝?湧?雿?
+1. Django `urls.py` 不可寫入 proxy prefix（例如 `/djangoai`）。
+2. 前端 API URL 必須統一透過 `apiurl()` 組合。
+3. HTML / JS 不可硬寫 proxy 或 node 前綴。
+4. `PROXY_PREFIX`、`FORCE_SCRIPT_NAME`、`PROXY_PREFIX_WRITE_SCRIPT_NAME` 必須一致管理。
 
-### 2.2 ?垢鞈?頛
-1. HTML 蝳迫憛之??inline `<script>` / `<style>`??
-2. CSS / JS ???`webapps/<node>/static/<node>/`??
-3. Template ??? `custom_static`嚗?撠??Ｘ?蝑 helper嚗??仿???皞?
-4. ?抒雯撌亙????祉?甇Ｖ蝙??`<script type="module">`?蝬脣?蝞∪?汗?具??敹誨?? static header 撌桃嚗?賢???module ?單摰銝銵?銵函?箝??????
-5. 撌亙????砌?敺蝙??`defer` 頛嚗?
-   `<script defer src="{% custom_static '<node>/js/<page>.js' %}"></script>`
-6. ?亦Ⅱ撖阡?閬芋蝯???芸??其???`defer` ?單?找蝙?典???`import()`嚗?敺誑 module script ?嗡???亙??
+### 2.2 前端結構
+1. Template 禁止內嵌大量 `<script>` / `<style>`。
+2. CSS / JS 必須放在 `webapps/<node>/static/<node>/...`。
+3. Script 載入預設使用 `defer`。
+4. 頁面邏輯與樣式分離，避免單檔過度膨脹。
 
-### 2.3 DB / LLM 撌亙?
-1. DB ????閰Ｙ絞銝韏?`DB_FACTORY`嚗webapps/database/db_factory.py`嚗?
-2. 蝳迫?典??賣芋蝯銵?new DB ?????
-3. LLM ?澆蝯曹?韏?`get_chat_model()`嚗webapps/llm/llm_factory.py`嚗?
-4. 蝳迫?典?璅∠??湔 new OpenAI/Ollama 摰Ｘ蝡胯?
+### 2.3 DB / LLM
+1. DB 存取只能走 `webapps/database/db_factory.py`。
+2. LLM 存取只能走 `webapps/llm/llm_factory.py`。
+3. 禁止在功能模組直接建立 DB 連線或模型客戶端。
 
 ### 2.4 ACL / require_node
-1. ?敹???`@require_node("<node>")`??
-2. API 敹???`@require_node("<node>", api=True)`??
-3. 銝蝜? ACL ?湔?蝡舫???
+1. 頁面端點必須加 `@require_node("<node>")`。
+2. API 端點必須加 `@require_node("<node>", api=True)`。
 
 ---
 
-## 3) ENV / ?瑁?璅∪?嚗andatory嚗?
+## 3) ENV 與連線政策（Mandatory）
 
-### 3.1 EXT / INT DB Mode嚗撥?塚?
-1. `ENV=EXT`嚗?閮梢?PostgreSQL嚗QL Server / Oracle / Sybase 蝳迫??祕擃?DB嚗??蝙??mock 鞈???
-2. `ENV=INT`嚗???祕擃?DB嚗?甇?fallback ?唳??mock JSON??
-3. `ENV=INT` ?亥岷憭望???敹??Ⅱ?嚗??舀韏?mock??
-4. EXT/INT 銝瘛瑞嚗??胯? fallback??
+### 3.1 EXT / INT
+1. `ENV=EXT`：SQL Server / Oracle / Sybase 依專案政策走 mock（除非明確批准）。
+2. `ENV=INT`：必須連實體 DB，不可偷偷 fallback mock JSON。
+3. 禁止 EXT/INT 混用 fallback 行為。
 
-### 3.2 NO_PROXY嚗撥?塚?
-銝??格?????`NO_PROXY/no_proxy`嚗?
-1. `127.0.0.1`?localhost`?::1`
-2. ?抒雯??銝餅?嚗B / Ollama / RAG / ?折 API嚗?
-
----
-
-## 4) ?祆?摮頂蝯梢??Mandatory嚗?
-1. Perspective Logic嚗LM ???? `_preprocess_incoming_text`嚗??詨?蝔梯??踵??箏擃?蝔晞?
-2. Buffer Integrity嚗?蝡舫??雿?蝛箄?????
-   - `.value = ""`
-   - `.setAttribute("value", "")`
-3. case ?????孛??`resetFocusPick`??
-4. `views_parse.py` ??`out_files` ??敹? idempotent 銝銝嚗??銴??詻?
+### 3.2 NO_PROXY
+必須包含：
+- `127.0.0.1`
+- `localhost`
+- `::1`
+- 內網網域與必要主機（DB / Ollama / RAG / 內網 API）
 
 ---
 
-## 5) SQL ??撅?
-1. SQL ??銝剜 service/repository 撅扎?
-2. View/template 銝?湔?潭 SQL??
-3. ?亦 legacy ?嫣?嚗?蝬剜??舀葫?餈質馱嚗?銝?????
+## 4) 編碼規範（Mandatory）
+1. 所有文字檔一律使用 **UTF-8（無 BOM）**。
+2. 不得使用 Big5 / CP950 / GB 編碼儲存原始碼與文件。
+3. Windows PowerShell 5.1 避免用 `Set-Content -Encoding UTF8` 寫專案檔（會有 BOM 風險）。
+4. 優先使用可明確控制編碼的工具／流程，確保 UTF-8 無 BOM。
 
 ---
 
-## 6) UTF-8 / BOM嚗andatory嚗?
-1. ?典?獢?摮?敹?雿輻 UTF-8嚗 BOM嚗?
-2. Windows PowerShell 5.1 蝳嚗Set-Content -Encoding UTF8`嚗?撖怠 BOM嚗?
-3. 隢蝙?函 BOM 撖急?嚗?
-
-```powershell
-[System.IO.File]::WriteAllText($path, $text, (New-Object System.Text.UTF8Encoding($false)))
-```
-
-4. PowerShell 7 ?舐 `-Encoding utf8NoBOM`??
-5. VS Code ?身蝺函Ⅳ???`UTF-8`嚗? `UTF-8 with BOM`嚗?
-6. 蝳迫雿輻 Big5/CP950/GB 雿撠?瑼??脣?蝺函Ⅳ??
+## 5) 測試規範
+1. 新功能與重要修正必須補測試。
+2. 測試建議目錄：
+- `tests/unit/`
+- `tests/integration/`
+- `tests/e2e/`
+3. 至少覆蓋：happy path、邊界條件、錯誤處理。
 
 ---
 
-## 7) 皜祈岫閬?嚗ibe coding嚗?
-1. ?啣??耨?孵??賣?嚗???甇亦?箸葫閰艾?
-2. ?啣?蝟餌絞?敹?靘?`H:\AI\AI_TOOLS\tests` ?暹??嗆?嚗?甇亥?銝惜皜祈岫嚗??臬撖怠撅斗葫閰血?摰?迂摰?嚗?
-   - `tests\unit\`
-   - `tests\integration\`
-   - `tests\e2e\`
-3. 銝惜皜祈岫閬?憒?嚗?
-   - Unit嚗?霅??賢??ervice?ormatter?alidator????瑞??臬??券??ａ?頛?
-   - Integration嚗?霅?view?ervice?B_FACTORY?CL?equest/response?ock 憭靘陷?游?銵
-   - E2E嚗?霅蝙?刻??菜?蝔?銝餉??亙銵
-4. ?啣?蝟餌絞?交??撅斗葫閰阡爸?嗉?撠?皜祈岫獢?嚗??箸摰?嚗?敺?雿萸?
-5. 皜祈岫?⊿?摮?嚗?
-   - Unit 蝝?70%
-   - Integration 蝝?20%
-   - E2E 蝝?10%
-6. 瘥葫閰虫蜓憿撠嚗?
-   - happy path
-   - boundary case
-   - error handling
-7. 瘨?憭 API / DB / 瑼? / 蝚砌??寞?嚗?蝙??mock/stub/fake嚗?敺? unit test ?湔靘陷?祕憭????
-8. 皜祈岫瑼?銝剜嚗H:\AI\AI_TOOLS\tests`
-   - `tests\unit\`
-   - `tests\integration\`
-   - `tests\e2e\`
-9. 瑼?嚗test_<??迂>.py`嚗??嗅??`pytest`??
+## 6) 資料庫與資料表政策
+1. 新增應用資料表必須建立於 PostgreSQL。
+2. 資料表變更必須使用 Django migration 管理。
+3. 禁止在功能程式中直接建立 ad-hoc table。
 
 ---
 
-## 8) 霈??
-1. 霈??蝣箄??臬???祆?隞颱? Mandatory 閬???
-2. ?亥???蝒?隞交瑼皞??∟?蝭??～?撠憯?遝?皜祈岫????
-3. 隞颱??蔣??proxy?CL?B mode?楊蝣潸???靽格嚗???PR/commit 隤芣?銝剜?蝣箏??箝?
+## 7) 架構政策
+1. 新子系統必須整合進既有 Django 專案（`webapps/<subsystem>`）。
+2. 禁止建立第二套 Django 專案、第二個 `manage.py`、子專案獨立 `.env` 或 `requirements.txt`。
+3. 全專案設定來源統一由 root `.env` + `webproj/settings.py` 管理。
 
 ---
 
-## 9) Roadmap 蝞∠?閬?嚗andatory嚗?
-1. ?啣?蝟餌絞???敹????瘙???銝血 `H:\AI\AI_TOOLS\.roadmap\` 撱箇?撠? roadmap 瑼?
-2. 瑼?閬?嚗?
-   - 銝?砍?蝟餌絞嚗<蝟餌絞?迂>roadmap.md`嚗?嚗XXX蝟餌絞roadmap.md`嚗?
-   - 瑼?? `roadmap` ??`ROADMAP` ??隞塚?銝敺??`.roadmap` 鞈?憭橘?銝?撠??寧???嗡?鞈?憭整?
-3. roadmap ?批捆?撠????恬?
-   - ?瘙???????璅蝙?刻敹?瘙???瘙?
-   - 蝟餌絞?閬?嚗hase/Sprint/??蝣?
-   - 摰??折脣漲閮餉?嚗蜇摰?摨艾?畾菟脣漲??颲西??餃?嚗?
-   - 撽璅?嚗efinition of Done嚗?
-4. ?脣漲蝬剛風閬?嚗?
-   - 瘥活???賢???瘙??氬◢?芾矽?湔?嚗???甇交?啣???roadmap??
-   - ?湔?批捆?喳?閬??????柴擗◢?芥?銝甇亥??怒?
-5. ??roadmap ?祕雿???銝?湛?閬?閬???嚗府霈銝??蔥嚗UST NOT MERGE嚗?
+## 8) 禁用 Docker（Mandatory）
+1. 本專案禁止使用 Docker / Docker Compose / Dockerfile。
+2. 開發、測試、部署以本機或內網實體服務為準。
 
 ---
 
-## ?? A嚗???rules.md 摰??嚗???
+## 9) 檔案大小控制
+1. 單一來源檔案不得超過 1000 行。
+2. 超過 900 行時，後續變更應優先拆模組重構。
 
-```markdown
-# DJANGO 銝餃?獢?蝭?Primary Rules嚗?
+---
 
-??交?嚗?026-03-23
-?拍頝臬?嚗:\AI\AI_TOOLS嚗蒂雿?嗡?撠?銝餉?蝭?皞?
-
-## 閬?撅斤?
-1. ?祆?嚗:\AI\AI_TOOLS\.codex\rules.md嚗鈭?獢?擃?蝭?
-2. ?嗡?撠? rules.md ?芾鋆?嚗?敺??祆?銵???
-3. ?潛?銵???隞交瑼皞?
-
-## 撠??函???
-- 瘥?獢蝡蝵脯蝡???摨蝡?撘Ⅳ????
-- 蝳迫隞?PYTHONPATH ??亥楝敺釣?交撘楊撠? import ?賣??
-- 撠?????賡? API???臭????Ⅱ鞈?鈭斗?瘚???
-
-## ?梁?閮剖?
-- ?梁? workspace嚗:\AI\openclaw-workspace
-
-
-## 霈蝞∠?
-- 隞颱?撠?閬?隤踵嚗??湔?祆?嚗??郊?湔?嗡?撠? rules.md??
-- 隢??瑟????輻??郊閮??潘?
-  H:\AI\openclaw-workspace\LONG_TERM_MEMORY.md
-
-# 撠?蝟餌絞?嗆????潸?蝭?蝎曄陛撘瑕??
-
-?祆?隞嗥撘瑕閬?嚗andatory Rules嚗?
-隞颱?????蝔?蝣潔?敺?雿蛛?MUST NOT MERGE嚗?
-
-## 銝??函???
-- Django 憭?暺頂蝯梧?portal / doc / comment / meetingreply / ?佗?
-- ?垢 JS / HTML Template / Static 鞈?
-- IIS Reverse Proxy嚗 proxy prefix嚗?
-- DB_FACTORY / LLM_FACTORY
-- ACL / require_node / DEV Login
-
-## 鈭RL ??Proxy 閬?嚗敹??
-
-### ?萄? 1嚗jango 瘞賊?銝神 proxy prefix
-- `urls.py` 銝?? `/djangoai` ?遙雿?proxy ?韌
-- `PROXY_PREFIX` ?芰??render ???誨?楝敺?鋆?銝?撖急香??app 頝舐
-
-```python
-# 甇?Ⅱ
-path("incoming_lookup/", ...)
-# ?航炊
-path("djangoai/incoming_lookup/", ...)
-```
-
-### ?萄? 2嚗?蝡臭?敺′撖思遙雿?prefix / node
-- 蝳迫 `/djangoai/...`
-- 蝳迫 `/doc/...`
-- 蝳迫?芾??潭 base URL
-- 蝳迫??middleware 銝剔摮葡?踵? response ?批捆靘? prefix
-- 隞颱? prefix 鋆??賢?? URL / template ???挾摰?嚗??賭?敺 response body
-
-### ?萄? 3嚗???API URL ?芾蝬? `apiurl()`
-- HTML / JS / Template ?臭????亙嚗apiurl(path)`
-- `apiurl()` 敹?靘 `apiurl_factory`
-
-### ?萄? 4嚗???皞?prefix ?望芋?踵?蝐斗??
-- `FORCE_SCRIPT_NAME` 瘙箏? Django ??`script_name` / ?誨?箏?
-- ??鞈??臬頛詨 prefix ??`PROXY_PREFIX_WRITE_SCRIPT_NAME` ?批
-- `PROXY_PREFIX_WRITE_SCRIPT_NAME=0` ????鞈?頛詨銝??活??prefix
-- ??鞈?銝敺??芾?璅⊥璅惜 `custom_static` ?Ｙ?嚗?敺?亦′撖?`staticfiles`
-- 蝳迫?湔??IIS ??????? `staticfiles` 靘?隞?Django static 瘚?
-
-## 銝piurl_factory 閬?嚗銝?嚗?
-
-### 撘瑕閬?
-- JS ?芾霈??`document.body.dataset.baseUrl`
-- 蝳迫摮?嚗?
-  - `window.__FORCE_SCRIPT_NAME__`
-  - `window.__PROXY_PREFIX__`
-  - 隞颱? ENV prefix
-  - 隞颱?蝖砍神 `/djangoai`
-
-### Template 敹?瘜典
-```html
-<body data-base-url="{{ request.script_name }}">
-```
-
-### ?臭??迂????頛?
-```js
-function apiurl(path) {
-  const base = document.body.dataset.baseUrl || "";
-  if (!path.startsWith("/")) path = "/" + path;
-  return base + path;
-}
-```
-
-## ??蝡?Static 鞈?閬?嚗撥?塚?
-- HTML ?抒?甇?`<style>`
-- HTML ?抒?甇Ｗ之??`<script>`
-- CSS / JS 銝敺 `static/`
-- ?芸?閮勗???inline 閮剖?瘜典嚗10 銵?摩嚗?
-
-### Static 蝯?嚗撥?塚?
-```
-webapps/<node>/static/<node>/
-  css/<page>.css
-  js/<page>.js
-```
-
-### HTML 璅?撖急?
-```django
-{% load custom_tags %}
-<link rel="stylesheet" href="{% custom_static '<node>/css/<page>.css' %}">
-<script defer src="{% custom_static '<node>/js/<page>.js' %}"></script>
-```
-
-- ???皞??鋡?`collectstatic` ?園?
-- ??鞈??祕??URL 敹???`PROXY_PREFIX_WRITE_SCRIPT_NAME` ?詨捆嚗??賢??祆? 8090 ?湧????prefix
-
-## 鈭B_FACTORY 閬?嚗撥?塚?
-- 蝳迫?芾?撱箇? DB ???
-- 蝳迫雿輻?? db_factory
-- 銝敺蝙??`webapps/database/db_factory.py`
-- ??閮梧?`db_query_one` / `db_query_all` / `db_execute`
-
-## ?准LM_FACTORY 閬?嚗撥?塚?
-- 蝳迫?湔 new OpenAI / Ollama
-- 銝敺蝙??`get_chat_model()`
-- 璅∪????芾??ENV ?批
-
-## 銝ettings / ENV 閬?
-- ??憓?瑕?賢 `settings.py`
-- ?芋蝯?敺銵??proxy / env / login 銵
-- `.env` 敹?????潸??潔?閮剖?嚗?銝??璈??8090 ??IIS ?誨?函蔡瘛瑞??銝蝯???prefix 銵
-- `PROXY_PREFIX`?FORCE_SCRIPT_NAME`?PROXY_PREFIX_WRITE_SCRIPT_NAME` 敹???蝬剛風嚗?敺????嗡?璅∠???鋆?銝?
-- IIS rewrite 撠? 8090 ??敺垢銝??? prefix ??蝚砌?甈∴??祆??湧??甇???誨敹?雿輻銝???ENV ?蔭
-
-### 敹? ENV嚗內靘?
-```
-NO_PROXY=127.0.0.1,localhost,::1,.mpc.mil.tw
-FORCE_SCRIPT_NAME=
-PROXY_PREFIX=
-PROXY_PREFIX_WRITE_SCRIPT_NAME=0
-DEV_LOGIN_USER=
-DEV_LOGIN_NAME=
-```
-
-## ?怒O_PROXY 閬?嚗撥?塚?
-敹??嚗?
-- localhost / 127.0.0.1 / ::1
-- ?抒雯蝬脣?撠曄Ⅳ
-- DB / Ollama / RAG host
-
-## 銋CL / require_node 閬?嚗撥?塚?
-- ????ｇ?`@require_node`
-- ???API嚗@require_node(api=True)`
-- ACL ?斗?葉蝞∠?嚗?甇Ｗ???祕雿?
-
-## ?EV Login 閬?
-- 甇???啣?嚗靽∩遙 IIS RemoteUser
-- DEBUG嚗?閮?`DEV_LOGIN_USER`
-- DEV fallback ?芾摮??middleware / utils_login
-
-## ???楊蝣潸?蝭?撘瑕嚗?
-- ?典?獢?敺?UTF-8嚗???BOM嚗?
-- 蝳迫 Big5 / CP950 / GB 蝟餃?
-- 銝???service / view 撅日脰?隞颱?鈭活 encode/decode
-
-### Sybase 銝剜???
-- 銝剜?甈? SQL 敹?雿輻 `CONVERT(VARBINARY)`
-- 鈭Ⅳ???芾?滲靽格迤 DB_FACTORY / Driver / DSN
-
-## ???QL ?葉??嚗OC嚗?
-- ???SELECT SQL ?葉??service
-- View / 摮芋蝯?敺??SQL
-- ?澆蝡臬?澆 service method
-
-## ???B / Mock 閬?
-- `ENV=EXT`嚗?閮?PostgreSQL嚗QL Server / Oracle / Sybase ?憭 DB嚗??mock JSON
-- `ENV=INT`嚗?敺蝙?典祕擃?DB
-- 銝??芾??? mock 銵
-- ENV閮剖?隢?憭雯撌桃嚗??潛頂蝯曹葉?脰?ENV??蒂??皛輯雲?批?蝬脤?瘙?
-
-## Mandatory Startup Rule
-- 瘥活?脣?砍?獢??啣?閰???session嚗???霈??`/.codex/rules.md`嚗????嗡?撌乩???
-- 瘥活?脣?砍?獢??啣?閰???session嚗霈摰?`/.codex/rules.md` 敺?敹?????`H:\AI\openclaw-workspace\LONG_TERM_MEMORY.md` ??啣摰對?????嗡?撌乩???
-- 瘥活?脣?砍?獢??啣?閰???session嚗?????敹?????`H:\AI\openclaw-workspace` 銝剜??唬?蝑漱?亥?????靘?嚗AI_TOOLS_鈭斗?勗?_YYYY-MM-DD.md`嚗?嚗?舀蝥??潦?
-
-## UTF-8 / BOM Rule
-- 撠?????撘Ⅳ瑼?銝敺蝙??UTF-8嚗 BOM嚗?
-- ??Windows PowerShell 5.1嚗?蝙??`Set-Content -Encoding UTF8`嚗?撖怠 BOM嚗?
-- 隢?剁?
-  `[System.IO.File]::WriteAllText(path, text, (New-Object System.Text.UTF8Encoding($false)))`
-- ??PowerShell 7 ?臭蝙??`-Encoding utf8NoBOM`??
-- VS Code ?身蝺函Ⅳ隢蝙??`UTF-8`嚗?閬蝙??`UTF-8 with BOM`??
-
-## ENV DB Mode Rule (Mandatory)
-- ENV=EXT: PostgreSQL MAY connect to a physical DB. SQL Server / Oracle / Sybase MUST use MOCK DATA and MUST NOT connect to physical DB.
-- ENV=INT: MUST always connect to physical DB. MUST NOT use MOCK DATA.
-- ENV=INT: MUST NOT fallback to local/mock JSON when DB query fails; return explicit error instead.
-- No fallback or mixed mode is allowed between EXT and INT.
-
-## Encoding Rule (Mandatory)
-- Avoid PowerShell write methods that may produce UTF-8 with BOM by default.
-- Do not use `Set-Content -Encoding UTF8` in Windows PowerShell 5.1 for project files.
-- Use no-BOM writing instead:
-  - `[System.IO.File]::WriteAllText(path, text, (New-Object System.Text.UTF8Encoding($false)))`
-  - In PowerShell 7+, prefer `-Encoding utf8NoBOM`.
-- VS Code default encoding must be UTF-8 (without BOM).
-
-## Factory and Connection Rules (Mandatory)
-- Model construction logic MUST use `Strategy + Registry`.
-- Factory responsibilities are strictly limited to: select strategy, pass context, return model.
-- Provider-specific differences MUST be implemented only in provider strategy classes.
-- Provider fallback policy MUST be centralized; do not scatter fallback branches across unrelated modules.
-- Database connections MUST go through `webapps/database/db_factory.py` only.
-- LLM connections MUST go through `webapps/llm/llm_factory.py` only.
-- Other modules MUST NOT create DB/LLM connections directly.
-
-## Database Table Rule (Mandatory)
-- Any newly introduced application tables MUST be created in PostgreSQL.
-- New feature schemas/migrations MUST target PostgreSQL first and be validated there.
-- New tables MUST be managed via Django migrations; do not create ad-hoc tables directly from feature code.
-- Any table-creation requirement MUST be documented in this `/.codex/rules.md` as project policy.
-
-## PostgreSQL Default Policy (Mandatory)
-- `webapps/videolearning` MUST use PostgreSQL (via Django `DATABASES["default"]` when `DATABASE_URL` is set).
-- Going forward, all newly added app tables in this repository MUST be created in PostgreSQL, not SQLite.
-
-## Shared Utility Rule (Mandatory)
-- Do not create duplicate helper functions with the same responsibility in different modules.
-- Before adding a new helper, search existing modules for equivalent logic and reuse it.
-- If reused across modules, move it into a shared utility module (example: `webapps/portal/identity.py`).
-- `decorators.py` and `middleware.py` must use shared identity resolution, not separate per-file implementations.
-
-## No Duplicate Responsibility Functions Rule (Mandatory)
-- 蝳迫?其???獢?銴遣蝡?鞎砌遙?撘??撓??????撓?箄?????
-- ?啣??賢??????冽????Ｘ?撖虫?嚗撠誑 `rg` ?撘????菜?雿蜓閬?蝔??萄?嚗?
-- ?亙歇摮蝑?摩嚗???仿??剁?銝?銴ˊ鞎潔??凝隤踹??
-- ?亙?璅∠??賡?閬?敹??賢?梁璅∠?嚗?憒?`webapps/<node>/identity.py`?utils.py`?services/common.py`嚗?
-- PR/?漱??摰?嚗?
-- `1.` ????梁?撘?蝵?
-- `2.` 蝘駁??銴撘??寧頧?怠?典撘?
-- `3.` 蝣箄??澆蝡航??箔??湛?敹???皜祈岫嚗?
-```
-
-## Vibe Coding ??啣???Git ??抒恣嚗andatory嚗?- AI 撌亙?冽撠??脰? Vibe coding ??敹?嚗H:\AI\AI_TOOLS\.md\??啣??it??抒恣.md`??- 甇斗?隞嗥 A/B ????it 銝剜??SL/Windows ?郊?單?撣貊??祆?雿?璅?雿平靘???- ?芷霈??萄儐閰脫?隞嗆?蝔?霈嚗??箸?蝔???嚗?敺?雿萸?
-## Git Commit ?單?臬?閬?嚗andatory嚗?- AI 撌亙??瑁? `git commit` ??敹?銝雿萄銵??祆蝞∟?砌蒂蝣箄?蝯???- Windows 瘚?嚗??瑁? `git-sync.ps1`嚗?鈭文??瑁? `git-push.ps1`??- WSL 瘚?嚗??瑁? `git-sync.sh`嚗?鈭文??瑁? `git-push.sh`??- ?亥?砍?銵???怠?霈?隞??仃??敹????文?憿???嚗?啣?甇亥??券???蝣箝?
-
-## EXT Mock Policy嚗andatory嚗?- `ENV=EXT` ??ACL **銝??亥岷 Oracle ACL**嚗???乩蝙??mock data??  - 撖虫?瑼?嚗webapps/portal/acl.py`
-- `ENV=EXT` ??`USER_ID` / `USER_NAME` **銝??亥岷 Oracle ?∪極鞈?**嚗??蝙??mock data??  - 撖虫?瑼?嚗webapps/portal/oracle_emp.py`
-- mock data 霈瑼???楝敺?fallback嚗?  - ?亥身摰楝敺?靘?頝冽???`D:\...`嚗?摮嚗??????啁??獢?桅??舐??`SQLTEST_output.json`??  - 甇方??????ACL ??EMP mock 頛瘚???- 隞颱???隞乩? EXT mock policy ???湛?閬瘚?銝?閬?`MUST NOT MERGE`?
-## Single-File Size Rule (Mandatory)
-- Any source file in this project MUST NOT exceed 1000 lines.
-- If a file reaches 900 lines, the next change MUST prioritize modular split/refactor.
-- New feature work MUST be implemented in split modules, not appended into oversized files.
-- Temporary exception is allowed only for generated files or third-party vendored files, and must be documented in PR/commit note.
-- Violating this rule is `MUST NOT MERGE`.
-
-## No Docker Rule (Mandatory)
-- This project MUST NOT use Docker, Docker Compose, Dockerfile, containerized PostgreSQL, or containerized app deployment.
-- All development, test, and deployment instructions MUST target local Windows/WSL execution with a directly installed PostgreSQL service.
-- PostgreSQL connection settings MUST use `127.0.0.1` or an explicit intranet host/IP, not Docker service names such as `postgres`.
-- Do not add `Dockerfile`, `docker-compose.yml`, `.dockerignore`, container orchestration scripts, or Docker-based README instructions.
-- If a requested feature mentions Docker, adapt it to local/non-container deployment and document the local equivalent.
-- Violating this rule is `MUST NOT MERGE`.
-## Integrated Subsystem Rule (Mandatory)
-- New subsystems MUST be integrated into the existing `H:\AI\AI_TOOLS` Django project, normally under `webapps/<subsystem>`.
-- Do not create a second Django project, second `manage.py`, second `config/settings.py`, subsystem-local `.env`, or subsystem-local `requirements.txt`.
-- Runtime settings MUST be read from the repository root `.env` through `webproj/settings.py`.
-- Python dependencies MUST be merged into the repository root `requirements.txt`.
-- Subsystem URLs MUST be mounted from `webproj/urls.py` and must not hijack existing global `/api/` routes unless explicitly approved.
-- Violating this rule is `MUST NOT MERGE`.
+## 10) 合併門檻
+1. 違反本檔 Mandatory 規則，一律 `MUST NOT MERGE`。
+2. 任何例外都必須在 PR / commit 記錄理由與範圍。

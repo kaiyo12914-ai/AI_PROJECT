@@ -1,122 +1,82 @@
 from django.conf import settings
+
 from webapps.llm.llm_factory import get_chat_model
 
-NO_DATA_ANSWER = "目前知識庫尚無足夠資料回答此問題。"
+NO_DATA_ANSWER = "目前無可用的檢索內容，請提供更具體問題或先匯入知識文件。"
 
 
-def generate_answer(question: str, context: str) -> str:
+def _resolve_provider() -> str:
+    provider = getattr(settings, "DIGITAL_TWIN_KB_LLM_PROVIDER", None)
+    if not provider or not str(provider).strip():
+        provider = getattr(settings, "MODEL_TYPE", "LM_STUDIO")
+    return str(provider).strip().upper()
+
+
+def _resolve_model_name(model_type: str) -> str | None:
+    if model_type == "OPENAI":
+        m = getattr(settings, "DIGITAL_TWIN_KB_OPENAI_MODEL", None)
+        return m.strip() if isinstance(m, str) and m.strip() else None
+    return None
+
+
+def generate_answer(question: str, context: str, history_block: str = "") -> str:
     if not context.strip():
         return NO_DATA_ANSWER
 
-    # 優先使用數位雙生子系統專屬的 PROVIDER 設定，否則自動 Fallback 至專案全局 settings.MODEL_TYPE
-    provider = getattr(settings, "DIGITAL_TWIN_KB_LLM_PROVIDER", None)
-    if not provider or not provider.strip():
-        provider = getattr(settings, "MODEL_TYPE", "OLLAMA")
-
-    if provider.lower() in {"none", "disabled"}:
+    model_type = _resolve_provider()
+    if model_type.lower() in {"none", "disabled"}:
         return _fallback_summary(context)
 
-    model_type = provider.upper()
-    
-    # 僅讀取 settings 中子系統專屬的模型名稱，其餘 Fallback 與環境變數讀取一律交給 LLM_FACTORY 內部統一決定
-    model_name = None
-    if model_type == "OLLAMA":
-        model_name = getattr(settings, "DIGITAL_TWIN_KB_OLLAMA_MODEL", None)
-    elif model_type == "OPENAI":
-        model_name = getattr(settings, "DIGITAL_TWIN_KB_OPENAI_MODEL", None)
-
-    # 若 settings 載入的模型名稱為空字串，則視為未指定，以讓 LLM_FACTORY 底層進行全局模型 Fallback
-    if not model_name or not model_name.strip():
-        model_name = None
-
+    model_name = _resolve_model_name(model_type)
     try:
-        # 使用 llm_factory 獲取統一的 LangChain Chat Model 實例
         llm = get_chat_model(
             model_type=model_type,
             model_name=model_name,
             timeout=120,
         )
-        
-        prompt = _prompt(question, context)
+        prompt = _prompt(question, context, history_block=history_block)
         response = llm.invoke(prompt)
-        
-        if hasattr(response, "content"):
-            content = response.content
-        else:
-            content = str(response)
-            
+        content = response.content if hasattr(response, "content") else str(response)
         return content.strip() or _fallback_summary(context)
     except Exception:
         return _fallback_summary(context)
 
 
-def _prompt(question: str, context: str) -> str:
-    return f"""請根據下列知識庫內容回答問題，並保留來源依據。
+def generate_general_answer(question: str, history_block: str = "") -> str:
+    model_type = _resolve_provider()
+    if model_type.lower() in {"none", "disabled"}:
+        return "目前未設定可用 LLM。"
 
-問題：
-{question}
-
-知識庫內容：
-{context}
-"""
-
-
-def _fallback_summary(context: str) -> str:
-    return "未設定可用 LLM，以下為檢索結果摘要：\n" + context[:2000]
-
-
-def generate_general_answer(question: str) -> str:
-    """當知識庫查無資料時，由通用 LLM 提供專業回答"""
-    provider = getattr(settings, "DIGITAL_TWIN_KB_LLM_PROVIDER", None)
-    if not provider or not provider.strip():
-        provider = getattr(settings, "MODEL_TYPE", "OLLAMA")
-
-    if provider.lower() in {"none", "disabled"}:
-        return "目前知識庫尚無足夠資料回答此問題，且未啟用通用 LLM 服務。"
-
-    model_type = provider.upper()
-
-    # 僅讀取 settings 中子系統專屬的模型名稱，其餘 Fallback 與環境變數讀取一律交給 LLM_FACTORY 內部統一決定
-    model_name = None
-    if model_type == "OLLAMA":
-        model_name = getattr(settings, "DIGITAL_TWIN_KB_OLLAMA_MODEL", None)
-    elif model_type == "OPENAI":
-        model_name = getattr(settings, "DIGITAL_TWIN_KB_OPENAI_MODEL", None)
-
-    # 若 settings 載入的模型名稱為空字串，則視為未指定，以讓 LLM_FACTORY 底層進行全局模型 Fallback
-    if not model_name or not model_name.strip():
-        model_name = None
-
+    model_name = _resolve_model_name(model_type)
     try:
-        # 使用 llm_factory 獲取統一的 LangChain Chat Model 實例
         llm = get_chat_model(
             model_type=model_type,
             model_name=model_name,
             timeout=120,
         )
-        
-        prompt = f"""您是一位極其專業且知識淵博的「工業4.0、數位孿生、智慧製造、真實物理模擬與系統架構」頂級專家。
-請針對以下問題，撰寫一篇【結構嚴謹、內容詳實、具有高度知識含金量、可以直接作為專業維基知識庫建檔】的繁體中文詳細解答。
-
-問題：{question}
-
-為確保本篇回答未來自動存入知識庫後具備極高的參考與檢索價值，請務必遵循以下撰寫規範：
-1. 【定義與概述】：清晰且專業地定義該技術、平台、標準或名詞的核心概念與背景脈絡。
-2. 【核心技術架構/主要特色】：分點詳細且具體地說明其關鍵技術指標、運作原理、主要優勢或平台特性。
-3. 【應用範疇與實務場景】：具體列舉其在智慧製造、數位孿生、工業模擬或其他相關領域的典型實務應用場景與實務效益。
-4. 【產業影響或未來趨勢】：簡述其對相關產業的變革性影響，或未來的技術發展動向。
-5. 【內容長度與細緻度】：請勿給出敷衍、短小或過於簡略的答覆。請盡可能充實每個章節的論述深度與細節（字數建議在 800 至 1500 字之間，條理清晰、層次分明）。
-"""
+        prompt = (
+            "你是數位孿生知識助理。若無檢索內容，請根據一般產業知識提供保守且可執行的建議，"
+            "避免捏造具體法規、內部制度或未提供的數據。\n\n"
+            f"使用者問題：{question}\n\n"
+            f"歷史對話摘要與近期輪次：\n{history_block or '(none)'}\n"
+        )
         response = llm.invoke(prompt)
-        
-        if hasattr(response, "content"):
-            content = response.content
-        else:
-            content = str(response)
-            
+        content = response.content if hasattr(response, "content") else str(response)
         ans = content.strip()
-        if ans:
-            return f"*(💡 提示：本地知識庫查無此關聯文檔，以下由 AI 通用智慧為您解答)*\n\n{ans}"
-        return "目前知識庫尚無足夠資料回答此問題。"
-    except Exception as e:
-        return f"currently unavailable: {str(e)}"
+        return ans or "目前無法產生答案，請稍後再試。"
+    except Exception as exc:
+        return f"currently unavailable: {exc}"
+
+
+def _prompt(question: str, context: str, history_block: str = "") -> str:
+    return (
+        "你是數位孿生知識助理。請僅根據提供的檢索內容與歷史脈絡回答，"
+        "避免杜撰來源。若資訊不足，請明確指出缺口。\n\n"
+        f"使用者問題：\n{question}\n\n"
+        f"歷史對話摘要與近期輪次：\n{history_block or '(none)'}\n\n"
+        f"檢索內容：\n{context}\n"
+    )
+
+
+def _fallback_summary(context: str) -> str:
+    return "目前 LLM 暫不可用，先提供檢索摘要：\n" + context[:2000]

@@ -73,7 +73,7 @@
       {% endif %}
       {% if can_digital_twin_kb %}
         {% url 'digital_twin_kb:page' as digital_twin_kb_href %}
-        {% include "portal/_svg_card.html" with href=digital_twin_kb_href title="數位雙生知識庫" subtitle="工業知識 pgvector 檢索 / 雙生層級" tone="green" icon="rag" variant=card_variant %}
+        {% include "portal/_svg_card.html" with href=digital_twin_kb_href title="數位孿生知識庫" subtitle="數位孿生知識檢索 / 知識庫" tone="green" icon="rag" variant=card_variant %}
       {% endif %}
       {% if can_projectnotes %}
         {% url 'projectnotes:page' as projectnotes_href %}
