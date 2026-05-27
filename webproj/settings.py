@@ -508,6 +508,7 @@ PORTAL_USAGE_CODE_MAP = [
     ("/excelproc/", "EXCELPROC"),
     ("/projectnotes/", "PROJECTNOTES"),
     ("/formalize/", "FORMALIZE"),
+    ("/videolearning/", "VIDEOLEARNING"),
     ("/open-notebook/", "OPEN_NOTEBOOK"),
     ("/digital-twin-kb/", "DIGITAL_TWIN_KB"),
 ]
