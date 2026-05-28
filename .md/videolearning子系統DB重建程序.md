@@ -17,8 +17,6 @@
 ### 匯出單一 dump（建議）
 
 ```powershell
-pg_dump -h 192.168.0.137 -p 5432 -U projectnotes_user -d projectnotes -t videolearning_category -t videolearning_tag -t videolearning_asset -t videolearning_asset_tags -t videolearning_playlist -t videolearning_playlist_item -t videolearning_transcript -t videolearning_chapter -F c -f videolearning_tables_full.dump
-
 pg_dump -h 192.168.0.137 -p 5432 -U projectnotes_user -d projectnotes --no-owner --no-privileges -t videolearning_category -t videolearning_tag -t videolearning_asset -t videolearning_asset_tags -t videolearning_playlist -t videolearning_playlist_item -t videolearning_transcript -t videolearning_chapter -F c -f videolearning_tables_full.dump
 
 ```
