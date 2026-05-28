@@ -522,7 +522,18 @@ class PortalUsageLogMiddleware:
                 name2 = _cache_get_emp_name(user_id)
                 if name2: user_name = name2
 
-            # ??蝝??WhoAmI ?日鞈?
+            # 相同使用者同一小時內使用相同功能時不予紀錄使用紀錄
+            if user_id:
+                one_hour_ago = timezone.now() - timezone.timedelta(hours=1)
+                exists = PortalUsageLog.objects.filter(
+                    user_id=user_id,
+                    program_code=program_code,
+                    created_at__gte=one_hour_ago
+                ).exists()
+                if exists:
+                    return response
+
+            # 收集 WhoAmI 診斷資訊
             whoami_data = _get_whoami_debug_info(request)
 
             PortalUsageLog.objects.create(
@@ -533,9 +544,8 @@ class PortalUsageLogMiddleware:
                 path=raw_path,
                 method=request.method,
                 ip=_client_ip(request),
-                whoami_json=json.dumps(whoami_data, ensure_ascii=False) # ??撖怠 JSON
+                whoami_json=json.dumps(whoami_data, ensure_ascii=False) # 寫入 JSON
             )
         except Exception as e:
             logger.exception("PortalUsageLog write failed: %s", e)
         return response
-
