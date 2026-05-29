@@ -154,6 +154,11 @@ ehthumbs.db
 *.mp4
 *.mp3
 
+# GitHub large-file warning list (>50MB)
+webapps/text2pptx/pptx_templates/beige_lightblue_travel_plan.pptx
+webapps/text2pptx/pptx_templates/未命名設計 (1).pptx
+webapps/text2pptx/pptx_templates/無人機2.pptx
+
 ffmpeg-8.1.1.tar.xz
 scratch/reports
 .playwright-mcp
