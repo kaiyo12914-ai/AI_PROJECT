@@ -38,6 +38,16 @@ class ChatbotUIRepository(BaseRepository):
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
 
+        CREATE TABLE IF NOT EXISTS chatbotui_message_embedding (
+            message_id BIGINT PRIMARY KEY REFERENCES chatbotui_message(id) ON DELETE CASCADE,
+            conversation_id TEXT NOT NULL REFERENCES chatbotui_conversation(id) ON DELETE CASCADE,
+            role TEXT NOT NULL,
+            content_preview TEXT NOT NULL DEFAULT '',
+            embedding_json TEXT NOT NULL DEFAULT '[]',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
         CREATE TABLE IF NOT EXISTS chatbotui_prompt_history (
             id BIGSERIAL PRIMARY KEY,
             conversation_id TEXT NOT NULL REFERENCES chatbotui_conversation(id) ON DELETE CASCADE,
@@ -75,6 +85,9 @@ class ChatbotUIRepository(BaseRepository):
 
         CREATE INDEX IF NOT EXISTS idx_chatbotui_message_conversation_created
             ON chatbotui_message (conversation_id, created_at ASC, id ASC);
+
+        CREATE INDEX IF NOT EXISTS idx_chatbotui_message_embedding_conversation_updated
+            ON chatbotui_message_embedding (conversation_id, updated_at DESC, message_id DESC);
 
         CREATE INDEX IF NOT EXISTS idx_chatbotui_prompt_history_conversation_created
             ON chatbotui_prompt_history (conversation_id, created_at DESC, id DESC);
@@ -336,6 +349,94 @@ class ChatbotUIRepository(BaseRepository):
         )
         """
         return self.execute(sql, [conversation_id, role, content, model_type, model_name, latency_ms], profile=self.profile)
+
+    def add_message_and_get_id(
+        self,
+        conversation_id: str,
+        role: str,
+        content: str,
+        model_type: str,
+        model_name: str = "",
+        latency_ms: int = 0,
+    ) -> int:
+        sql = """
+        INSERT INTO chatbotui_message (
+            conversation_id, role, content, model_type, model_name, latency_ms, created_at
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, NOW()
+        )
+        RETURNING id
+        """
+        row = self.query_one(sql, [conversation_id, role, content, model_type, model_name, latency_ms], profile=self.profile)
+        if isinstance(row, dict):
+            return int(row.get("id") or 0)
+        if isinstance(row, (list, tuple)):
+            return int(row[0] or 0) if row else 0
+        return int(getattr(row, "id", 0) or 0)
+
+    def upsert_message_embedding(
+        self,
+        message_id: int,
+        conversation_id: str,
+        role: str,
+        content_preview: str,
+        embedding_json: str,
+    ) -> int:
+        sql = """
+        INSERT INTO chatbotui_message_embedding (
+            message_id, conversation_id, role, content_preview, embedding_json, created_at, updated_at
+        ) VALUES (
+            %s, %s, %s, %s, %s, NOW(), NOW()
+        )
+        ON CONFLICT (message_id) DO UPDATE
+        SET conversation_id = EXCLUDED.conversation_id,
+            role = EXCLUDED.role,
+            content_preview = EXCLUDED.content_preview,
+            embedding_json = EXCLUDED.embedding_json,
+            updated_at = NOW()
+        """
+        return self.execute(
+            sql,
+            [message_id, conversation_id, role, content_preview, embedding_json],
+            profile=self.profile,
+        )
+
+    def list_message_embeddings(self, conversation_id: str, limit: int = 300) -> List[Dict[str, Any]]:
+        sql = """
+        SELECT message_id, role, content_preview, embedding_json, updated_at
+        FROM chatbotui_message_embedding
+        WHERE conversation_id = %s
+        ORDER BY updated_at DESC, message_id DESC
+        LIMIT %s
+        """
+        rows = self.query_all(sql, [conversation_id, limit], profile=self.profile)
+        out: List[Dict[str, Any]] = []
+        for row in rows:
+            if isinstance(row, dict):
+                out.append({
+                    "message_id": int(row.get("message_id") or 0),
+                    "role": row.get("role") or "",
+                    "content_preview": row.get("content_preview") or "",
+                    "embedding_json": row.get("embedding_json") or "[]",
+                    "updated_at": row.get("updated_at"),
+                })
+            elif isinstance(row, (list, tuple)):
+                out.append({
+                    "message_id": int(row[0] or 0) if len(row) > 0 else 0,
+                    "role": row[1] if len(row) > 1 and row[1] is not None else "",
+                    "content_preview": row[2] if len(row) > 2 and row[2] is not None else "",
+                    "embedding_json": row[3] if len(row) > 3 and row[3] is not None else "[]",
+                    "updated_at": row[4] if len(row) > 4 else None,
+                })
+            else:
+                out.append({
+                    "message_id": int(getattr(row, "message_id", 0) or 0),
+                    "role": getattr(row, "role", "") or "",
+                    "content_preview": getattr(row, "content_preview", "") or "",
+                    "embedding_json": getattr(row, "embedding_json", "[]") or "[]",
+                    "updated_at": getattr(row, "updated_at", None),
+                })
+        return out
 
     def clear_messages(self, conversation_id: str) -> int:
         sql = "DELETE FROM chatbotui_message WHERE conversation_id = %s"

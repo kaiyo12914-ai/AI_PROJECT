@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import math
 import os
 import time
 import uuid
@@ -25,6 +27,8 @@ MAX_ATTACHMENT_TOTAL_PROMPT_CHARS = 1000
 MAX_PROMPT_CHARS = 10000
 MAX_HISTORY_ITEMS = 6
 ATTACHMENT_PROMPT_LIMIT = 2
+RETRY_TOTAL_BUDGET_SEC = 70
+RETRY_TIMEOUT_SEC = 25
 ALLOWED_ATTACHMENT_EXTENSIONS = {
     ".txt", ".md", ".csv", ".json", ".yaml", ".yml", ".log", ".ini", ".cfg", ".py", ".js", ".ts", ".html", ".css", ".pdf", ".docx"
 }
@@ -119,6 +123,7 @@ def history_to_prompt(
     latest_user_text: str,
     system_prompt: str,
     attachment_context: str = "",
+    retrieved_context: str = "",
     max_prompt_chars: int = MAX_PROMPT_CHARS,
     max_history_items: int = MAX_HISTORY_ITEMS,
 ) -> str:
@@ -127,6 +132,8 @@ def history_to_prompt(
     lines: List[str] = [system_text, "", "Conversation history:"]
     if attachment_context:
         lines.extend(["", "Reference attachments:", safe_text(attachment_context), ""])
+    if retrieved_context:
+        lines.extend(["", "Retrieved relevant history:", safe_text(retrieved_context), ""])
 
     history_lines: List[str] = []
     max_history = max(1, int(max_history_items or 1))
@@ -173,6 +180,39 @@ def is_context_exceeded_error(exc: Exception) -> bool:
         "too many tokens",
     ]
     return any(p in text for p in patterns)
+
+
+def is_timeout_error(exc: Exception) -> bool:
+    text = safe_text(exc).lower()
+    if not text:
+        return False
+    patterns = [
+        "request timed out",
+        "timeout",
+        "timed out",
+        "deadline exceeded",
+    ]
+    return any(p in text for p in patterns)
+
+
+def cosine_similarity(vec_a: List[float], vec_b: List[float]) -> float:
+    if not vec_a or not vec_b:
+        return 0.0
+    n = min(len(vec_a), len(vec_b))
+    if n <= 0:
+        return 0.0
+    dot = 0.0
+    norm_a = 0.0
+    norm_b = 0.0
+    for i in range(n):
+        a = float(vec_a[i] or 0.0)
+        b = float(vec_b[i] or 0.0)
+        dot += a * b
+        norm_a += a * a
+        norm_b += b * b
+    if norm_a <= 1e-12 or norm_b <= 1e-12:
+        return 0.0
+    return dot / (math.sqrt(norm_a) * math.sqrt(norm_b))
 
 
 def resolve_model_name(model_type: str) -> str:
@@ -263,6 +303,104 @@ class ChatbotUIService:
 
     def ensure_schema(self) -> None:
         self.repository.ensure_schema()
+
+    def _create_message_embedding(self, message_text: str) -> List[float]:
+        text = safe_text(message_text)
+        if not text:
+            return []
+        from webapps.projectnotes.embedding_service import get_embedding
+        vec = get_embedding(text)
+        if not isinstance(vec, list):
+            return []
+        out: List[float] = []
+        for item in vec:
+            try:
+                out.append(float(item))
+            except Exception:
+                out.append(0.0)
+        return out
+
+    def _store_message_embedding(self, conversation_id: str, message_id: int, role: str, content: str) -> None:
+        if message_id <= 0:
+            return
+        text = safe_text(content)
+        if not text:
+            return
+        try:
+            vec = self._create_message_embedding(text)
+            if not vec:
+                return
+            self.repository.upsert_message_embedding(
+                message_id=message_id,
+                conversation_id=conversation_id,
+                role=safe_text(role) or "user",
+                content_preview=text[:240],
+                embedding_json=json.dumps(vec, ensure_ascii=False),
+            )
+        except Exception:
+            # Embedding failure should not break the chat main flow.
+            return
+
+    def retrieve_similar_messages(self, conversation_id: str, query_text: str, top_k: int = 4) -> List[Dict[str, Any]]:
+        query = safe_text(query_text)
+        if not query:
+            return []
+        try:
+            query_vec = self._create_message_embedding(query)
+        except Exception:
+            return []
+        if not query_vec:
+            return []
+        rows = self.repository.list_message_embeddings(conversation_id=conversation_id, limit=300)
+        ranked: List[Dict[str, Any]] = []
+        for row in rows:
+            try:
+                emb = json.loads(safe_text(row.get("embedding_json")) or "[]")
+            except Exception:
+                emb = []
+            if not isinstance(emb, list) or not emb:
+                continue
+            score = cosine_similarity(query_vec, emb)
+            ranked.append(
+                {
+                    "message_id": int(row.get("message_id") or 0),
+                    "role": safe_text(row.get("role")),
+                    "content_preview": safe_text(row.get("content_preview")),
+                    "score": float(score),
+                }
+            )
+        ranked.sort(key=lambda x: x["score"], reverse=True)
+        return ranked[: max(1, int(top_k or 4))]
+
+    def _build_retrieved_history_context(
+        self,
+        conversation_id: str,
+        query_text: str,
+        history_messages: List[Dict[str, Any]],
+        top_k: int = 4,
+    ) -> str:
+        recent_ids = set()
+        for item in history_messages[-MAX_HISTORY_ITEMS:]:
+            try:
+                recent_ids.add(int(item.get("id") or 0))
+            except Exception:
+                continue
+        rows = self.retrieve_similar_messages(conversation_id=conversation_id, query_text=query_text, top_k=top_k)
+        lines: List[str] = []
+        for row in rows:
+            mid = int(row.get("message_id") or 0)
+            if mid in recent_ids:
+                continue
+            score = float(row.get("score") or 0.0)
+            if score < 0.25:
+                continue
+            role = safe_text(row.get("role")).lower()
+            speaker = "User" if role == "user" else "Assistant"
+            preview = safe_text(row.get("content_preview"))[:240]
+            if not preview:
+                continue
+            lines.append(f"- {speaker} (score={score:.2f}): {preview}")
+        return "\n".join(lines).strip()
 
     def list_conversations(self, user_id: str) -> List[Dict[str, Any]]:
         self.ensure_schema()
@@ -702,6 +840,7 @@ class ChatbotUIService:
 
     def _invoke_reply(
         self,
+        conversation_id: str,
         messages: List[Dict[str, Any]],
         user_text: str,
         model_type: str,
@@ -740,11 +879,18 @@ class ChatbotUIService:
         else:
             rag_reason = "rag_disabled"
 
+        retrieved_history_context = self._build_retrieved_history_context(
+            conversation_id=conversation_id,
+            query_text=user_text,
+            history_messages=messages,
+            top_k=4,
+        )
         prompt = history_to_prompt(
             messages,
             user_text,
             system_prompt,
             attachment_context,
+            retrieved_context=retrieved_history_context,
             max_prompt_chars=MAX_PROMPT_CHARS,
             max_history_items=MAX_HISTORY_ITEMS,
         )
@@ -761,30 +907,47 @@ class ChatbotUIService:
             if not is_context_exceeded_error(exc):
                 raise
             retry_profiles = [
-                {"max_history_items": 4, "attachment_context": "", "max_prompt_chars": 6000},
-                {"max_history_items": 2, "attachment_context": "", "max_prompt_chars": 4000},
-                {"max_history_items": 1, "attachment_context": "", "max_prompt_chars": 2000},
+                {"max_history_items": 4, "attachment_context": "", "max_prompt_chars": 4000},
+                {"max_history_items": 2, "attachment_context": "", "max_prompt_chars": 2000},
+                {"max_history_items": 1, "attachment_context": "", "max_prompt_chars": 1000},
             ]
             last_exc: Exception = exc
             result = None
+            final_prompt_chars = len(prompt)
             for profile in retry_profiles:
+                elapsed = time.perf_counter() - started
+                if elapsed >= RETRY_TOTAL_BUDGET_SEC:
+                    break
                 try:
                     retry_prompt = history_to_prompt(
                         messages,
                         user_text,
                         system_prompt,
                         profile["attachment_context"],
+                        retrieved_context=retrieved_history_context,
                         max_prompt_chars=profile["max_prompt_chars"],
                         max_history_items=profile["max_history_items"],
                     )
-                    result = llm.invoke(retry_prompt)
+                    final_prompt_chars = len(retry_prompt)
+                    retry_timeout = min(max(10, int(timeout_sec or DEFAULT_TIMEOUT_SEC)), RETRY_TIMEOUT_SEC)
+                    retry_llm = get_chat_model(
+                        temperature=temperature,
+                        timeout=retry_timeout,
+                        model_type=model_type,
+                        model_name=model_name,
+                    )
+                    result = retry_llm.invoke(retry_prompt)
                     break
                 except Exception as retry_exc:
                     last_exc = retry_exc
+                    if is_timeout_error(retry_exc):
+                        continue
                     if not is_context_exceeded_error(retry_exc):
                         raise
             if result is None:
                 raise last_exc
+        else:
+            final_prompt_chars = len(prompt)
         latency_ms = int((time.perf_counter() - started) * 1000)
         answer = extract_message_text(getattr(result, "content", result))
         if not answer:
@@ -792,6 +955,7 @@ class ChatbotUIService:
         return {
             "answer": answer,
             "latency_ms": latency_ms,
+            "prompt_chars": int(final_prompt_chars),
             "attachment_used": attachment_used,
             "attachment_count": attachment_count,
             "rag_used": False,
@@ -830,6 +994,7 @@ class ChatbotUIService:
         config = self._conversation_config(conversation)
         attachment_context = self._build_attachment_context(user_id, conversation_id)
         generated = self._invoke_reply(
+            conversation_id,
             history_messages,
             latest_user_text,
             model_type,
@@ -850,13 +1015,16 @@ class ChatbotUIService:
         self.repository.delete_messages_from(conversation_id, start_message_id)
 
         self.repository.set_model_type(user_id, conversation_id, model_type, model_name)
-        self.repository.add_message(conversation_id, "user", latest_user_text, model_type, model_name, 0)
-        self.repository.add_message(conversation_id, "assistant", answer, model_type, model_name, latency_ms)
+        user_message_id = self.repository.add_message_and_get_id(conversation_id, "user", latest_user_text, model_type, model_name, 0)
+        assistant_message_id = self.repository.add_message_and_get_id(conversation_id, "assistant", answer, model_type, model_name, latency_ms)
+        self._store_message_embedding(conversation_id, user_message_id, "user", latest_user_text)
+        self._store_message_embedding(conversation_id, assistant_message_id, "assistant", answer)
         self.repository.touch_conversation(conversation_id)
         return {
             "reply": answer,
             "conversation_title": safe_text(conversation.get("title")) or "New Chat",
             "latency_ms": latency_ms,
+            "prompt_chars": int(generated.get("prompt_chars") or 0),
             "model_type": model_type,
             "model_name": model_name,
             "temperature": config["temperature"],
@@ -907,6 +1075,7 @@ class ChatbotUIService:
         config = self._conversation_config(conversation)
         attachment_context = self._build_attachment_context(user_id, conversation_id)
         generated = self._invoke_reply(
+            conversation_id,
             history_messages,
             normalized_user_text,
             model_type,
@@ -921,13 +1090,23 @@ class ChatbotUIService:
 
         self.repository.delete_messages_from(conversation_id, target_message_id)
         self.repository.set_model_type(user_id, conversation_id, model_type, model_name)
-        self.repository.add_message(conversation_id, "user", normalized_user_text, model_type, model_name, 0)
-        self.repository.add_message(conversation_id, "assistant", generated["answer"], model_type, model_name, generated["latency_ms"])
+        user_message_id = self.repository.add_message_and_get_id(conversation_id, "user", normalized_user_text, model_type, model_name, 0)
+        assistant_message_id = self.repository.add_message_and_get_id(
+            conversation_id,
+            "assistant",
+            generated["answer"],
+            model_type,
+            model_name,
+            generated["latency_ms"],
+        )
+        self._store_message_embedding(conversation_id, user_message_id, "user", normalized_user_text)
+        self._store_message_embedding(conversation_id, assistant_message_id, "assistant", generated["answer"])
         self.repository.touch_conversation(conversation_id)
         return {
             "reply": generated["answer"],
             "conversation_title": safe_text(conversation.get("title")) or "New Chat",
             "latency_ms": generated["latency_ms"],
+            "prompt_chars": int(generated.get("prompt_chars") or 0),
             "model_type": model_type,
             "model_name": model_name,
             "temperature": config["temperature"],
@@ -953,6 +1132,7 @@ class ChatbotUIService:
         config = self._conversation_config(conversation)
         attachment_context = self._build_attachment_context(user_id, conversation_id)
         generated = self._invoke_reply(
+            conversation_id,
             current_messages,
             user_text,
             model_type,
@@ -970,13 +1150,16 @@ class ChatbotUIService:
         if not current_messages:
             self.repository.rename_conversation(user_id, conversation_id, infer_title(user_text))
         self.repository.set_model_type(user_id, conversation_id, model_type, model_name)
-        self.repository.add_message(conversation_id, "user", user_text, model_type, model_name, 0)
-        self.repository.add_message(conversation_id, "assistant", answer, model_type, model_name, latency_ms)
+        user_message_id = self.repository.add_message_and_get_id(conversation_id, "user", user_text, model_type, model_name, 0)
+        assistant_message_id = self.repository.add_message_and_get_id(conversation_id, "assistant", answer, model_type, model_name, latency_ms)
+        self._store_message_embedding(conversation_id, user_message_id, "user", user_text)
+        self._store_message_embedding(conversation_id, assistant_message_id, "assistant", answer)
         self.repository.touch_conversation(conversation_id)
         return {
             "reply": answer,
             "conversation_title": infer_title(user_text) if not current_messages else safe_text(conversation.get("title")) or "New Chat",
             "latency_ms": latency_ms,
+            "prompt_chars": int(generated.get("prompt_chars") or 0),
             "model_type": model_type,
             "model_name": model_name,
             "temperature": config["temperature"],

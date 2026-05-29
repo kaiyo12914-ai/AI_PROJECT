@@ -617,6 +617,7 @@
     if (message.model_type) parts.push(message.model_type);
     if (message.model_name) parts.push(message.model_name);
     if (message.latency_ms) parts.push(`${message.latency_ms} ms`);
+    if (Number(message.prompt_chars || 0) > 0) parts.push(`prompt ${Number(message.prompt_chars || 0)} chars`);
     if (message.attachment_used || Number(message.attachment_count || 0) > 0) parts.push(`附件 ${Number(message.attachment_count || 0)}`);
     if (message.rag_used) parts.push(`RAG 引用 ${Number(message.citation_count || 0)}`);
     else if (String(message.rag_reason || "") === "rag_error") parts.push("RAG 錯誤");
@@ -633,6 +634,7 @@
       msg.rag_used = Boolean(meta.rag_used);
       msg.citation_count = Number(meta.citation_count || 0);
       msg.rag_reason = String(meta.rag_reason || "");
+      msg.prompt_chars = Number(meta.prompt_chars || 0);
       msg.citations = Array.isArray(meta.citations) ? meta.citations : [];
       break;
     }
@@ -1014,10 +1016,16 @@
   }
 
   function handleUiError(error) {
-    setConfigStatus(`儲存失敗：${error.message}`, true);
-    setAttachmentStatus(`附件操作失敗：${error.message}`, true);
-    pushDebug(`[介面錯誤] ${error.message}`);
-    window.alert(`系統錯誤：${error.message}`);
+    const rawMessage = String((error && error.message) || error || "");
+    const lower = rawMessage.toLowerCase();
+    const isTimeout = lower.includes("request timed out") || lower.includes("timed out") || lower.includes("timeout") || lower.includes("deadline exceeded");
+    const userMessage = isTimeout
+      ? "系統逾時，請另開新對話後再試。"
+      : `系統錯誤：${rawMessage}`;
+    setConfigStatus(isTimeout ? "系統逾時，建議另開新對話。" : `儲存失敗：${rawMessage}`, true);
+    setAttachmentStatus(isTimeout ? "系統逾時，建議另開新對話。" : `附件操作失敗：${rawMessage}`, true);
+    pushDebug(`[介面錯誤] ${rawMessage}`);
+    window.alert(userMessage);
   }
 
   elements.sendBtn.addEventListener("click", function () {

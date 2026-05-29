@@ -440,6 +440,7 @@ def api_chat(request):
                     "citation_count": int(result.get("citation_count") or 0),
                     "rag_reason": safe_text(result.get("rag_reason")),
                     "citations": result.get("citations") if isinstance(result.get("citations"), list) else [],
+                    "prompt_chars": int(result.get("prompt_chars") or 0),
                     "debug": bool(getattr(settings, "DEBUG", False)),
                 },
             }
@@ -497,6 +498,7 @@ def api_chat_regenerate(request):
                     "citation_count": int(result.get("citation_count") or 0),
                     "rag_reason": safe_text(result.get("rag_reason")),
                     "citations": result.get("citations") if isinstance(result.get("citations"), list) else [],
+                    "prompt_chars": int(result.get("prompt_chars") or 0),
                     "debug": bool(getattr(settings, "DEBUG", False)),
                 },
             }
@@ -566,6 +568,7 @@ def api_chat_resend(request):
                     "citation_count": int(result.get("citation_count") or 0),
                     "rag_reason": safe_text(result.get("rag_reason")),
                     "citations": result.get("citations") if isinstance(result.get("citations"), list) else [],
+                    "prompt_chars": int(result.get("prompt_chars") or 0),
                     "debug": bool(getattr(settings, "DEBUG", False)),
                 },
             }
