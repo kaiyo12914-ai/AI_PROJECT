@@ -17,11 +17,14 @@ Do not claim capabilities you do not have.
 """
 DEFAULT_TEMPERATURE = 0.3
 DEFAULT_TIMEOUT_SEC = 120
-MAX_SYSTEM_PROMPT_CHARS = 8000
+MAX_SYSTEM_PROMPT_CHARS = 1500
 MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024
 MAX_ATTACHMENT_TEXT_CHARS = 12000
-MAX_ATTACHMENT_PROMPT_CHARS = 1500
-ATTACHMENT_PROMPT_LIMIT = 3
+MAX_ATTACHMENT_PROMPT_CHARS = 500
+MAX_ATTACHMENT_TOTAL_PROMPT_CHARS = 1000
+MAX_PROMPT_CHARS = 10000
+MAX_HISTORY_ITEMS = 6
+ATTACHMENT_PROMPT_LIMIT = 2
 ALLOWED_ATTACHMENT_EXTENSIONS = {
     ".txt", ".md", ".csv", ".json", ".yaml", ".yml", ".log", ".ini", ".cfg", ".py", ".js", ".ts", ".html", ".css", ".pdf", ".docx"
 }
@@ -116,11 +119,18 @@ def history_to_prompt(
     latest_user_text: str,
     system_prompt: str,
     attachment_context: str = "",
+    max_prompt_chars: int = MAX_PROMPT_CHARS,
+    max_history_items: int = MAX_HISTORY_ITEMS,
 ) -> str:
-    lines: List[str] = [resolve_system_prompt(system_prompt), "", "Conversation history:"]
+    system_text = resolve_system_prompt(system_prompt)
+    latest_user = safe_text(latest_user_text)
+    lines: List[str] = [system_text, "", "Conversation history:"]
     if attachment_context:
-        lines.extend(["", "Reference attachments:", attachment_context, ""])
-    for item in messages[-12:]:
+        lines.extend(["", "Reference attachments:", safe_text(attachment_context), ""])
+
+    history_lines: List[str] = []
+    max_history = max(1, int(max_history_items or 1))
+    for item in messages[-max_history:]:
         if not isinstance(item, dict):
             continue
         role = safe_text(item.get("role")).lower()
@@ -128,10 +138,41 @@ def history_to_prompt(
         if not content:
             continue
         speaker = "User" if role == "user" else "Assistant"
-        lines.append(f"{speaker}: {content}")
-    lines.append(f"User: {latest_user_text}")
-    lines.append("Assistant:")
+        history_lines.append(f"{speaker}: {content}")
+
+    tail_lines = [f"User: {latest_user}", "Assistant:"]
+    fixed_prefix = "\n".join(lines)
+    fixed_tail = "\n".join(tail_lines)
+    budget = max(1000, int(max_prompt_chars or MAX_PROMPT_CHARS))
+    remaining = budget - len(fixed_prefix) - len(fixed_tail) - 16
+
+    selected_reversed: List[str] = []
+    for row in reversed(history_lines):
+        clipped = row[:1200]
+        need = len(clipped) + 1
+        if remaining - need < 0:
+            break
+        selected_reversed.append(clipped)
+        remaining -= need
+    selected_history = list(reversed(selected_reversed))
+
+    lines.extend(selected_history)
+    lines.extend(tail_lines)
     return "\n".join(lines)
+
+
+def is_context_exceeded_error(exc: Exception) -> bool:
+    text = safe_text(exc).lower()
+    if not text:
+        return False
+    patterns = [
+        "context size has been exceeded",
+        "maximum context length",
+        "context_length_exceeded",
+        "prompt is too long",
+        "too many tokens",
+    ]
+    return any(p in text for p in patterns)
 
 
 def resolve_model_name(model_type: str) -> str:
@@ -428,12 +469,20 @@ class ChatbotUIService:
         if not rows:
             return ""
         lines: List[str] = []
+        total_chars = 0
         for item in rows:
             name = normalize_filename(item.get("filename")) or "attachment"
             excerpt = normalize_attachment_text(item.get("content_text"))[:MAX_ATTACHMENT_PROMPT_CHARS]
             if not excerpt:
                 continue
-            lines.append(f"- {name}:\n{excerpt}")
+            chunk = f"- {name}:\n{excerpt}"
+            remaining = MAX_ATTACHMENT_TOTAL_PROMPT_CHARS - total_chars
+            if remaining <= 0:
+                break
+            if len(chunk) > remaining:
+                chunk = chunk[:remaining]
+            lines.append(chunk)
+            total_chars += len(chunk)
         return "\n".join(lines).strip()
 
     def clear_conversation(self, user_id: str, conversation_id: str) -> bool:
@@ -691,7 +740,14 @@ class ChatbotUIService:
         else:
             rag_reason = "rag_disabled"
 
-        prompt = history_to_prompt(messages, user_text, system_prompt, attachment_context)
+        prompt = history_to_prompt(
+            messages,
+            user_text,
+            system_prompt,
+            attachment_context,
+            max_prompt_chars=MAX_PROMPT_CHARS,
+            max_history_items=MAX_HISTORY_ITEMS,
+        )
         started = time.perf_counter()
         llm = get_chat_model(
             temperature=temperature,
@@ -699,7 +755,35 @@ class ChatbotUIService:
             model_type=model_type,
             model_name=model_name,
         )
-        result = llm.invoke(prompt)
+        try:
+            result = llm.invoke(prompt)
+        except Exception as exc:
+            if not is_context_exceeded_error(exc):
+                raise
+            retry_profiles = [
+                {"max_history_items": 4, "attachment_context": "", "max_prompt_chars": 8000},
+                {"max_history_items": 2, "attachment_context": "", "max_prompt_chars": 6000},
+            ]
+            last_exc: Exception = exc
+            result = None
+            for profile in retry_profiles:
+                try:
+                    retry_prompt = history_to_prompt(
+                        messages,
+                        user_text,
+                        system_prompt,
+                        profile["attachment_context"],
+                        max_prompt_chars=profile["max_prompt_chars"],
+                        max_history_items=profile["max_history_items"],
+                    )
+                    result = llm.invoke(retry_prompt)
+                    break
+                except Exception as retry_exc:
+                    last_exc = retry_exc
+                    if not is_context_exceeded_error(retry_exc):
+                        raise
+            if result is None:
+                raise last_exc
         latency_ms = int((time.perf_counter() - started) * 1000)
         answer = extract_message_text(getattr(result, "content", result))
         if not answer:

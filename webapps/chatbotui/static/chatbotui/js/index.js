@@ -162,7 +162,22 @@
 
   async function apiFetch(path, options) {
     const response = await fetch(url(path), options);
-    const data = await response.json();
+    const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+    const rawText = await response.text();
+    const isJson = contentType.includes("application/json");
+    let data = null;
+
+    if (isJson) {
+      try {
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch (_err) {
+        throw new Error(`API JSON 解析失敗（HTTP ${response.status}）`);
+      }
+    } else {
+      const snippet = String(rawText || "").trim().slice(0, 120).replace(/\s+/g, " ");
+      throw new Error(`API 返回非 JSON（HTTP ${response.status}，content-type=${contentType || "unknown"}）：${snippet}`);
+    }
+
     if (!response.ok || !data.ok) {
       throw new Error(data.detail || data.error || `HTTP ${response.status}`);
     }
