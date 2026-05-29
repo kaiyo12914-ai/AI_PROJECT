@@ -10,6 +10,18 @@
         "-y",
         "@playwright/mcp@latest"
       ]
+    },
+    "postgres": {
+      "command": "D:\\Program Files\\nodejs\\npx.cmd",
+      "args": [
+        "--yes",
+        "pg-mcp-server",
+        "--transport",
+        "stdio"
+      ],
+      "env": {
+        "DATABASE_URL": "postgres://projectnotes_user:mpcdbadm@192.168.0.137:5432/projectnotes"
+      }
     }
   }
 }

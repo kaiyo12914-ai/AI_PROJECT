@@ -761,8 +761,9 @@ class ChatbotUIService:
             if not is_context_exceeded_error(exc):
                 raise
             retry_profiles = [
-                {"max_history_items": 4, "attachment_context": "", "max_prompt_chars": 8000},
-                {"max_history_items": 2, "attachment_context": "", "max_prompt_chars": 6000},
+                {"max_history_items": 4, "attachment_context": "", "max_prompt_chars": 6000},
+                {"max_history_items": 2, "attachment_context": "", "max_prompt_chars": 4000},
+                {"max_history_items": 1, "attachment_context": "", "max_prompt_chars": 2000},
             ]
             last_exc: Exception = exc
             result = None
