@@ -36,8 +36,8 @@ urlpatterns = [
     symbols = extract_python(source)
     kinds = {s.name: s.kind for s in symbols}
 
-    assert kinds["path"] == "import"
-    assert kinds["VALUE"] == "constant"
+    assert kinds["django.urls"] == "import"
+    assert kinds["VALUE"] == "variable"
     assert kinds["urlpatterns"] == "variable"
     assert kinds["hello/"] == "route"
     assert ("Base", 5) in next(s for s in symbols if s.name == "Child").extends
@@ -59,5 +59,5 @@ function load() {
     assert kinds["api.js"] == "import"
     assert kinds["baseUrl"] == "constant"
     assert kinds["load"] == "function"
-    assert kinds["doc/list/"] == "route"
+    assert "doc/list/" not in kinds
     assert ("apiurl", 5) in load.calls

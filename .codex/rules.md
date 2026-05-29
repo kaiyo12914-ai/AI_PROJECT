@@ -1,8 +1,8 @@
-# AI_TOOLS 專案規範（Primary Rules）
+﻿# AI_TOOLS 專案規範（Primary Rules）
 
 最後更新：2026-05-25  
 專案根目錄：`H:\AI\AI_TOOLS`
-
+專案使用Python根目錄：`H:\AI\AI_TOOLS\venv`
 ---
 
 ## 1) 啟動必讀（Mandatory Startup Rule）

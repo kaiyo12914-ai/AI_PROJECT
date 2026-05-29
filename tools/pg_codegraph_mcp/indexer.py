@@ -60,6 +60,9 @@ def _iter_source_files(root: Path) -> list[Path]:
         base = Path(dirpath)
         for filename in filenames:
             p = base / filename
+            rel = p.relative_to(root).as_posix()
+            if "/vendor/" in rel:
+                continue
             if p.suffix.lower() in SOURCE_SUFFIXES:
                 files.append(p)
     return sorted(files)
@@ -90,6 +93,11 @@ def _call_name(node: ast.AST) -> str:
     if isinstance(node, ast.Attribute):
         parent = _call_name(node.value)
         return f"{parent}.{node.attr}" if parent else node.attr
+    if isinstance(node, ast.Call):
+        name = _call_name(node.func)
+        if name.endswith(".as_view"):
+            return name[: -len(".as_view")]
+        return name
     return ""
 
 
@@ -130,6 +138,9 @@ class PythonExtractor(ast.NodeVisitor):
             self.generic_visit(node)
             return
         module = "." * int(node.level or 0) + (node.module or "")
+        if module == "__future__":
+            self.generic_visit(node)
+            return
         imported = ",".join(alias.name for alias in node.names)
         name = module or imported
         target = f"{module}.{imported}".strip(".")
@@ -158,7 +169,16 @@ class PythonExtractor(ast.NodeVisitor):
         call_name = _call_name(node.func)
         if call_name in {"path", "re_path"} and node.args and isinstance(node.args[0], ast.Constant):
             route = str(node.args[0].value)
-            self._add_light_symbol(route, "route", getattr(node, "lineno", 1), getattr(node, "lineno", 1), ast.get_source_segment(self.source, node) or "")
+            if not route:
+                self.generic_visit(node)
+                return
+            route_symbol = self._add_light_symbol(route, "route", getattr(node, "lineno", 1), getattr(node, "lineno", 1), ast.get_source_segment(self.source, node) or "")
+            if len(node.args) > 1:
+                view_name = _call_name(node.args[1])
+                if view_name:
+                    route_symbol.references.append((view_name, getattr(node.args[1], "lineno", getattr(node, "lineno", 1))))
+            self.generic_visit(node)
+            return
         if self.current_symbol is not None:
             name = call_name
             if name:
@@ -169,8 +189,6 @@ class PythonExtractor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Name(self, node: ast.Name) -> Any:
-        if isinstance(node.ctx, ast.Load) and self.current_symbol is not None:
-            self.current_symbol.references.append((node.id, getattr(node, "lineno", self.current_symbol.line)))
         self.generic_visit(node)
 
     def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef, kind: str) -> None:
@@ -220,7 +238,7 @@ class PythonExtractor(ast.NodeVisitor):
         return symbol
 
     def _record_assignment(self, target: ast.AST, node: ast.AST) -> None:
-        if self.function_depth > 0:
+        if self.function_depth > 0 or self.class_depth > 0:
             return
         names: list[str] = []
         if isinstance(target, ast.Name):
@@ -228,8 +246,7 @@ class PythonExtractor(ast.NodeVisitor):
         elif isinstance(target, (ast.Tuple, ast.List)):
             names.extend(elt.id for elt in target.elts if isinstance(elt, ast.Name))
         for name in names:
-            kind = "constant" if name.isupper() else "variable"
-            self._add_light_symbol(name, kind, getattr(node, "lineno", 1), getattr(node, "end_lineno", getattr(node, "lineno", 1)), ast.get_source_segment(self.source, node) or "")
+            self._add_light_symbol(name, "variable", getattr(node, "lineno", 1), getattr(node, "end_lineno", getattr(node, "lineno", 1)), ast.get_source_segment(self.source, node) or "")
 
 
 def extract_python(source: str, module_prefix: str = "") -> list[SymbolRecord]:
@@ -251,14 +268,56 @@ _JS_CALL_RE = re.compile(r"\b([A-Za-z_$][\w$.]*)\s*\(")
 _JS_ROUTE_RE = re.compile(r"\b(?:fetch|apiurl|path)\s*\(\s*['\"]([^'\"]+)['\"]")
 
 
+def _is_wrapped_iife(source: str) -> bool:
+    for raw in source.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("//") or line.startswith("/*") or line.startswith("*"):
+            continue
+        return (
+            line.startswith("(function")
+            or line.startswith("(async function")
+            or line.startswith("(() =>")
+            or line.startswith("document.addEventListener(")
+        )
+    return False
+
+
+def _extract_javascript_top_level_values(source: str, module_prefix: str = "") -> list[SymbolRecord]:
+    symbols: list[SymbolRecord] = []
+    global_depth = 0
+    for idx, line in enumerate(source.splitlines(), start=1):
+        stripped = line.strip()
+        line_depth = global_depth
+        var_match = _JS_VAR_RE.match(line)
+        if var_match and line_depth == 0 and "=>" not in line and "function" not in line:
+            name = var_match.group(1)
+            kind = "constant" if line.lstrip().startswith("const ") or f"const {name}" in line else "variable"
+            symbols.append(
+                SymbolRecord(
+                    name=name,
+                    qualname=".".join(part for part in [module_prefix, name] if part),
+                    kind=kind,
+                    line=idx,
+                    end_line=idx,
+                    code=stripped,
+                )
+            )
+        global_depth += line.count("{") - line.count("}")
+    return symbols
+
+
 def extract_javascript(source: str, module_prefix: str = "") -> list[SymbolRecord]:
+    if _is_wrapped_iife(source):
+        return _extract_javascript_top_level_values(source, module_prefix=module_prefix)
     symbols: list[SymbolRecord] = []
     lines = source.splitlines()
     active_function: SymbolRecord | None = None
     brace_depth = 0
+    global_depth = 0
 
     for idx, line in enumerate(lines, start=1):
         stripped = line.strip()
+        line_depth = global_depth
         class_match = _JS_CLASS_RE.match(line)
         if class_match:
             name = class_match.group(1)
@@ -277,7 +336,7 @@ def extract_javascript(source: str, module_prefix: str = "") -> list[SymbolRecor
             continue
 
         fn_match = _JS_FUNCTION_RE.match(line)
-        if fn_match:
+        if fn_match and (fn_match.group(1) or line_depth == 0):
             name = fn_match.group(1) or fn_match.group(3) or fn_match.group(5)
             args = fn_match.group(2) or fn_match.group(4) or fn_match.group(6) or ""
             symbol = SymbolRecord(
@@ -310,7 +369,7 @@ def extract_javascript(source: str, module_prefix: str = "") -> list[SymbolRecor
             symbols.append(symbol)
 
         var_match = _JS_VAR_RE.match(line)
-        if var_match and active_function is None and "=>" not in line and "function" not in line:
+        if var_match and line_depth == 0 and "=>" not in line and "function" not in line:
             name = var_match.group(1)
             kind = "constant" if line.lstrip().startswith("const ") or f"const {name}" in line else "variable"
             symbols.append(
@@ -318,19 +377,6 @@ def extract_javascript(source: str, module_prefix: str = "") -> list[SymbolRecor
                     name=name,
                     qualname=".".join(part for part in [module_prefix, name] if part),
                     kind=kind,
-                    line=idx,
-                    end_line=idx,
-                    code=stripped,
-                )
-            )
-
-        for route_match in _JS_ROUTE_RE.finditer(line):
-            route = route_match.group(1)
-            symbols.append(
-                SymbolRecord(
-                    name=route,
-                    qualname=".".join(part for part in [module_prefix, route] if part),
-                    kind="route",
                     line=idx,
                     end_line=idx,
                     code=stripped,
@@ -350,6 +396,7 @@ def extract_javascript(source: str, module_prefix: str = "") -> list[SymbolRecor
             active_function.code = "\n".join(lines[active_function.line - 1 : idx])
             if brace_depth <= 0 and "{" in line:
                 active_function = None
+        global_depth += line.count("{") - line.count("}")
 
     return symbols
 
@@ -387,13 +434,14 @@ def rebuild_project(conn: Any, project_path: str, project_name: str | None = Non
             cur.execute("DELETE FROM pgcg_files WHERE project_id = %s", (project_id,))
             file_symbol_rows: list[tuple[int, int, SymbolRecord]] = []
             contains_rows: list[tuple[int, int, int]] = []
+            file_node_by_file_id: dict[int, int] = {}
             file_count = 0
             symbol_count = 0
             for path in source_files:
                 rel_path = path.relative_to(root).as_posix()
                 language = SOURCE_SUFFIXES[path.suffix.lower()]
                 try:
-                    content = path.read_text(encoding="utf-8")
+                    content = path.read_text(encoding="utf-8-sig")
                     module_prefix = str(Path(rel_path).with_suffix("")).replace("\\", "/").replace("/", ".")
                     symbols = extract_source(content, language=language, module_prefix=module_prefix)
                 except (UnicodeDecodeError, SyntaxError):
@@ -446,6 +494,7 @@ def rebuild_project(conn: Any, project_path: str, project_name: str | None = Non
                     ),
                 )
                 file_symbol_id = cur.fetchone()[0]
+                file_node_by_file_id[file_id] = file_symbol_id
                 file_symbol_rows.append((file_symbol_id, file_id, file_symbol))
                 symbol_count += 1
                 for symbol in symbols:
@@ -470,27 +519,39 @@ def rebuild_project(conn: Any, project_path: str, project_name: str | None = Non
                     )
                     symbol_id = cur.fetchone()[0]
                     file_symbol_rows.append((symbol_id, file_id, symbol))
-                    contains_rows.append((file_symbol_id, symbol_id, file_id))
+                    if symbol.kind != "route":
+                        contains_rows.append((file_symbol_id, symbol_id, file_id))
                     symbol_count += 1
-            cur.execute("SELECT id, name, qualname FROM pgcg_symbols WHERE project_id = %s", (project_id,))
             by_qualname: dict[str, int] = {}
-            by_name: dict[str, int] = {}
-            for symbol_id, simple_name, qualname in cur.fetchall():
+            name_counts: dict[str, int] = {}
+            first_by_name: dict[str, int] = {}
+            symbol_kind_by_id: dict[int, str] = {}
+            same_file_counts: dict[tuple[int, str], int] = {}
+            first_by_file_name: dict[tuple[int, str], int] = {}
+            cur.execute("SELECT id, file_id, name, qualname, kind FROM pgcg_symbols WHERE project_id = %s", (project_id,))
+            for symbol_id, symbol_file_id, simple_name, qualname, kind in cur.fetchall():
                 by_qualname.setdefault(qualname, symbol_id)
-                by_name.setdefault(simple_name, symbol_id)
+                first_by_name.setdefault(simple_name, symbol_id)
+                name_counts[simple_name] = name_counts.get(simple_name, 0) + 1
+                symbol_kind_by_id[symbol_id] = kind
+                file_key = (symbol_file_id, simple_name)
+                first_by_file_name.setdefault(file_key, symbol_id)
+                same_file_counts[file_key] = same_file_counts.get(file_key, 0) + 1
+            by_name = {name: symbol_id for name, symbol_id in first_by_name.items() if name_counts.get(name) == 1}
+            by_file_name = {key: symbol_id for key, symbol_id in first_by_file_name.items() if same_file_counts.get(key) == 1}
             edge_rows: list[tuple[int, int, int | None, int, str, str, int]] = []
             for source_id, file_id, symbol in file_symbol_rows:
                 if symbol.kind == "file":
                     continue
                 for target_name, line in symbol.calls:
                     short_name = target_name.rsplit(".", 1)[-1]
-                    target_id = by_qualname.get(target_name) or by_name.get(short_name)
+                    target_id = by_qualname.get(target_name) or by_file_name.get((file_id, short_name)) or by_name.get(short_name)
                     if target_id is not None:
                         edge_rows.append((project_id, source_id, target_id, file_id, "calls", target_name, line))
-                for target_name, line in symbol.imports:
-                    short_name = target_name.rsplit(".", 1)[-1]
-                    target_id = by_qualname.get(target_name) or by_name.get(short_name)
-                    edge_rows.append((project_id, source_id, target_id, file_id, "imports", target_name, line))
+                if symbol.kind == "import":
+                    code = symbol.code.lstrip()
+                    if code.startswith("from ") or (code.startswith("import ") and symbol.name.endswith(".js")):
+                        edge_rows.append((project_id, file_node_by_file_id[file_id], source_id, file_id, "imports", symbol.name, symbol.line))
                 for target_name, line in symbol.extends:
                     short_name = target_name.rsplit(".", 1)[-1]
                     target_id = by_qualname.get(target_name) or by_name.get(short_name)
@@ -498,12 +559,17 @@ def rebuild_project(conn: Any, project_path: str, project_name: str | None = Non
                         edge_rows.append((project_id, source_id, target_id, file_id, "extends", target_name, line))
                 for target_name, line in symbol.instantiates:
                     short_name = target_name.rsplit(".", 1)[-1]
-                    target_id = by_qualname.get(target_name) or by_name.get(short_name)
+                    target_id = by_qualname.get(target_name) or by_file_name.get((file_id, short_name)) or first_by_name.get(short_name)
                     if target_id is not None:
                         edge_rows.append((project_id, source_id, target_id, file_id, "instantiates", target_name, line))
+                call_refs = {(name.rsplit(".", 1)[-1], line) for name, line in symbol.calls}
+                instantiate_refs = {(name.rsplit(".", 1)[-1], line) for name, line in symbol.instantiates}
                 for target_name, line in symbol.references[:25]:
-                    target_id = by_name.get(target_name)
-                    if target_id is not None:
+                    if (target_name, line) in call_refs or (target_name, line) in instantiate_refs:
+                        continue
+                    short_name = target_name.rsplit(".", 1)[-1]
+                    target_id = by_qualname.get(target_name) or by_name.get(short_name)
+                    if target_id is not None and symbol_kind_by_id.get(target_id) in {"class", "function"}:
                         edge_rows.append((project_id, source_id, target_id, file_id, "references", target_name, line))
             for source_id, target_id, contains_file_id in contains_rows:
                 edge_rows.append((project_id, source_id, target_id, contains_file_id, "contains", "", 1))

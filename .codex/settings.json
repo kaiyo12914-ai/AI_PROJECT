@@ -2,5 +2,14 @@
   "files.encoding": "utf8",
   "files.eol": "\n",
   "editor.formatOnSave": false,
-  "editor.wordWrap": "on"
+  "editor.wordWrap": "on",
+  "mcpServers": {
+    "microsoft-playwright-mcp": {
+      "command": "D:\\Program Files\\nodejs\\npx.cmd",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest"
+      ]
+    }
+  }
 }
