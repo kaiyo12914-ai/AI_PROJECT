@@ -133,7 +133,10 @@ button {
 #checkReorderBtn,
 #nextReorderBtn,
 #checkTranslateBtn,
-#nextTranslateBtn {
+#nextTranslateBtn,
+#testStartBtn,
+#testCheckBtn,
+#testNextBtn {
   background: #2563eb;
   color: #fff;
 }
@@ -281,6 +284,24 @@ button {
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.test-panel textarea {
+  margin-bottom: 12px;
+}
+
+.test-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  color: #334155;
+}
+
+.test-progress {
+  font-size: 13px;
+  color: #475569;
 }
 
 .summary-panel {

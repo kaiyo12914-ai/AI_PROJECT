@@ -322,6 +322,38 @@ class ChatbotUIRepository(BaseRepository):
         """
         return self.execute(sql, [conversation_id, user_id], profile=self.profile)
 
+    def delete_conversation(self, user_id: str, conversation_id: str) -> int:
+        conversation = self.get_conversation(user_id, conversation_id)
+        if not conversation:
+            return 0
+
+        self.execute(
+            "DELETE FROM chatbotui_message_embedding WHERE conversation_id = %s",
+            [conversation_id],
+            profile=self.profile,
+        )
+        self.execute(
+            "DELETE FROM chatbotui_prompt_history WHERE conversation_id = %s",
+            [conversation_id],
+            profile=self.profile,
+        )
+        self.execute(
+            "DELETE FROM chatbotui_attachment WHERE conversation_id = %s",
+            [conversation_id],
+            profile=self.profile,
+        )
+        self.execute(
+            "DELETE FROM chatbotui_message WHERE conversation_id = %s",
+            [conversation_id],
+            profile=self.profile,
+        )
+        sql = """
+        DELETE FROM chatbotui_conversation
+        WHERE id = %s
+          AND user_id = %s
+        """
+        return self.execute(sql, [conversation_id, user_id], profile=self.profile)
+
     def list_messages(self, conversation_id: str) -> List[Dict[str, Any]]:
         sql = """
         SELECT id, role, content, model_type, model_name, latency_ms, created_at
@@ -439,10 +471,24 @@ class ChatbotUIRepository(BaseRepository):
         return out
 
     def clear_messages(self, conversation_id: str) -> int:
+        self.execute(
+            "DELETE FROM chatbotui_message_embedding WHERE conversation_id = %s",
+            [conversation_id],
+            profile=self.profile,
+        )
         sql = "DELETE FROM chatbotui_message WHERE conversation_id = %s"
         return self.execute(sql, [conversation_id], profile=self.profile)
 
     def delete_message(self, conversation_id: str, message_id: int) -> int:
+        self.execute(
+            """
+            DELETE FROM chatbotui_message_embedding
+            WHERE conversation_id = %s
+              AND message_id = %s
+            """,
+            [conversation_id, message_id],
+            profile=self.profile,
+        )
         sql = """
         DELETE FROM chatbotui_message
         WHERE conversation_id = %s
@@ -450,7 +496,37 @@ class ChatbotUIRepository(BaseRepository):
         """
         return self.execute(sql, [conversation_id, message_id], profile=self.profile)
 
+    def delete_message_ids(self, conversation_id: str, message_ids: List[int]) -> int:
+        ids = [int(x) for x in message_ids if int(x or 0) > 0]
+        if not ids:
+            return 0
+        placeholders = ", ".join(["%s"] * len(ids))
+        self.execute(
+            f"""
+            DELETE FROM chatbotui_message_embedding
+            WHERE conversation_id = %s
+              AND message_id IN ({placeholders})
+            """,
+            [conversation_id] + ids,
+            profile=self.profile,
+        )
+        sql = f"""
+        DELETE FROM chatbotui_message
+        WHERE conversation_id = %s
+          AND id IN ({placeholders})
+        """
+        return self.execute(sql, [conversation_id] + ids, profile=self.profile)
+
     def delete_messages_from(self, conversation_id: str, start_message_id: int) -> int:
+        self.execute(
+            """
+            DELETE FROM chatbotui_message_embedding
+            WHERE conversation_id = %s
+              AND message_id >= %s
+            """,
+            [conversation_id, start_message_id],
+            profile=self.profile,
+        )
         sql = """
         DELETE FROM chatbotui_message
         WHERE conversation_id = %s

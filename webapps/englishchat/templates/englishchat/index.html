@@ -52,6 +52,7 @@
         <button id="quizModeBtn" class="mode-tab" type="button" data-mode="quiz">Fill Blank</button>
         <button id="reorderModeBtn" class="mode-tab" type="button" data-mode="reorder">Reorder</button>
         <button id="translateModeBtn" class="mode-tab" type="button" data-mode="translate">Translate</button>
+        <button id="testModeBtn" class="mode-tab" type="button" data-mode="test">Online Test</button>
       </div>
       <div class="speech-tools">
         <button id="speakBtn" type="button">Speak</button>
@@ -88,6 +89,23 @@
         <div class="practice-actions">
           <button id="checkTranslateBtn" type="button">Check</button>
           <button id="nextTranslateBtn" type="button">Next question</button>
+        </div>
+      </div>
+      <div id="testPanel" class="practice-panel test-panel hidden" aria-live="polite">
+        <div class="test-head">
+          <strong>Online Test</strong>
+          <span id="testProgress" class="test-progress"></span>
+        </div>
+        <div id="testPrompt" class="practice-prompt"></div>
+        <div id="testChoices" class="quiz-choices"></div>
+        <div id="testAnswer" class="assembled-answer hidden"></div>
+        <div id="testWords" class="word-bank"></div>
+        <textarea id="testTextInput" class="hidden" rows="3" placeholder="Type your answer..."></textarea>
+        <div id="testResult" class="quiz-result"></div>
+        <div class="practice-actions">
+          <button id="testStartBtn" type="button">Start test</button>
+          <button id="testCheckBtn" type="button">Check now</button>
+          <button id="testNextBtn" type="button">Next</button>
         </div>
       </div>
       <div class="summary-panel">

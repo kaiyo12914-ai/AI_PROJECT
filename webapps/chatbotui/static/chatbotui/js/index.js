@@ -320,6 +320,9 @@
   async function removeConversation(conversationId) {
     const id = conversationId || (activeConversation() && activeConversation().id) || "";
     if (!id) return;
+    const target = state.conversations.find((item) => item.id === id) || null;
+    const title = target ? displayTitle(target.title) : "目前對話";
+    if (!window.confirm(`確定刪除「${title}」？對話紀錄與 RAG 索引會同步刪除。`)) return;
     await apiFetch(`/chatbotui/conversations/${id}/`, { method: "DELETE" });
     state.conversations = state.conversations.filter((item) => item.id !== id);
     if (state.activeId === id) {
@@ -707,7 +710,17 @@
         editBtn.className = "message-action-btn";
         editBtn.textContent = "編輯後重送";
         editBtn.dataset.messageId = String(messageId(message));
+        editBtn.dataset.action = "resend";
         right.appendChild(editBtn);
+      }
+      if (messageId(message) > 0 && !state.sending) {
+        const deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.className = "message-action-btn danger";
+        deleteBtn.textContent = message.role === "user" ? "刪除此輪" : "刪除回答";
+        deleteBtn.dataset.messageId = String(messageId(message));
+        deleteBtn.dataset.action = message.role === "user" ? "delete-turn" : "delete-answer";
+        right.appendChild(deleteBtn);
       }
 
       header.appendChild(role);
@@ -1028,6 +1041,40 @@
     window.alert(userMessage);
   }
 
+  async function deleteMessageUnit(messageIdValue, scope) {
+    const current = activeConversation();
+    if (!current || state.sending) return;
+    const target = current.messages.find((m) => messageId(m) === messageIdValue);
+    if (!target) {
+      handleUiError(new Error("找不到要刪除的訊息"));
+      return;
+    }
+    const label = scope === "answer" ? "這則回答" : "這一輪對話與回答";
+    if (!window.confirm(`確定刪除${label}？相關 RAG 索引會同步刪除。`)) return;
+
+    state.sending = true;
+    render();
+    pushDebug(`[刪除訊息] 對話=${current.id} 訊息=${messageIdValue} scope=${scope}`);
+    try {
+      await apiFetch(`/chatbotui/conversations/${current.id}/messages/delete/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message_id: messageIdValue,
+          scope: scope,
+        }),
+      });
+      await loadConversationDetail(current.id);
+      render();
+    } catch (error) {
+      pushDebug(`[刪除訊息失敗] ${error.message}`);
+      handleUiError(error);
+    } finally {
+      state.sending = false;
+      render();
+    }
+  }
+
   elements.sendBtn.addEventListener("click", function () {
     sendMessage().catch(handleUiError);
   });
@@ -1134,8 +1181,13 @@
     const actionBtn = event.target.closest(".message-action-btn");
     if (actionBtn) {
       const id = Number(actionBtn.dataset.messageId || 0);
-      if (id > 0) {
+      const action = String(actionBtn.dataset.action || "");
+      if (id > 0 && action === "resend") {
         resendFromMessage(id).catch(handleUiError);
+      } else if (id > 0 && action === "delete-turn") {
+        deleteMessageUnit(id, "turn").catch(handleUiError);
+      } else if (id > 0 && action === "delete-answer") {
+        deleteMessageUnit(id, "answer").catch(handleUiError);
       }
     }
   });

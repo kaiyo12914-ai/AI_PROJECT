@@ -156,7 +156,7 @@ def api_conversation_detail(request, conversation_id: str):
 
     if request.method == "DELETE":
         try:
-            ok = service.archive_conversation(user_id, conversation_id)
+            ok = service.delete_conversation(user_id, conversation_id)
             if not ok:
                 return JsonResponse({"ok": False, "error": "conversation not found"}, status=404)
             return JsonResponse({"ok": True})
@@ -393,6 +393,48 @@ def api_conversation_attachments(request, conversation_id: str):
             )
 
     return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+
+@csrf_exempt
+@require_node("chatbotui", api=True)
+def api_conversation_message_delete(request, conversation_id: str):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    body = _read_json_body(request)
+    if body is None:
+        return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
+
+    user_id = resolve_user_id(request)
+    cid = safe_text(conversation_id)
+    target_message_id = int(body.get("message_id") or 0)
+    scope = safe_text(body.get("scope")) or "turn"
+
+    if not cid:
+        return JsonResponse({"ok": False, "error": "conversation_id is required"}, status=400)
+    if target_message_id <= 0:
+        return JsonResponse({"ok": False, "error": "message_id is required"}, status=400)
+
+    try:
+        result = service.delete_message_unit(
+            user_id=user_id,
+            conversation_id=cid,
+            target_message_id=target_message_id,
+            scope=scope,
+        )
+        if not result:
+            return JsonResponse({"ok": False, "error": "conversation not found"}, status=404)
+        return JsonResponse({"ok": True, "result": result})
+    except Exception as exc:
+        logger.exception("chatbotui api_conversation_message_delete failed")
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "message delete failed",
+                "detail": str(exc) if getattr(settings, "DEBUG", False) else "",
+            },
+            status=502,
+        )
 
 
 @csrf_exempt

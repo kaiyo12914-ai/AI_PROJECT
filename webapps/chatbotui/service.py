@@ -637,6 +637,10 @@ class ChatbotUIService:
         self.ensure_schema()
         return self.repository.archive_conversation(user_id, conversation_id) > 0
 
+    def delete_conversation(self, user_id: str, conversation_id: str) -> bool:
+        self.ensure_schema()
+        return self.repository.delete_conversation(user_id, conversation_id) > 0
+
     def rename_conversation(self, user_id: str, conversation_id: str, title: str) -> Dict[str, Any]:
         self.ensure_schema()
         conversation = self.repository.get_conversation(user_id, conversation_id)
@@ -1088,7 +1092,11 @@ class ChatbotUIService:
             config["rag_source"],
         )
 
-        self.repository.delete_messages_from(conversation_id, target_message_id)
+        replace_ids = [target_message_id]
+        next_item = all_messages[target_idx + 1] if target_idx + 1 < len(all_messages) else None
+        if next_item and safe_text(next_item.get("role")).lower() == "assistant":
+            replace_ids.append(int(next_item.get("id") or 0))
+        self.repository.delete_message_ids(conversation_id, replace_ids)
         self.repository.set_model_type(user_id, conversation_id, model_type, model_name)
         user_message_id = self.repository.add_message_and_get_id(conversation_id, "user", normalized_user_text, model_type, model_name, 0)
         assistant_message_id = self.repository.add_message_and_get_id(
@@ -1118,6 +1126,57 @@ class ChatbotUIService:
             "citation_count": int(generated.get("citation_count") or 0),
             "rag_reason": safe_text(generated.get("rag_reason")),
             "citations": _normalize_citations(generated.get("citations")),
+        }
+
+    def delete_message_unit(
+        self,
+        user_id: str,
+        conversation_id: str,
+        target_message_id: int,
+        scope: str = "turn",
+    ) -> Dict[str, Any]:
+        self.ensure_schema()
+        conversation = self.repository.get_conversation(user_id, conversation_id)
+        if not conversation:
+            return {}
+        if target_message_id <= 0:
+            raise RuntimeError("target_message_id is required")
+
+        all_messages = self.repository.list_messages(conversation_id)
+        target_idx = -1
+        for idx, item in enumerate(all_messages):
+            if int(item.get("id") or 0) == target_message_id:
+                target_idx = idx
+                break
+        if target_idx < 0:
+            raise RuntimeError("target message not found")
+
+        target = all_messages[target_idx]
+        role = safe_text(target.get("role")).lower()
+        normalized_scope = safe_text(scope).lower() or "turn"
+        delete_ids: List[int] = [target_message_id]
+
+        if normalized_scope == "turn" and role == "user":
+            next_item = all_messages[target_idx + 1] if target_idx + 1 < len(all_messages) else None
+            if next_item and safe_text(next_item.get("role")).lower() == "assistant":
+                delete_ids.append(int(next_item.get("id") or 0))
+        elif normalized_scope == "turn" and role == "assistant":
+            prev_item = all_messages[target_idx - 1] if target_idx - 1 >= 0 else None
+            if prev_item and safe_text(prev_item.get("role")).lower() == "user":
+                delete_ids.append(int(prev_item.get("id") or 0))
+        elif normalized_scope == "answer":
+            if role != "assistant":
+                raise RuntimeError("answer scope requires assistant message")
+        elif normalized_scope not in {"answer", "message"}:
+            raise RuntimeError("unsupported delete scope")
+
+        deleted = self.repository.delete_message_ids(conversation_id, delete_ids)
+        if deleted > 0:
+            self.repository.touch_conversation(conversation_id)
+        return {
+            "deleted": int(deleted or 0),
+            "deleted_message_ids": sorted(set([x for x in delete_ids if x > 0])),
+            "conversation_title": safe_text(conversation.get("title")) or "New Chat",
         }
 
     def chat(self, user_id: str, conversation_id: str, user_text: str, model_type: str) -> Dict[str, Any]:

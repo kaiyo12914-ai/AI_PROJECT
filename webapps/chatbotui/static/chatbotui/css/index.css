@@ -386,7 +386,7 @@ body {
 .message-action-btn {
   min-width: 28px;
   height: 28px;
-  padding: 0;
+  padding: 0 8px;
   border-radius: 8px;
   font-size: 13px;
   line-height: 1;
@@ -398,6 +398,14 @@ body {
 
 .message-action-btn:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+.message-action-btn.danger {
+  color: #ffb4b4;
+}
+
+.message-action-btn.danger:hover {
+  background: rgba(255, 96, 96, 0.18);
 }
 
 .message-body p,

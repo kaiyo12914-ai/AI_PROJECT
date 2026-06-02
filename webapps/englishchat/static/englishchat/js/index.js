@@ -3,6 +3,8 @@
 
   const MAX_SEEN_HISTORY = 12;
   const MAX_DEBUG_LINES = 30;
+  const ONLINE_TEST_TOTAL = 10;
+  const ONLINE_TEST_MODES = ["quiz", "reorder", "translate"];
   const DEBUG_MODE = document.body.dataset.debugMode === "1";
 
   const state = {
@@ -19,6 +21,17 @@
       quiz: [],
       reorder: [],
       translate: [],
+    },
+    onlineTest: {
+      active: false,
+      total: ONLINE_TEST_TOTAL,
+      index: 0,
+      mode: "",
+      question: null,
+      picked: [],
+      answered: false,
+      correct: 0,
+      scoreTotal: 0,
     },
     lastSpeakText: "",
     recognition: null,
@@ -63,6 +76,17 @@
   const translateInput = document.getElementById("translateInput");
   const translateResult = document.getElementById("translateResult");
   const translatePatterns = document.getElementById("translatePatterns");
+  const testPanel = document.getElementById("testPanel");
+  const testProgress = document.getElementById("testProgress");
+  const testPrompt = document.getElementById("testPrompt");
+  const testChoices = document.getElementById("testChoices");
+  const testAnswer = document.getElementById("testAnswer");
+  const testWords = document.getElementById("testWords");
+  const testTextInput = document.getElementById("testTextInput");
+  const testResult = document.getElementById("testResult");
+  const testStartBtn = document.getElementById("testStartBtn");
+  const testCheckBtn = document.getElementById("testCheckBtn");
+  const testNextBtn = document.getElementById("testNextBtn");
   const summaryStats = document.getElementById("summaryStats");
   const summaryAdvice = document.getElementById("summaryAdvice");
   const composer = document.querySelector(".composer");
@@ -139,6 +163,12 @@
       return state.reorder.prompt || (state.reorder.words || []).join(" ");
     }
     if (state.mode === "translate" && state.translation) return state.translation.sample_answer || translateInput.value || state.lastSpeakText;
+    if (state.mode === "test" && state.onlineTest.question) {
+      const q = state.onlineTest.question;
+      if (state.onlineTest.mode === "quiz") return q.question || state.lastSpeakText;
+      if (state.onlineTest.mode === "reorder") return q.answer || q.prompt || state.lastSpeakText;
+      if (state.onlineTest.mode === "translate") return q.sample_answer || testTextInput.value || state.lastSpeakText;
+    }
     return state.lastSpeakText;
   }
 
@@ -169,6 +199,13 @@
     if (state.mode === "translate") {
       translateInput.value = s;
       translateInput.focus();
+      return;
+    }
+    if (state.mode === "test") {
+      if (!testTextInput.classList.contains("hidden")) {
+        testTextInput.value = s;
+        testTextInput.focus();
+      }
       return;
     }
     if (state.mode === "chat") {
@@ -273,6 +310,7 @@
     quizPanel.classList.toggle("hidden", mode !== "quiz");
     reorderPanel.classList.toggle("hidden", mode !== "reorder");
     translatePanel.classList.toggle("hidden", mode !== "translate");
+    testPanel.classList.toggle("hidden", mode !== "test");
   }
 
   function renderSummary(summary) {
@@ -331,6 +369,7 @@
     if (mode === "quiz" && !state.quiz) loadFillBlankQuiz().catch(showQuizLoadError);
     if (mode === "reorder" && !state.reorder) loadReorderQuiz().catch(showReorderLoadError);
     if (mode === "translate" && !state.translation) loadTranslationQuiz().catch(showTranslateLoadError);
+    if (mode === "test" && !state.onlineTest.active) resetOnlineTest();
   }
 
   function addMessage(role, text) {
@@ -378,6 +417,7 @@
     state.translation = null;
     state.attempts = [];
     state.seenQuestionIds = { quiz: [], reorder: [], translate: [] };
+    state.onlineTest.active = false;
     state.debugLines = [];
     if (debugLog) debugLog.innerHTML = "";
     chatLog.innerHTML = "";
@@ -388,6 +428,7 @@
     if (state.mode === "quiz") return loadFillBlankQuiz();
     if (state.mode === "reorder") return loadReorderQuiz();
     if (state.mode === "translate") return loadTranslationQuiz();
+    if (state.mode === "test") return resetOnlineTest();
 
     const resp = await fetch(url("/englishchat/start/"), {
       method: "POST",
@@ -690,6 +731,231 @@
     });
   }
 
+  function resetOnlineTest() {
+    state.topic = currentTopic();
+    state.level = currentLevel();
+    state.onlineTest = {
+      active: true,
+      total: ONLINE_TEST_TOTAL,
+      index: 0,
+      mode: "",
+      question: null,
+      picked: [],
+      answered: false,
+      correct: 0,
+      scoreTotal: 0,
+    };
+    testResult.textContent = "";
+    loadOnlineTestQuestion().catch(showOnlineTestLoadError);
+  }
+
+  function showOnlineTestLoadError() {
+    testPrompt.textContent = "Could not load the test question.";
+    testResult.textContent = "Please try again.";
+  }
+
+  function updateOnlineTestProgress() {
+    const t = state.onlineTest;
+    const average = t.index ? Math.round(t.scoreTotal / t.index) : 0;
+    testProgress.textContent = `Question ${Math.min(t.index + 1, t.total)} / ${t.total} | Correct ${t.correct} | Avg ${average}`;
+  }
+
+  function setOnlineTestControls(answered) {
+    testCheckBtn.disabled = Boolean(answered);
+    testNextBtn.disabled = !answered;
+  }
+
+  function renderOnlineTestQuestion(mode, quiz) {
+    state.onlineTest.mode = mode;
+    state.onlineTest.question = quiz;
+    state.onlineTest.picked = [];
+    state.onlineTest.answered = false;
+    updateOnlineTestProgress();
+    testChoices.innerHTML = "";
+    testWords.innerHTML = "";
+    testAnswer.textContent = "";
+    testAnswer.classList.add("hidden");
+    testTextInput.value = "";
+    testTextInput.classList.add("hidden");
+    testResult.textContent = "";
+    setOnlineTestControls(false);
+
+    if (mode === "quiz") {
+      testPrompt.textContent = quiz.question || "";
+      rememberSpeakText(quiz.question || "");
+      testCheckBtn.classList.add("hidden");
+      (quiz.choices || []).forEach((choice) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "quiz-choice";
+        btn.textContent = choice;
+        btn.addEventListener("click", () => checkOnlineTestAnswer(choice).catch(() => {
+          testResult.textContent = "Could not check the answer.";
+        }));
+        testChoices.appendChild(btn);
+      });
+      return;
+    }
+
+    testCheckBtn.classList.remove("hidden");
+    if (mode === "reorder") {
+      testPrompt.textContent = quiz.prompt || "Put the words in order.";
+      rememberSpeakText(quiz.answer || "");
+      testAnswer.classList.remove("hidden");
+      (quiz.words || []).forEach((word) => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "word-chip";
+        chip.textContent = word;
+        chip.addEventListener("click", () => {
+          if (state.onlineTest.answered) return;
+          chip.disabled = true;
+          state.onlineTest.picked.push(word);
+          testAnswer.textContent = state.onlineTest.picked.join(" ");
+        });
+        testWords.appendChild(chip);
+      });
+      return;
+    }
+
+    testPrompt.textContent = quiz.zh_prompt || "";
+    rememberSpeakText(quiz.sample_answer || "");
+    testTextInput.classList.remove("hidden");
+    testTextInput.focus();
+  }
+
+  async function loadOnlineTestQuestion() {
+    const t = state.onlineTest;
+    if (!t.active) {
+      resetOnlineTest();
+      return;
+    }
+    if (t.index >= t.total) {
+      const average = t.total ? Math.round(t.scoreTotal / t.total) : 0;
+      testPrompt.textContent = "Test completed.";
+      testChoices.innerHTML = "";
+      testWords.innerHTML = "";
+      testAnswer.classList.add("hidden");
+      testTextInput.classList.add("hidden");
+      testResult.textContent = `Final score: ${average}. Correct: ${t.correct}/${t.total}.`;
+      testProgress.textContent = `Done | Correct ${t.correct}/${t.total} | Avg ${average}`;
+      testCheckBtn.disabled = true;
+      testNextBtn.disabled = true;
+      return;
+    }
+
+    const mode = ONLINE_TEST_MODES[t.index % ONLINE_TEST_MODES.length];
+    testPrompt.textContent = "Loading test question...";
+    const path = mode === "quiz"
+      ? "/englishchat/quiz/fill_blank/"
+      : mode === "reorder"
+        ? "/englishchat/quiz/reorder/"
+        : "/englishchat/quiz/translate/";
+    const seenKey = mode === "quiz" ? "quiz" : mode;
+    const resp = await fetch(url(path), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        topic: topicSelect.value,
+        custom_topic: customTopic.value.trim(),
+        level: state.level,
+        seen_question_ids: state.seenQuestionIds[seenKey],
+      }),
+    });
+    const data = await resp.json();
+    if (!data.ok) return showOnlineTestLoadError();
+    logFallback(`test_${mode}`, data);
+    rememberSeenQuestion(seenKey, data.question_id);
+    renderOnlineTestQuestion(mode, data);
+  }
+
+  async function checkOnlineTestAnswer(selectedChoice) {
+    const t = state.onlineTest;
+    const quiz = t.question;
+    if (!quiz || t.answered) return;
+    let data = {};
+    let attempt = { mode: t.mode, correct: false, score: 0, pattern: "" };
+
+    if (t.mode === "quiz") {
+      const selected = String(selectedChoice || "");
+      const resp = await fetch(url("/englishchat/quiz/check/"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          selected,
+          answer: quiz.answer,
+          explanation_zh: quiz.explanation_zh,
+          pattern: quiz.pattern,
+        }),
+      });
+      data = await resp.json();
+      testChoices.querySelectorAll("button").forEach((btn) => {
+        btn.disabled = true;
+        btn.classList.toggle("correct", btn.textContent === data.answer);
+        btn.classList.toggle("wrong", btn.textContent === data.selected && !data.correct);
+      });
+      attempt = { mode: "test_fill_blank", correct: Boolean(data.correct), score: data.correct ? 100 : 0, pattern: data.pattern || "" };
+      testResult.textContent = data.correct
+        ? `Correct. ${data.explanation_zh || ""} Pattern: ${data.pattern || ""}`
+        : `Not quite. Answer: ${data.answer}. ${data.explanation_zh || ""} Pattern: ${data.pattern || ""}`;
+    } else if (t.mode === "reorder") {
+      const userAnswer = t.picked.join(" ");
+      if (!userAnswer) {
+        testResult.textContent = "Build a sentence first.";
+        return;
+      }
+      const resp = await fetch(url("/englishchat/quiz/reorder/check/"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_answer: userAnswer,
+          answer: quiz.answer,
+          explanation_zh: quiz.explanation_zh,
+          pattern: quiz.pattern,
+        }),
+      });
+      data = await resp.json();
+      attempt = { mode: "test_reorder", correct: Boolean(data.correct), score: data.correct ? 100 : 0, pattern: data.pattern || "" };
+      testResult.textContent = data.correct
+        ? `Correct. ${data.explanation_zh || ""} Pattern: ${data.pattern || ""}`
+        : `Not quite. Answer: ${data.answer}. ${data.explanation_zh || ""} Pattern: ${data.pattern || ""}`;
+    } else {
+      const userAnswer = testTextInput.value.trim();
+      if (!userAnswer) {
+        testResult.textContent = "Type your translation first.";
+        return;
+      }
+      const resp = await fetch(url("/englishchat/quiz/translate/evaluate/"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          zh_prompt: quiz.zh_prompt,
+          sample_answer: quiz.sample_answer,
+          user_answer: userAnswer,
+          level: state.level,
+        }),
+      });
+      data = await resp.json();
+      const score = Number(data.score || 0);
+      attempt = { mode: "test_translate", correct: score >= 80, score, pattern: (quiz.patterns || [])[0] || "" };
+      testResult.textContent = `Score: ${score}. Better: ${data.corrected}. ${data.feedback_zh || ""}`;
+      rememberSpeakText(data.corrected || data.sample_answer || "");
+    }
+
+    t.answered = true;
+    t.index += 1;
+    if (attempt.correct) t.correct += 1;
+    t.scoreTotal += Number(attempt.score || 0);
+    recordAttempt(attempt);
+    updateOnlineTestProgress();
+    setOnlineTestControls(true);
+  }
+
+  function nextOnlineTestQuestion() {
+    if (!state.onlineTest.active || !state.onlineTest.answered) return;
+    loadOnlineTestQuestion().catch(showOnlineTestLoadError);
+  }
+
   modeButtons.forEach((btn) => {
     btn.addEventListener("click", () => setMode(btn.dataset.mode || "chat"));
   });
@@ -713,6 +979,11 @@
   checkTranslateBtn.addEventListener("click", () => checkTranslationAnswer().catch(() => {
     translateResult.textContent = "Could not check the translation.";
   }));
+  testStartBtn.addEventListener("click", resetOnlineTest);
+  testCheckBtn.addEventListener("click", () => checkOnlineTestAnswer().catch(() => {
+    testResult.textContent = "Could not check the answer.";
+  }));
+  testNextBtn.addEventListener("click", nextOnlineTestQuestion);
   refreshSummaryBtn.addEventListener("click", () => updateSummary().catch(() => {
     summaryAdvice.textContent = "Could not refresh the summary.";
   }));

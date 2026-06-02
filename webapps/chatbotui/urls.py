@@ -15,6 +15,7 @@ urlpatterns = [
     path("conversations/<str:conversation_id>/config/reset-profile/", views.api_conversation_config_reset_profile, name="conversation_config_reset_profile"),
     path("conversations/<str:conversation_id>/prompt-history/", views.api_conversation_prompt_history, name="conversation_prompt_history"),
     path("conversations/<str:conversation_id>/attachments/", views.api_conversation_attachments, name="conversation_attachments"),
+    path("conversations/<str:conversation_id>/messages/delete/", views.api_conversation_message_delete, name="conversation_message_delete"),
     path("chat/", views.api_chat, name="chat"),
     path("chat/regenerate/", views.api_chat_regenerate, name="chat_regenerate"),
     path("chat/resend/", views.api_chat_resend, name="chat_resend"),
