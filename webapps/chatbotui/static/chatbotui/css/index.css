@@ -53,6 +53,44 @@ body {
   cursor: pointer;
 }
 
+.sidebar-head {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.sidebar-title {
+  min-width: 0;
+}
+
+.sidebar-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.conversation-search {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  color: #e6edf7;
+  background: rgba(255, 255, 255, 0.06);
+  font: inherit;
+  outline: none;
+}
+
+.conversation-search::placeholder {
+  color: #7f93ad;
+}
+
+.conversation-search:focus {
+  border-color: rgba(110, 178, 255, 0.68);
+  box-shadow: 0 0 0 3px rgba(78, 132, 224, 0.18);
+}
+
 .sidebar-note {
   margin: 16px 0 18px;
   padding: 14px;
@@ -111,6 +149,14 @@ body {
   margin-top: 6px;
   font-size: 13px;
   color: #9fb3cb;
+}
+
+.conversation-empty {
+  padding: 14px 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  color: #9fb3cb;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .workspace {

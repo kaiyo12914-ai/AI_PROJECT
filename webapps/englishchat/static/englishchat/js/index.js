@@ -43,6 +43,7 @@
   const customTopic = document.getElementById("customTopic");
   const levelSelect = document.getElementById("levelSelect");
   const startBtn = document.getElementById("startBtn");
+  const startTestBtn = document.getElementById("startTestBtn");
   const sendBtn = document.getElementById("sendBtn");
   const stuckBtn = document.getElementById("stuckBtn");
   const nextQuizBtn = document.getElementById("nextQuizBtn");
@@ -84,7 +85,6 @@
   const testWords = document.getElementById("testWords");
   const testTextInput = document.getElementById("testTextInput");
   const testResult = document.getElementById("testResult");
-  const testStartBtn = document.getElementById("testStartBtn");
   const testCheckBtn = document.getElementById("testCheckBtn");
   const testNextBtn = document.getElementById("testNextBtn");
   const summaryStats = document.getElementById("summaryStats");
@@ -267,7 +267,7 @@
         state.recognition = controller;
         state.listening = true;
         dictateBtn.classList.add("active");
-        setSpeechStatus("正在錄音，按 Stop 後送內網辨識...");
+        setSpeechStatus("正在錄音，按「停止」後送內網辨識...");
       },
       onresult: (text) => {
         applyDictation(text);
@@ -315,7 +315,7 @@
 
   function renderSummary(summary) {
     const total = summary.total || 0;
-    summaryStats.textContent = `Questions: ${total} | Correct: ${summary.correct || 0} | Accuracy: ${summary.accuracy || 0}% | Avg score: ${summary.average_score || 0}`;
+    summaryStats.textContent = `題數：${total} | 答對：${summary.correct || 0} | 正確率：${summary.accuracy || 0}% | 平均分數：${summary.average_score || 0}`;
     summaryAdvice.innerHTML = "";
     const recommendations = Array.isArray(summary.recommendations) ? summary.recommendations : [];
     recommendations.forEach((item) => {
@@ -326,7 +326,7 @@
     const weakPatterns = Array.isArray(summary.weak_patterns) ? summary.weak_patterns : [];
     if (weakPatterns.length) {
       const div = document.createElement("div");
-      div.textContent = `Weak patterns: ${weakPatterns.join(", ")}`;
+      div.textContent = `需加強句型：${weakPatterns.join(", ")}`;
       summaryAdvice.appendChild(div);
     }
   }
@@ -355,7 +355,7 @@
         correct: state.attempts.filter((x) => x.correct).length,
         accuracy: 0,
         average_score: 0,
-        recommendations: ["Summary service unavailable. Keep practicing."],
+        recommendations: ["學習進度服務暫時無法使用，請繼續練習。"],
       });
     });
   }
@@ -386,7 +386,7 @@
     starterBox.innerHTML = "";
     if (!Array.isArray(list) || list.length === 0) return;
     const title = document.createElement("div");
-    title.textContent = "Try one of these:";
+    title.textContent = "可以試試這幾句：";
     starterBox.appendChild(title);
     list.forEach((s) => {
       if (!s) return;
@@ -405,7 +405,7 @@
   function setCorrection(correction) {
     correctionBox.innerHTML = "";
     if (!correction || !correction.improved) return;
-    correctionBox.textContent = `Original: ${correction.original || ""} | Better: ${correction.improved || ""} | Why: ${correction.why || ""}`;
+    correctionBox.textContent = `原句：${correction.original || ""} | 建議：${correction.improved || ""} | 說明：${correction.why || ""}`;
   }
 
   async function startChat() {
@@ -441,7 +441,7 @@
     });
     const data = await resp.json();
     if (!data.ok) {
-      addMessage("ai", "I could not start the chat. Please try again.");
+      addMessage("ai", "無法開始練習，請再試一次。");
       return;
     }
 
@@ -469,7 +469,7 @@
     });
     const data = await resp.json();
     if (!data.ok) {
-      addMessage("ai", "I hit an error. Please try once more.");
+      addMessage("ai", "系統發生錯誤，請再試一次。");
       return;
     }
 
@@ -481,7 +481,7 @@
   }
 
   function showQuizLoadError() {
-    quizQuestion.textContent = "Could not load a quiz. Please try again.";
+    quizQuestion.textContent = "無法載入題目，請再試一次。";
   }
 
   function renderQuiz(quiz) {
@@ -498,7 +498,7 @@
       btn.textContent = choice;
       btn.addEventListener("click", () => {
         checkFillBlankAnswer(choice).catch(() => {
-          quizResult.textContent = "Could not check the answer. Please try again.";
+          quizResult.textContent = "無法評分，請再試一次。";
         });
       });
       quizChoices.appendChild(btn);
@@ -508,7 +508,7 @@
   async function loadFillBlankQuiz() {
     state.topic = currentTopic();
     state.level = currentLevel();
-    quizQuestion.textContent = "Loading question...";
+    quizQuestion.textContent = "題目載入中...";
     quizChoices.innerHTML = "";
     quizResult.textContent = "";
 
@@ -542,7 +542,7 @@
     });
     const data = await resp.json();
     if (!data.ok) {
-      quizResult.textContent = "Could not check the answer.";
+      quizResult.textContent = "無法評分。";
       return;
     }
     quizChoices.querySelectorAll("button").forEach((btn) => {
@@ -551,8 +551,8 @@
       btn.classList.toggle("wrong", btn.textContent === data.selected && !data.correct);
     });
     quizResult.textContent = data.correct
-      ? `Correct. ${data.explanation_zh || ""} Pattern: ${data.pattern || ""}`
-      : `Not quite. Answer: ${data.answer}. ${data.explanation_zh || ""} Pattern: ${data.pattern || ""}`;
+      ? `答對了。${data.explanation_zh || ""} 句型：${data.pattern || ""}`
+      : `還差一點。答案：${data.answer}。${data.explanation_zh || ""} 句型：${data.pattern || ""}`;
     recordAttempt({
       mode: "fill_blank",
       correct: data.correct,
@@ -562,7 +562,7 @@
   }
 
   function showReorderLoadError() {
-    reorderPrompt.textContent = "Could not load a reorder question.";
+    reorderPrompt.textContent = "無法載入重組題。";
   }
 
   function refreshReorderAnswer() {
@@ -573,7 +573,7 @@
     state.reorder = quiz;
     rememberSeenQuestion("reorder", quiz.question_id);
     state.reorderPicked = [];
-    reorderPrompt.textContent = quiz.prompt || "Put the words in order.";
+    reorderPrompt.textContent = quiz.prompt || "請將字詞排成正確句子。";
     rememberSpeakText(quiz.answer || "");
     reorderAnswer.textContent = "";
     reorderResult.textContent = "";
@@ -595,7 +595,7 @@
   async function loadReorderQuiz() {
     state.topic = currentTopic();
     state.level = currentLevel();
-    reorderPrompt.textContent = "Loading reorder question...";
+    reorderPrompt.textContent = "重組題載入中...";
     reorderAnswer.textContent = "";
     reorderWords.innerHTML = "";
     reorderResult.textContent = "";
@@ -631,12 +631,12 @@
     });
     const data = await resp.json();
     if (!data.ok) {
-      reorderResult.textContent = "Please build a sentence first.";
+      reorderResult.textContent = "請先組出句子。";
       return;
     }
     reorderResult.textContent = data.correct
-      ? `Correct. ${data.explanation_zh || ""} Pattern: ${data.pattern || ""}`
-      : `Not quite. Answer: ${data.answer}. ${data.explanation_zh || ""} Pattern: ${data.pattern || ""}`;
+      ? `答對了。${data.explanation_zh || ""} 句型：${data.pattern || ""}`
+      : `還差一點。答案：${data.answer}。${data.explanation_zh || ""} 句型：${data.pattern || ""}`;
     recordAttempt({
       mode: "reorder",
       correct: data.correct,
@@ -655,7 +655,7 @@
   }
 
   function showTranslateLoadError() {
-    translatePrompt.textContent = "Could not load a translation question.";
+    translatePrompt.textContent = "無法載入翻譯題。";
   }
 
   function renderTranslation(quiz) {
@@ -678,7 +678,7 @@
   async function loadTranslationQuiz() {
     state.topic = currentTopic();
     state.level = currentLevel();
-    translatePrompt.textContent = "Loading translation question...";
+    translatePrompt.textContent = "翻譯題載入中...";
     translateInput.value = "";
     translateResult.textContent = "";
     translatePatterns.innerHTML = "";
@@ -703,7 +703,7 @@
     if (!state.translation) return;
     const userAnswer = translateInput.value.trim();
     if (!userAnswer) {
-      translateResult.textContent = "Type your translation first.";
+      translateResult.textContent = "請先輸入你的英文翻譯。";
       return;
     }
     const resp = await fetch(url("/englishchat/quiz/translate/evaluate/"), {
@@ -718,10 +718,10 @@
     });
     const data = await resp.json();
     if (!data.ok) {
-      translateResult.textContent = "Could not check the translation.";
+      translateResult.textContent = "無法評分翻譯。";
       return;
     }
-    translateResult.textContent = `Score: ${data.score}. Better: ${data.corrected}. ${data.feedback_zh || ""}`;
+    translateResult.textContent = `分數：${data.score}。建議寫法：${data.corrected}。${data.feedback_zh || ""}`;
     rememberSpeakText(data.corrected || data.sample_answer || "");
     recordAttempt({
       mode: "translate",
@@ -750,14 +750,14 @@
   }
 
   function showOnlineTestLoadError() {
-    testPrompt.textContent = "Could not load the test question.";
-    testResult.textContent = "Please try again.";
+    testPrompt.textContent = "無法載入測驗題。";
+    testResult.textContent = "請再試一次。";
   }
 
   function updateOnlineTestProgress() {
     const t = state.onlineTest;
     const average = t.index ? Math.round(t.scoreTotal / t.index) : 0;
-    testProgress.textContent = `Question ${Math.min(t.index + 1, t.total)} / ${t.total} | Correct ${t.correct} | Avg ${average}`;
+    testProgress.textContent = `第 ${Math.min(t.index + 1, t.total)} / ${t.total} 題 | 答對 ${t.correct} | 平均 ${average}`;
   }
 
   function setOnlineTestControls(answered) {
@@ -790,7 +790,7 @@
         btn.className = "quiz-choice";
         btn.textContent = choice;
         btn.addEventListener("click", () => checkOnlineTestAnswer(choice).catch(() => {
-          testResult.textContent = "Could not check the answer.";
+          testResult.textContent = "無法評分。";
         }));
         testChoices.appendChild(btn);
       });
@@ -799,7 +799,7 @@
 
     testCheckBtn.classList.remove("hidden");
     if (mode === "reorder") {
-      testPrompt.textContent = quiz.prompt || "Put the words in order.";
+      testPrompt.textContent = quiz.prompt || "請將字詞排成正確句子。";
       rememberSpeakText(quiz.answer || "");
       testAnswer.classList.remove("hidden");
       (quiz.words || []).forEach((word) => {
@@ -832,20 +832,20 @@
     }
     if (t.index >= t.total) {
       const average = t.total ? Math.round(t.scoreTotal / t.total) : 0;
-      testPrompt.textContent = "Test completed.";
+      testPrompt.textContent = "測驗完成。";
       testChoices.innerHTML = "";
       testWords.innerHTML = "";
       testAnswer.classList.add("hidden");
       testTextInput.classList.add("hidden");
-      testResult.textContent = `Final score: ${average}. Correct: ${t.correct}/${t.total}.`;
-      testProgress.textContent = `Done | Correct ${t.correct}/${t.total} | Avg ${average}`;
+      testResult.textContent = `總分：${average}。答對：${t.correct}/${t.total}。`;
+      testProgress.textContent = `完成 | 答對 ${t.correct}/${t.total} | 平均 ${average}`;
       testCheckBtn.disabled = true;
       testNextBtn.disabled = true;
       return;
     }
 
     const mode = ONLINE_TEST_MODES[t.index % ONLINE_TEST_MODES.length];
-    testPrompt.textContent = "Loading test question...";
+    testPrompt.textContent = "測驗題載入中...";
     const path = mode === "quiz"
       ? "/englishchat/quiz/fill_blank/"
       : mode === "reorder"
@@ -896,12 +896,12 @@
       });
       attempt = { mode: "test_fill_blank", correct: Boolean(data.correct), score: data.correct ? 100 : 0, pattern: data.pattern || "" };
       testResult.textContent = data.correct
-        ? `Correct. ${data.explanation_zh || ""} Pattern: ${data.pattern || ""}`
-        : `Not quite. Answer: ${data.answer}. ${data.explanation_zh || ""} Pattern: ${data.pattern || ""}`;
+        ? `答對了。${data.explanation_zh || ""} 句型：${data.pattern || ""}`
+        : `還差一點。答案：${data.answer}。${data.explanation_zh || ""} 句型：${data.pattern || ""}`;
     } else if (t.mode === "reorder") {
       const userAnswer = t.picked.join(" ");
       if (!userAnswer) {
-        testResult.textContent = "Build a sentence first.";
+        testResult.textContent = "請先組出句子。";
         return;
       }
       const resp = await fetch(url("/englishchat/quiz/reorder/check/"), {
@@ -917,12 +917,12 @@
       data = await resp.json();
       attempt = { mode: "test_reorder", correct: Boolean(data.correct), score: data.correct ? 100 : 0, pattern: data.pattern || "" };
       testResult.textContent = data.correct
-        ? `Correct. ${data.explanation_zh || ""} Pattern: ${data.pattern || ""}`
-        : `Not quite. Answer: ${data.answer}. ${data.explanation_zh || ""} Pattern: ${data.pattern || ""}`;
+        ? `答對了。${data.explanation_zh || ""} 句型：${data.pattern || ""}`
+        : `還差一點。答案：${data.answer}。${data.explanation_zh || ""} 句型：${data.pattern || ""}`;
     } else {
       const userAnswer = testTextInput.value.trim();
       if (!userAnswer) {
-        testResult.textContent = "Type your translation first.";
+        testResult.textContent = "請先輸入你的英文翻譯。";
         return;
       }
       const resp = await fetch(url("/englishchat/quiz/translate/evaluate/"), {
@@ -938,7 +938,7 @@
       data = await resp.json();
       const score = Number(data.score || 0);
       attempt = { mode: "test_translate", correct: score >= 80, score, pattern: (quiz.patterns || [])[0] || "" };
-      testResult.textContent = `Score: ${score}. Better: ${data.corrected}. ${data.feedback_zh || ""}`;
+      testResult.textContent = `分數：${score}。建議寫法：${data.corrected}。${data.feedback_zh || ""}`;
       rememberSpeakText(data.corrected || data.sample_answer || "");
     }
 
@@ -962,30 +962,34 @@
 
   startBtn.addEventListener("click", () => {
     startChat().catch(() => {
-      if (state.mode === "chat") addMessage("ai", "Start failed. Please retry.");
-      if (state.mode === "quiz") quizResult.textContent = "Start failed. Please retry.";
-      if (state.mode === "reorder") reorderResult.textContent = "Start failed. Please retry.";
-      if (state.mode === "translate") translateResult.textContent = "Start failed. Please retry.";
+      if (state.mode === "chat") addMessage("ai", "開始失敗，請再試一次。");
+      if (state.mode === "quiz") quizResult.textContent = "開始失敗，請再試一次。";
+      if (state.mode === "reorder") reorderResult.textContent = "開始失敗，請再試一次。";
+      if (state.mode === "translate") translateResult.textContent = "開始失敗，請再試一次。";
     });
+  });
+
+  startTestBtn.addEventListener("click", () => {
+    setMode("test");
+    resetOnlineTest();
   });
 
   nextQuizBtn.addEventListener("click", () => loadFillBlankQuiz().catch(showQuizLoadError));
   nextReorderBtn.addEventListener("click", () => loadReorderQuiz().catch(showReorderLoadError));
   clearReorderBtn.addEventListener("click", clearReorderAnswer);
   checkReorderBtn.addEventListener("click", () => checkReorderAnswer().catch(() => {
-    reorderResult.textContent = "Could not check the answer.";
+    reorderResult.textContent = "無法評分。";
   }));
   nextTranslateBtn.addEventListener("click", () => loadTranslationQuiz().catch(showTranslateLoadError));
   checkTranslateBtn.addEventListener("click", () => checkTranslationAnswer().catch(() => {
-    translateResult.textContent = "Could not check the translation.";
+    translateResult.textContent = "無法評分翻譯。";
   }));
-  testStartBtn.addEventListener("click", resetOnlineTest);
   testCheckBtn.addEventListener("click", () => checkOnlineTestAnswer().catch(() => {
-    testResult.textContent = "Could not check the answer.";
+    testResult.textContent = "無法評分。";
   }));
   testNextBtn.addEventListener("click", nextOnlineTestQuestion);
   refreshSummaryBtn.addEventListener("click", () => updateSummary().catch(() => {
-    summaryAdvice.textContent = "Could not refresh the summary.";
+    summaryAdvice.textContent = "無法重新整理學習進度。";
   }));
   speakBtn.addEventListener("click", () => speakText(currentSpeakText()));
   dictateBtn.addEventListener("click", startDictation);
@@ -1003,7 +1007,7 @@
 
   stuckBtn.addEventListener("click", () => {
     sendUserMessage("I'm stuck. Please give me 3 simple ways to respond.").catch(() => {
-      addMessage("ai", "Please try again.");
+      addMessage("ai", "請再試一次。");
     });
   });
 

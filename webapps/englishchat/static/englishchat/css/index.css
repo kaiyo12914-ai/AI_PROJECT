@@ -49,6 +49,12 @@ body {
   align-items: end;
 }
 
+.setup-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
 .row {
   display: grid;
   gap: 6px;
@@ -128,6 +134,7 @@ button {
 }
 
 #startBtn,
+#startTestBtn,
 #sendBtn,
 #nextQuizBtn,
 #checkReorderBtn,
@@ -417,6 +424,10 @@ button {
   .setup-grid {
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+
+  .setup-actions {
+    grid-template-columns: 1fr;
   }
 
   .chat-log {

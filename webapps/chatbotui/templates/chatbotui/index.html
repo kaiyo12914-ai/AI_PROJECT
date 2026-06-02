@@ -30,11 +30,14 @@
   <main class="shell">
     <aside class="sidebar">
       <div class="sidebar-head">
-        <div>
+        <div class="sidebar-title">
           <div class="eyebrow">入口 AI</div>
           <h1>AI 對話助手</h1>
         </div>
-        <button id="newChatBtn" type="button">新對話</button>
+        <div class="sidebar-actions">
+          <input id="conversationSearchInput" class="conversation-search" type="search" placeholder="搜尋對話" aria-label="搜尋對話">
+          <button id="newChatBtn" type="button">新對話</button>
+        </div>
       </div>
       <div class="sidebar-note">
         類似 Open WebUI 的入口，適合快速問答、草稿整理與一般對話。

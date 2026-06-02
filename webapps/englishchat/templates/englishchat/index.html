@@ -43,21 +43,23 @@
           </select>
         </div>
       </div>
-      <button id="startBtn" type="button">開始練習</button>
+      <div class="setup-actions">
+        <button id="startBtn" type="button">開始練習</button>
+        <button id="startTestBtn" type="button">開始測驗</button>
+      </div>
     </section>
 
     <section class="panel chat">
       <div class="mode-tabs" role="tablist" aria-label="practice modes">
-        <button id="chatModeBtn" class="mode-tab active" type="button" data-mode="chat">Conversation</button>
-        <button id="quizModeBtn" class="mode-tab" type="button" data-mode="quiz">Fill Blank</button>
-        <button id="reorderModeBtn" class="mode-tab" type="button" data-mode="reorder">Reorder</button>
-        <button id="translateModeBtn" class="mode-tab" type="button" data-mode="translate">Translate</button>
-        <button id="testModeBtn" class="mode-tab" type="button" data-mode="test">Online Test</button>
+        <button id="chatModeBtn" class="mode-tab active" type="button" data-mode="chat">對話練習</button>
+        <button id="quizModeBtn" class="mode-tab" type="button" data-mode="quiz">填空練習</button>
+        <button id="reorderModeBtn" class="mode-tab" type="button" data-mode="reorder">重組練習</button>
+        <button id="translateModeBtn" class="mode-tab" type="button" data-mode="translate">翻譯練習</button>
       </div>
       <div class="speech-tools">
-        <button id="speakBtn" type="button">Speak</button>
-        <button id="dictateBtn" type="button">Dictate</button>
-        <button id="stopSpeechBtn" type="button">Stop</button>
+        <button id="speakBtn" type="button">朗讀</button>
+        <button id="dictateBtn" type="button">聽寫</button>
+        <button id="stopSpeechBtn" type="button">停止</button>
         <span id="speechStatus" class="speech-status"></span>
       </div>
       <div id="chatLog" class="chat-log" aria-live="polite"></div>
@@ -68,7 +70,7 @@
         <div id="quizQuestion" class="quiz-question"></div>
         <div id="quizChoices" class="quiz-choices"></div>
         <div id="quizResult" class="quiz-result"></div>
-        <button id="nextQuizBtn" type="button">Next question</button>
+        <button id="nextQuizBtn" type="button">下一題</button>
       </div>
       <div id="reorderPanel" class="practice-panel hidden" aria-live="polite">
         <div id="reorderPrompt" class="practice-prompt"></div>
@@ -76,42 +78,41 @@
         <div id="reorderWords" class="word-bank"></div>
         <div id="reorderResult" class="quiz-result"></div>
         <div class="practice-actions">
-          <button id="clearReorderBtn" type="button">Clear</button>
-          <button id="checkReorderBtn" type="button">Check</button>
-          <button id="nextReorderBtn" type="button">Next question</button>
+          <button id="clearReorderBtn" type="button">清除</button>
+          <button id="checkReorderBtn" type="button">立即評分</button>
+          <button id="nextReorderBtn" type="button">下一題</button>
         </div>
       </div>
       <div id="translatePanel" class="practice-panel hidden" aria-live="polite">
         <div id="translatePrompt" class="practice-prompt"></div>
-        <textarea id="translateInput" rows="3" placeholder="Type your English translation..."></textarea>
+        <textarea id="translateInput" rows="3" placeholder="請輸入英文翻譯..."></textarea>
         <div id="translateResult" class="quiz-result"></div>
         <div id="translatePatterns" class="starter-box"></div>
         <div class="practice-actions">
-          <button id="checkTranslateBtn" type="button">Check</button>
-          <button id="nextTranslateBtn" type="button">Next question</button>
+          <button id="checkTranslateBtn" type="button">立即評分</button>
+          <button id="nextTranslateBtn" type="button">下一題</button>
         </div>
       </div>
       <div id="testPanel" class="practice-panel test-panel hidden" aria-live="polite">
         <div class="test-head">
-          <strong>Online Test</strong>
+          <strong>線上測驗</strong>
           <span id="testProgress" class="test-progress"></span>
         </div>
         <div id="testPrompt" class="practice-prompt"></div>
         <div id="testChoices" class="quiz-choices"></div>
         <div id="testAnswer" class="assembled-answer hidden"></div>
         <div id="testWords" class="word-bank"></div>
-        <textarea id="testTextInput" class="hidden" rows="3" placeholder="Type your answer..."></textarea>
+        <textarea id="testTextInput" class="hidden" rows="3" placeholder="請輸入答案..."></textarea>
         <div id="testResult" class="quiz-result"></div>
         <div class="practice-actions">
-          <button id="testStartBtn" type="button">Start test</button>
-          <button id="testCheckBtn" type="button">Check now</button>
-          <button id="testNextBtn" type="button">Next</button>
+          <button id="testCheckBtn" type="button">立即評分</button>
+          <button id="testNextBtn" type="button">下一題</button>
         </div>
       </div>
       <div class="summary-panel">
         <div class="summary-head">
-          <strong>Session progress</strong>
-          <button id="refreshSummaryBtn" type="button">Refresh</button>
+          <strong>學習進度</strong>
+          <button id="refreshSummaryBtn" type="button">重新整理</button>
         </div>
         <div id="summaryStats" class="summary-stats"></div>
         <div id="summaryAdvice" class="summary-advice"></div>

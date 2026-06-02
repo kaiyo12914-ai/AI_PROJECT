@@ -15,6 +15,7 @@
     messageInput: document.getElementById("messageInput"),
     sendBtn: document.getElementById("sendBtn"),
     newChatBtn: document.getElementById("newChatBtn"),
+    conversationSearchInput: document.getElementById("conversationSearchInput"),
     clearChatBtn: document.getElementById("clearChatBtn"),
     regenBtn: document.getElementById("regenBtn"),
     modelTypeSelect: document.getElementById("modelTypeSelect"),
@@ -51,6 +52,7 @@
     debugLines: [],
     sending: false,
     contextConversationId: "",
+    conversationSearch: "",
     autosaveTimer: null,
     configCollapsed: false,
   };
@@ -580,7 +582,21 @@
 
   function renderConversationList() {
     elements.conversationList.innerHTML = "";
-    state.conversations.forEach((item) => {
+    const query = String(state.conversationSearch || "").trim().toLowerCase();
+    const rows = state.conversations.filter(function (item) {
+      if (!query) return true;
+      const title = displayTitle(item.title).toLowerCase();
+      const preview = String(item.preview || "").toLowerCase();
+      return title.includes(query) || preview.includes(query);
+    });
+    if (rows.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "conversation-empty";
+      empty.textContent = query ? "找不到符合的對話" : "尚無對話";
+      elements.conversationList.appendChild(empty);
+      return;
+    }
+    rows.forEach((item) => {
       const row = document.createElement("div");
       row.className = "conversation-row";
 
@@ -1081,6 +1097,12 @@
   elements.newChatBtn.addEventListener("click", function () {
     createConversation().catch(handleUiError);
   });
+  if (elements.conversationSearchInput) {
+    elements.conversationSearchInput.addEventListener("input", function () {
+      state.conversationSearch = elements.conversationSearchInput.value || "";
+      renderConversationList();
+    });
+  }
   elements.regenBtn.addEventListener("click", function () {
     regenerateReply().catch(handleUiError);
   });
