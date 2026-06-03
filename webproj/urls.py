@@ -42,6 +42,7 @@ urlpatterns = [
     path("formalize/", include("webapps.document_formalize.urls")),
     path("videolearning/", include("webapps.videolearning.urls")),
     path("digital-twin-kb/", include("webapps.digital_twin_kb.urls")),
+    path("nl2sql/", include("webapps.vanna.urls")),
 
     # ============================================================
     # Portal (single canonical entry)

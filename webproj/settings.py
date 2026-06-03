@@ -338,6 +338,7 @@ PORTAL_ACL = {
     "tts": ["ALL_AUTHENTICATED"],
     "rag": ["ALL_AUTHENTICATED"],
     "digital_twin_kb": ["ALL_AUTHENTICATED"],
+    "nl2sql": ["ALL_AUTHENTICATED"],
     "vanna": [
         "DB",
         "中心雲端系統跨廠權限",
@@ -434,6 +435,12 @@ RAG_BACKEND = env_str("RAG_BACKEND", "postgres").lower()
 RAG_PG_TABLE = env_str("RAG_PG_TABLE", "public.meeting_records")
 RAG_TOP_K = env_int("RAG_TOP_K", 10)
 
+# NL2SQL / Vanna 2.0
+NL2SQL_EMBEDDING_DIMENSION = env_int("NL2SQL_EMBEDDING_DIMENSION", 1536)
+NL2SQL_DEFAULT_ROW_LIMIT = env_int("NL2SQL_DEFAULT_ROW_LIMIT", 100)
+NL2SQL_MAX_ROW_LIMIT = env_int("NL2SQL_MAX_ROW_LIMIT", 1000)
+NL2SQL_QUERY_TIMEOUT_SEC = env_int("NL2SQL_QUERY_TIMEOUT_SEC", 30)
+
 # 知識庫與 Mock 資料
 API_CONTEXT_PATH = env_str("API_CONTEXT_PATH", f"{_PROJECT_ROOT_STR}\\api\\knowledge\\api.txt")
 MOCK_DB_JSON = env_str("MOCK_DB_JSON", f"{_PROJECT_ROOT_STR}\\SQLTEST_output.json")
@@ -511,6 +518,7 @@ PORTAL_USAGE_CODE_MAP = [
     ("/videolearning/", "VIDEOLEARNING"),
     ("/open-notebook/", "OPEN_NOTEBOOK"),
     ("/digital-twin-kb/", "DIGITAL_TWIN_KB"),
+    ("/nl2sql/", "NL2SQL"),
 ]
 
 # ============================================================
@@ -551,6 +559,7 @@ INSTALLED_APPS = [
     "webapps.document_formalize.apps.DocumentFormalizeConfig",
     "webapps.videolearning.apps.VideolearningConfig",
     "webapps.digital_twin_kb.apps.DigitalTwinKbConfig",
+    "webapps.vanna.apps.VannaConfig",
     "pgvector.django",
     "django.contrib.postgres",
 ]

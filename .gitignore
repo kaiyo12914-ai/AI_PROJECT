@@ -162,3 +162,6 @@ webapps/text2pptx/pptx_templates/無人機2.pptx
 ffmpeg-8.1.1.tar.xz
 scratch/reports
 .playwright-mcp
+*.pid
+webapps/vanna/vendor/vanna2/papers/img/
+*.png

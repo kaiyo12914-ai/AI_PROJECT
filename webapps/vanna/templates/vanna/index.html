@@ -1,0 +1,59 @@
+{% load custom_tags %}
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vanna 2.0 NL2SQL 整合</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <link rel="stylesheet" href="{% custom_static 'vanna/css/index.css' %}">
+</head>
+<body>
+  <main class="vanna-shell">
+    <section class="hero">
+      <div class="eyebrow">Vanna 2.0 Integration</div>
+      <h1>NL2SQL 自然語言查詢 DB</h1>
+      <p>
+        此入口已連接到專案內建的 Vanna 2.0 整合位置，作為後續 PostgreSQL / Oracle
+        自然語言查詢、schema RAG、example embeddings 與 SQL Guard 的入口。
+      </p>
+      <div class="status-card">
+        <strong>目前狀態</strong>
+        {% if vendor_ready %}
+          <span>已整合 Vanna {{ vanna_version }} 原始碼。</span>
+        {% else %}
+          <span>尚未偵測到 Vanna 2.0 vendor 原始碼。</span>
+        {% endif %}
+        <code>{{ vendor_path }}</code>
+      </div>
+    </section>
+
+    <section class="grid" aria-label="整合說明">
+      <article>
+        <h2>入口策略</h2>
+        <ul>
+          <li>Portal 的 NL2SQL 卡片導向此 Django app。</li>
+          <li>既有外部 Vanna 節點保留，不取代。</li>
+          <li>權限沿用 Portal ACL 的 nl2sql 節點。</li>
+        </ul>
+      </article>
+      <article>
+        <h2>Vanna 範圍</h2>
+        <ul>
+          <li>使用 Vanna 2.0 作為 NL2SQL 與 training 核心。</li>
+          <li>schema / example embeddings 後續落地至 pgvector。</li>
+          <li>不另建第二套 Django 專案或獨立環境。</li>
+        </ul>
+      </article>
+      <article>
+        <h2>下一階段</h2>
+        <ul>
+          <li>建立 Vanna adapter，統一呼叫 llm_factory。</li>
+          <li>透過 db_factory 控制 PostgreSQL / Oracle 查詢。</li>
+          <li>加入唯讀 SQL Guard、審計紀錄與測試。</li>
+        </ul>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

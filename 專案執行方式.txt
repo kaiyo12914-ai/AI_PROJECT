@@ -128,3 +128,7 @@ am_us_3030267d9173c58954dafdc10b13becd51bc93d00d389556aee09fb17b85b5d0
 DisplaySwitch.exe /internal # 只用主螢幕
 
 mermaid AI畫圖工具
+
+& 'H:\AI\AI_TOOLS\Scripts\Activate.ps1'
+Set-Location -Path "H:\AI\AI_TOOLS"
+H:\AI\AI_TOOLS\VENV\Scripts\python.exe get_Window.py
