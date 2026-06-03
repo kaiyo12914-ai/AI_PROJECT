@@ -4,56 +4,115 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Vanna 2.0 NL2SQL 整合</title>
+  <title>Vanna 2.0 NL2SQL 查詢工作區</title>
   <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Stylesheets -->
   <link rel="stylesheet" href="{% custom_static 'vanna/css/index.css' %}">
+  <!-- Defer JS Entry -->
+  <script defer src="{% custom_static 'vanna/js/index.js' %}"></script>
 </head>
-<body>
-  <main class="vanna-shell">
-    <section class="hero">
-      <div class="eyebrow">Vanna 2.0 Integration</div>
-      <h1>NL2SQL 自然語言查詢 DB</h1>
-      <p>
-        此入口已連接到專案內建的 Vanna 2.0 整合位置，作為後續 PostgreSQL / Oracle
-        自然語言查詢、schema RAG、example embeddings 與 SQL Guard 的入口。
-      </p>
-      <div class="status-card">
-        <strong>目前狀態</strong>
-        {% if vendor_ready %}
-          <span>已整合 Vanna {{ vanna_version }} 原始碼。</span>
-        {% else %}
-          <span>尚未偵測到 Vanna 2.0 vendor 原始碼。</span>
-        {% endif %}
-        <code>{{ vendor_path }}</code>
-      </div>
-    </section>
+<body data-base-url="{{ request.script_name }}">
+  <div class="vanna-shell">
+    <!-- 左側控制面板 -->
+    <aside>
+      <!-- 系統狀態卡 -->
+      <section class="panel-card" aria-label="系統狀態">
+        <h2>🌐 整合狀態</h2>
+        <div style="margin-bottom: 12px;">
+          {% if vendor_ready %}
+            <span class="status-badge ready">已加載 Vanna {{ vanna_version }}</span>
+          {% else %}
+            <span class="status-badge error">尚未偵測到 Vanna</span>
+          {% endif %}
+        </div>
+        <div style="font-size: 12px; color: #64748b; word-break: break-all;">
+          <strong>載入路徑:</strong><br>
+          <code>{{ vendor_path }}</code>
+        </div>
+      </section>
 
-    <section class="grid" aria-label="整合說明">
-      <article>
-        <h2>入口策略</h2>
-        <ul>
-          <li>Portal 的 NL2SQL 卡片導向此 Django app。</li>
-          <li>既有外部 Vanna 節點保留，不取代。</li>
-          <li>權限沿用 Portal ACL 的 nl2sql 節點。</li>
-        </ul>
-      </article>
-      <article>
-        <h2>Vanna 範圍</h2>
-        <ul>
-          <li>使用 Vanna 2.0 作為 NL2SQL 與 training 核心。</li>
-          <li>schema / example embeddings 後續落地至 pgvector。</li>
-          <li>不另建第二套 Django 專案或獨立環境。</li>
-        </ul>
-      </article>
-      <article>
-        <h2>下一階段</h2>
-        <ul>
-          <li>建立 Vanna adapter，統一呼叫 llm_factory。</li>
-          <li>透過 db_factory 控制 PostgreSQL / Oracle 查詢。</li>
-          <li>加入唯讀 SQL Guard、審計紀錄與測試。</li>
-        </ul>
-      </article>
-    </section>
-  </main>
+      <!-- 同步管理面板 -->
+      <section class="panel-card" aria-label="資料同步與管理">
+        <h2>⚙️ 數據管理</h2>
+        <div class="control-group">
+          <label>指定資料源</label>
+          <select id="dataSourceSelect">
+            <option value="legacy_vanna_chroma">Chroma 歷史資料集 (Oracle)</option>
+            <option value="default_pg">PostgreSQL 資料源 (預設)</option>
+          </select>
+        </div>
+        
+        <div style="display: grid; gap: 10px;">
+          <button id="btnSchemaSync" class="btn btn-secondary" onclick="triggerSchemaSync()">
+            🔄 同步資料庫結構 (Schema Sync)
+          </button>
+          <button id="btnVannaSync" class="btn btn-secondary" onclick="triggerVannaSync()">
+            🧠 同步 Vanna 訓練 (Vanna Sync)
+          </button>
+        </div>
+      </section>
+
+      <!-- 快捷提問範例 -->
+      <section class="panel-card" aria-label="快捷提問範例">
+        <h2>💡 範例提問</h2>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <button class="btn btn-secondary" style="font-size:12.5px; text-align:left; justify-content:flex-start;" onclick="askPreset('查詢有多少份公文')">
+            💬 查詢有多少份公文
+          </button>
+          <button class="btn btn-secondary" style="font-size:12.5px; text-align:left; justify-content:flex-start;" onclick="askPreset('查詢前5筆公文的發文字號與主旨')">
+            💬 查詢前5筆公文的發文字號與主旨
+          </button>
+          <button class="btn btn-secondary" style="font-size:12.5px; text-align:left; justify-content:flex-start;" onclick="askPreset('列出所有附件檔名中含有PDF的公文案號')">
+            💬 列出附件含有PDF的公文案號
+          </button>
+        </div>
+      </section>
+
+      <!-- 控制台日誌 -->
+      <section class="panel-card" aria-label="系統操作日誌" style="flex: 1; display: flex; flex-direction: column;">
+        <h2>💻 系統操作日誌</h2>
+        <div id="consoleLogs" class="console-log" style="flex: 1;">
+          <!-- 日誌內容會被 JS 動態寫入 -->
+        </div>
+      </section>
+    </aside>
+
+    <!-- 右側對話主視窗 -->
+    <main class="workspace">
+      <!-- 頂部資訊列 -->
+      <header class="chat-header">
+        <h1>Vanna 2.0 NL2SQL 智慧查詢工作區</h1>
+        <div style="font-size: 13px; color: #64748b;">
+          PostgreSQL / Oracle 唯讀安全查詢端點
+        </div>
+      </header>
+
+      <!-- 對話訊息流 -->
+      <section id="chatMessages" class="chat-messages">
+        <div class="msg-row assistant">
+          <div class="msg-bubble">
+            歡迎來到 **NL2SQL 查詢工作區**！👋<br>
+            您可以在下方輸入自然語言問題，AI 會自動比對向量資料庫中的 Schema 與範例，為您生成對應的 SQL 查詢。<br>
+            所有生成的 SQL 皆會經過 **SQL Guard (AST 解析)** 的安全審查，唯讀且僅限 `SELECT` 操作，以確保資料庫安全。
+          </div>
+        </div>
+      </section>
+
+      <!-- 問題輸入區域 -->
+      <footer class="chat-input-area">
+        <div class="input-container">
+          <input type="text" id="questionInput" placeholder="在此輸入您的問題... (例如：查詢公文總數量)" autocomplete="off">
+          <button id="sendBtn" class="send-btn" onclick="sendQuestion()" aria-label="傳送提問">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#ffffff;">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </div>
+      </footer>
+    </main>
+  </div>
 </body>
 </html>

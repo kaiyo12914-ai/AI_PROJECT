@@ -12,15 +12,19 @@ from typing import Any
 from django.conf import settings
 from django.utils import timezone
 
+from pgvector.django import CosineDistance
 from webapps.database.db_factory import db_query_all
-from webapps.llm.llm_factory import get_chat_model
+from webapps.llm.llm_factory import get_chat_model, get_embedding_model
 from webapps.vanna.models import (
     DataSource,
     QueryLog,
     SchemaObject,
     TrainingExample,
     VannaTrainingSync,
+    SchemaEmbedding,
+    ExampleEmbedding,
 )
+from webapps.vanna.sql_guard import validate_sql
 
 
 APP_DIR = Path(__file__).resolve().parent
@@ -394,18 +398,63 @@ def _score_schema(question: str, obj: SchemaObject) -> int:
 
 
 def retrieve_context(data_source: DataSource, question: str, *, top_k: int = 6) -> dict[str, Any]:
-    objects = list(SchemaObject.objects.filter(data_source=data_source, is_enabled=True))
-    ranked = sorted(objects, key=lambda obj: _score_schema(question, obj), reverse=True)
-    selected = [obj for obj in ranked[:top_k] if _score_schema(question, obj) > 0] or ranked[: min(top_k, len(ranked))]
+    # 嘗試獲取向量問題嵌入
+    q_vector = None
+    try:
+        emb_model = get_embedding_model()
+        q_vector = emb_model.embed_query(question)
+    except Exception:
+        # Fallback to keyword if model fetch fails
+        pass
 
-    example_tokens = _tokenize(question)
+    selected_objects = []
     examples = []
-    for ex in TrainingExample.objects.filter(data_source=data_source, review_status="approved").order_by("-updated_at")[:20]:
-        text = f"{ex.question}\n{ex.sql_text}".lower()
-        score = sum(1 for tok in example_tokens if tok in text)
-        if score > 0:
-            examples.append((score, ex))
-    examples = [ex for _, ex in sorted(examples, key=lambda item: item[0], reverse=True)[:3]]
+
+    # 1. 檢索最相似的 SchemaObjects
+    if q_vector:
+        # 使用 pgvector 的 CosineDistance 來查詢相似的 DDL 與 Doc 向量
+        se_matches = SchemaEmbedding.objects.filter(
+            schema_object__data_source=data_source,
+            schema_object__is_enabled=True,
+            embedding__isnull=False
+        ).annotate(
+            distance=CosineDistance("embedding", q_vector)
+        ).order_by("distance")[:top_k]
+
+        seen_ids = set()
+        for se in se_matches:
+            obj = se.schema_object
+            if obj.id not in seen_ids:
+                seen_ids.add(obj.id)
+                selected_objects.append(obj)
+                
+    # Fallback to keyword-based score if no vector matches found
+    if not selected_objects:
+        objects = list(SchemaObject.objects.filter(data_source=data_source, is_enabled=True))
+        ranked = sorted(objects, key=lambda obj: _score_schema(question, obj), reverse=True)
+        selected_objects = [obj for obj in ranked[:top_k] if _score_schema(question, obj) > 0] or ranked[: min(top_k, len(ranked))]
+
+    # 2. 檢索最相似的 Approved SQL Examples
+    if q_vector:
+        ee_matches = ExampleEmbedding.objects.filter(
+            data_source=data_source,
+            training_example__review_status="approved",
+            embedding__isnull=False
+        ).annotate(
+            distance=CosineDistance("embedding", q_vector)
+        ).order_by("distance")[:3]
+        examples = [ee.training_example for ee in ee_matches]
+
+    # Fallback to keyword-based if no vector examples found
+    if not examples:
+        example_tokens = _tokenize(question)
+        temp_examples = []
+        for ex in TrainingExample.objects.filter(data_source=data_source, review_status="approved").order_by("-updated_at")[:20]:
+            text = f"{ex.question}\n{ex.sql_text}".lower()
+            score = sum(1 for tok in example_tokens if tok in text)
+            if score > 0:
+                temp_examples.append((score, ex))
+        examples = [ex for _, ex in sorted(temp_examples, key=lambda item: item[0], reverse=True)[:3]]
 
     return {
         "tables": [
@@ -417,7 +466,7 @@ def retrieve_context(data_source: DataSource, question: str, *, top_k: int = 6) 
                 "ddl": obj.ddl_text,
                 "columns": obj.columns_json,
             }
-            for obj in selected
+            for obj in selected_objects
         ],
         "examples": [
             {
@@ -483,6 +532,12 @@ def generate_sql(data_source: DataSource, question: str, user_id: str = "") -> G
     response = llm.invoke(prompt)
     sql = extract_sql(_llm_to_text(response))
     latency_ms = int((time.monotonic() - started) * 1000)
+
+    # 整合 SQL Guard 進行安全審查
+    is_safe, guard_err = validate_sql(sql)
+    guard_status = "passed" if is_safe else "blocked"
+    guard_message = "" if is_safe else guard_err
+
     qlog = QueryLog.objects.create(
         data_source=data_source,
         user_id=user_id,
@@ -491,12 +546,14 @@ def generate_sql(data_source: DataSource, question: str, user_id: str = "") -> G
         retrieved_context_json=context,
         generated_sql=sql,
         cleaned_sql=sql,
-        guard_status="not_checked",
+        guard_status=guard_status,
+        guard_message=guard_message,
         execution_status="not_executed",
         latency_ms=latency_ms,
         engine_version="ai_tools_vanna_adapter_v1",
         prompt_version="nl2sql_generate_v1",
-        retriever_version="keyword_v1",
+        guard_version="sql_guard_ast_v1",
+        retriever_version="vector_v1",
         vanna_version=runtime.version,
         vanna_training_version="local_sync_v1",
         vanna_response_json={"vendor_available": runtime.available, "vendor_error": runtime.error},
@@ -509,6 +566,8 @@ def generate_sql(data_source: DataSource, question: str, user_id: str = "") -> G
             "examples": len(context.get("examples", [])),
             "vendor_available": runtime.available,
             "vendor_version": runtime.version,
+            "guard_status": guard_status,
+            "guard_message": guard_message,
         },
         query_log_id=qlog.id,
         latency_ms=latency_ms,
