@@ -78,7 +78,7 @@
       {% endif %}
       {% if can_nl2sql %}
         {% url 'nl2sql:page' as nl2sql_href %}
-        {% include "portal/_svg_card.html" with href=nl2sql_href title="NL2SQL 自然語言查詢 DB" subtitle="PostgreSQL / Oracle 智慧查詢" tone="cyan" icon="nl2sql" variant=card_variant %}
+        {% include "portal/_svg_card.html" with href=nl2sql_href title="自然語言查詢 DB" subtitle="PostgreSQL / Oracle 智慧查詢" tone="cyan" icon="nl2sql" variant=card_variant %}
       {% endif %}
       {% if can_projectnotes %}
         {% url 'projectnotes:page' as projectnotes_href %}

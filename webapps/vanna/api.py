@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
+from django.conf import settings
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from webapps.portal.decorators import require_node
-from webapps.vanna.models import DataSource, QueryLog
+from webapps.vanna.models import DataSource, QueryLog, SchemaObject, TrainingExample, VannaTrainingSync
+from webapps.vanna.views import is_vanna_admin
 from webapps.vanna.vanna_adapter import (
     ensure_vanna_vendor_loaded,
     generate_sql,
@@ -46,6 +49,40 @@ def _generate_payload(result: Any, *, include_prompt: bool = False) -> dict[str,
     return data
 
 
+def _env_name() -> str:
+    return str(getattr(settings, "ENV_NAME", "") or "").strip().upper()
+
+
+def _is_int_env() -> bool:
+    return _env_name() == "INT"
+
+
+def _execution_policy(data_source: DataSource) -> dict[str, Any]:
+    if data_source.db_type == "oracle":
+        if _is_int_env():
+            return {
+                "mode": "oracle_execute",
+                "can_execute": True,
+                "message": "ENV=INT，可於 SQL Guard 通過後執行 Oracle 查詢。",
+            }
+        return {
+            "mode": "sql_only_ext",
+            "can_execute": False,
+            "message": "ENV=EXT，Oracle 僅產生 SQL，不連線執行查詢。",
+        }
+    if data_source.db_type == "postgresql":
+        return {
+            "mode": "metadata_store_only",
+            "can_execute": False,
+            "message": "PostgreSQL 僅作為 Vanna/NL2SQL metadata 與訓練資料儲存庫，不作為業務查詢目標。",
+        }
+    return {
+        "mode": "unsupported",
+        "can_execute": False,
+        "message": f"Unsupported data source type: {data_source.db_type}",
+    }
+
+
 def _user_id(request: HttpRequest) -> str:
     return str(
         getattr(request, "login_user_name", "")
@@ -55,9 +92,15 @@ def _user_id(request: HttpRequest) -> str:
 
 
 def _resolve_data_source(data: dict[str, Any]) -> DataSource:
-    code = str(data.get("data_source") or data.get("code") or "default_pg").strip()
-    db_type = str(data.get("db_type") or "postgresql").strip().lower()
-    default_schema = str(data.get("schema") or data.get("default_schema") or ("public" if db_type == "postgresql" else "")).strip()
+    code = str(data.get("data_source") or data.get("code") or "legacy_vanna_chroma").strip()
+    db_type = str(data.get("db_type") or "").strip().lower()
+    if not db_type:
+        db_type = "postgresql" if code == "default_pg" else "oracle"
+    default_schema = str(
+        data.get("schema")
+        or data.get("default_schema")
+        or ("public" if db_type == "postgresql" else "LEGACY")
+    ).strip()
     return get_or_create_data_source(
         code=code,
         name=str(data.get("name") or code).strip(),
@@ -71,16 +114,39 @@ def _resolve_data_source(data: dict[str, Any]) -> DataSource:
 @require_node("nl2sql", api=True)
 def status_api(request: HttpRequest) -> JsonResponse:
     runtime = ensure_vanna_vendor_loaded()
-    return JsonResponse({"ok": runtime.available, "runtime": _payload(runtime)})
+    return JsonResponse(
+        {
+            "ok": runtime.available,
+            "runtime": _payload(runtime),
+            "env": _env_name(),
+            "policy": {
+                "postgresql": "metadata_store_only",
+                "oracle": "execute_only_when_ENV_INT",
+            },
+        }
+    )
 
 
 @csrf_exempt
 @require_POST
 @require_node("nl2sql", api=True)
 def schema_sync_api(request: HttpRequest) -> JsonResponse:
+    if not is_vanna_admin(request):
+        return JsonResponse({"ok": False, "error": "Only Vanna administrators can manage schema sync."}, status=403)
+
     body = _json_body(request)
     try:
         data_source = _resolve_data_source(body)
+        if data_source.db_type == "oracle" and not _is_int_env():
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "error": "ENV=EXT 不允許連線同步 Oracle schema；請使用已匯入的 Vanna training data，或切換 ENV=INT 後再同步。",
+                    "env": _env_name(),
+                    "policy": _execution_policy(data_source),
+                },
+                status=403,
+            )
         result = sync_schema(data_source)
         return JsonResponse({"ok": True, "result": _payload(result)})
     except Exception as exc:
@@ -91,6 +157,9 @@ def schema_sync_api(request: HttpRequest) -> JsonResponse:
 @require_POST
 @require_node("nl2sql", api=True)
 def training_sync_api(request: HttpRequest) -> JsonResponse:
+    if not is_vanna_admin(request):
+        return JsonResponse({"ok": False, "error": "Only Vanna administrators can manage training sync."}, status=403)
+
     body = _json_body(request)
     try:
         data_source = _resolve_data_source(body)
@@ -98,6 +167,121 @@ def training_sync_api(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"ok": True, "result": _payload(result)})
     except Exception as exc:
         return JsonResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status=500)
+
+
+def _training_dataset_payload(data_source: DataSource) -> dict[str, Any]:
+    schema_qs = SchemaObject.objects.filter(data_source=data_source)
+    examples_qs = TrainingExample.objects.filter(data_source=data_source)
+    sync_qs = VannaTrainingSync.objects.filter(data_source=data_source)
+
+    schema_items = [
+        {
+            "id": obj.id,
+            "schema": obj.schema_name,
+            "name": obj.object_name,
+            "type": obj.object_type,
+            "enabled": obj.is_enabled,
+            "columns": len(obj.columns_json or []),
+            "description": obj.description,
+            "updated_at": obj.updated_at,
+        }
+        for obj in schema_qs.order_by("schema_name", "object_name")[:30]
+    ]
+    example_items = [
+        {
+            "id": ex.id,
+            "question": ex.question,
+            "sql": ex.sql_text,
+            "dialect": ex.dialect,
+            "status": ex.review_status,
+            "created_by": ex.created_by,
+            "updated_at": ex.updated_at,
+        }
+        for ex in examples_qs.order_by("-updated_at")[:30]
+    ]
+    sync_items = [
+        {
+            "id": item.id,
+            "type": item.sync_type,
+            "status": item.sync_status,
+            "training_id": item.vanna_training_id,
+            "error": item.error_message,
+            "updated_at": item.updated_at,
+        }
+        for item in sync_qs.order_by("-updated_at")[:30]
+    ]
+    return {
+        "data_source": {
+            "code": data_source.code,
+            "name": data_source.name,
+            "db_type": data_source.db_type,
+            "db_profile": data_source.db_profile,
+            "schema": data_source.default_schema,
+        },
+        "summary": {
+            "schema_objects": schema_qs.count(),
+            "enabled_schema_objects": schema_qs.filter(is_enabled=True).count(),
+            "training_examples": examples_qs.count(),
+            "approved_examples": examples_qs.filter(review_status="approved").count(),
+            "vanna_sync_records": sync_qs.count(),
+            "synced_records": sync_qs.filter(sync_status="synced").count(),
+            "failed_records": sync_qs.filter(sync_status="failed").count(),
+        },
+        "schema_objects": schema_items,
+        "training_examples": example_items,
+        "vanna_sync_records": sync_items,
+    }
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+@require_node("nl2sql", api=True)
+def training_dataset_api(request: HttpRequest) -> JsonResponse:
+    if not is_vanna_admin(request):
+        return JsonResponse({"ok": False, "error": "Only Vanna administrators can manage training dataset."}, status=403)
+
+    body = _json_body(request) if request.method == "POST" else {}
+    params = request.GET if request.method == "GET" else body
+    try:
+        data_source = _resolve_data_source(dict(params))
+    except Exception as exc:
+        return JsonResponse({"ok": False, "error": f"Failed to resolve data source: {exc}"}, status=400)
+
+    if request.method == "GET":
+        return JsonResponse({"ok": True, "result": _training_dataset_payload(data_source)}, json_dumps_params={"default": str})
+
+    question = str(body.get("question") or "").strip()
+    sql_text = str(body.get("sql") or "").strip()
+    if not question or not sql_text:
+        return JsonResponse({"ok": False, "error": "question and sql are required"}, status=400)
+
+    from webapps.vanna.sql_guard import validate_sql
+
+    is_safe, guard_err = validate_sql(sql_text)
+    if not is_safe:
+        return JsonResponse({"ok": False, "error": f"SQL blocked by SQL Guard: {guard_err}"}, status=403)
+
+    created_by = _user_id(request)
+    example = TrainingExample.objects.create(
+        data_source=data_source,
+        question=question,
+        sql_text=sql_text,
+        dialect="oracle" if data_source.db_type == "oracle" else "postgresql",
+        review_status="approved",
+        created_by=created_by,
+        tags_json=body.get("tags") if isinstance(body.get("tags"), list) else [],
+    )
+    return JsonResponse(
+        {
+            "ok": True,
+            "result": {
+                "id": example.id,
+                "question": example.question,
+                "sql": example.sql_text,
+                "status": example.review_status,
+            },
+        }
+    )
 
 
 @csrf_exempt
@@ -112,15 +296,12 @@ def generate_api(request: HttpRequest) -> JsonResponse:
     try:
         data_source = _resolve_data_source(body)
         result = generate_sql(data_source, question, user_id=_user_id(request))
-        include_prompt = bool(body.get("debug_prompt"))
-        return JsonResponse({"ok": True, "result": _generate_payload(result, include_prompt=include_prompt)})
+        payload = _generate_payload(result, include_prompt=bool(body.get("debug_prompt")))
+        payload["execution_policy"] = _execution_policy(data_source)
+        payload["env"] = _env_name()
+        return JsonResponse({"ok": True, "result": payload})
     except Exception as exc:
         return JsonResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status=500)
-
-
-def _is_ext_env() -> bool:
-    import os
-    return (os.getenv("ENV") or "").strip().upper() == "EXT"
 
 
 @csrf_exempt
@@ -143,14 +324,13 @@ def execute_api(request: HttpRequest) -> JsonResponse:
     if not sql:
         return JsonResponse({"ok": False, "error": "SQL statement is required"}, status=400)
 
-    data_source = None
     try:
         data_source = qlog.data_source if qlog else _resolve_data_source(body)
     except Exception as exc:
         return JsonResponse({"ok": False, "error": f"Failed to resolve data source: {exc}"}, status=400)
 
-    # 1. 重新執行 SQL Guard 安全審查（雙重把關）
     from webapps.vanna.sql_guard import validate_sql
+
     is_safe, guard_err = validate_sql(sql)
     if not is_safe:
         if qlog:
@@ -162,61 +342,61 @@ def execute_api(request: HttpRequest) -> JsonResponse:
     if not data_source.enabled:
         return JsonResponse({"ok": False, "error": "Data source is disabled"}, status=403)
 
-    # 2. 處理 ENV=EXT 與非 PostgreSQL 的 MOCK 執行
-    is_mock = False
-    mock_rows = []
-    mock_columns = []
+    policy = _execution_policy(data_source)
+    if data_source.db_type == "postgresql":
+        if qlog:
+            qlog.final_sql = sql
+            qlog.execution_status = "blocked_metadata_store_only"
+            qlog.error_message = policy["message"]
+            qlog.save()
+        return JsonResponse({"ok": False, "error": policy["message"], "policy": policy}, status=403)
 
-    if data_source.db_type != "postgresql" and _is_ext_env():
-        is_mock = True
-        mock_columns = ["ID", "NAME", "VAL", "STATUS", "MOCK_MESSAGE"]
-        mock_rows = [
-            [1, "Mock Record A", 100.5, "ACTIVE", "Running in ENV=EXT mode; physical connection is mocked."],
-            [2, "Mock Record B", 200.0, "PENDING", "For security and compliance, non-PostgreSQL external DBs are mocked."],
-            [3, "Mock Record C", 300.75, "INACTIVE", "Physical queries are only performed when ENV=INT."],
-        ]
+    if data_source.db_type == "oracle" and not _is_int_env():
+        if qlog:
+            qlog.final_sql = sql
+            qlog.execution_status = "not_executed_ext_sql_only"
+            qlog.error_message = ""
+            qlog.save()
+        return JsonResponse(
+            {
+                "ok": True,
+                "sql_only": True,
+                "sql": sql,
+                "columns": [],
+                "rows": [],
+                "latency_ms": 0,
+                "policy": policy,
+                "message": policy["message"],
+            }
+        )
 
-    import time
     started = time.monotonic()
     rows = []
     columns = []
     error_msg = ""
     latency_ms = 0
 
-    if is_mock:
-        rows = mock_rows
-        columns = mock_columns
-        latency_ms = 1
-    else:
-        # 3. 實體資料庫查詢（依資料庫類型區分，手動提取 description）
-        try:
-            if data_source.db_type == "postgresql":
-                from django.db import connection
-                with connection.cursor() as cursor:
-                    cursor.execute(sql)
-                    if cursor.description:
-                        columns = [col[0] for col in cursor.description]
-                    rows = list(cursor.fetchall())
-            elif data_source.db_type == "oracle":
-                from webapps.database.db_factory import db_connect
-                conn = db_connect("oracle", profile=data_source.db_profile)
-                try:
-                    with conn.cursor() as cur:
-                        cur.execute(sql)
-                        if cur.description:
-                            columns = [col[0] for col in cur.description]
-                        rows = list(cur.fetchall())
-                finally:
-                    conn.close()
-            else:
-                error_msg = f"Unsupported database type for execution: '{data_source.db_type}'"
+    try:
+        if data_source.db_type == "oracle":
+            from webapps.database.db_factory import db_connect
 
-            latency_ms = int((time.monotonic() - started) * 1000)
-        except Exception as exc:
-            error_msg = str(exc)
-            latency_ms = int((time.monotonic() - started) * 1000)
+            conn = db_connect("oracle", profile=data_source.db_profile)
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(sql)
+                    if cur.description:
+                        columns = [col[0] for col in cur.description]
+                    rows = list(cur.fetchall())
+            finally:
+                conn.close()
+        else:
+            error_msg = f"Unsupported database type for execution: '{data_source.db_type}'"
 
-    # 4. 更新日誌與回傳
+        latency_ms = int((time.monotonic() - started) * 1000)
+    except Exception as exc:
+        error_msg = str(exc)
+        latency_ms = int((time.monotonic() - started) * 1000)
+
     if qlog:
         qlog.final_sql = sql
         qlog.latency_ms = (qlog.latency_ms or 0) + latency_ms
@@ -229,13 +409,16 @@ def execute_api(request: HttpRequest) -> JsonResponse:
         qlog.save()
 
     if error_msg:
-        return JsonResponse({"ok": False, "error": error_msg}, status=500)
+        return JsonResponse({"ok": False, "error": error_msg, "policy": policy}, status=500)
 
-    return JsonResponse({
-        "ok": True,
-        "columns": columns,
-        "rows": rows,
-        "is_mock": is_mock,
-        "latency_ms": latency_ms
-    })
-
+    return JsonResponse(
+        {
+            "ok": True,
+            "columns": columns,
+            "rows": rows,
+            "is_mock": False,
+            "sql_only": False,
+            "latency_ms": latency_ms,
+            "policy": policy,
+        }
+    )

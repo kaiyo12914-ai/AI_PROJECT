@@ -113,6 +113,171 @@ function triggerVannaSync() {
   });
 }
 
+function selectedDataSourceCode() {
+  const selectEl = document.getElementById("dataSourceSelect");
+  return selectEl ? selectEl.value : "legacy_vanna_chroma";
+}
+
+function openTrainingDatasetManager() {
+  const chatMessages = document.getElementById("chatMessages");
+  const row = document.createElement("div");
+  row.className = "msg-row assistant";
+  const bubble = document.createElement("div");
+  bubble.className = "msg-bubble training-manager";
+  bubble.innerHTML = `<div style="display:flex;align-items:center;gap:10px;"><div class="spinner" style="border-top-color:#06b6d4;"></div> 載入 Vanna 訓練資料集...</div>`;
+  row.appendChild(bubble);
+  chatMessages.appendChild(row);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+  loadTrainingDataset(bubble);
+}
+
+function loadTrainingDataset(bubbleEl) {
+  const code = encodeURIComponent(selectedDataSourceCode());
+  fetch(apiurl(`/nl2sql/api/vanna/training-dataset/?code=${code}`), {
+    method: "GET",
+    headers: {
+      "X-CSRFToken": getCookie("csrftoken")
+    }
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (!data.ok) {
+      bubbleEl.innerHTML = `<div style="color:#ef4444;">載入失敗: ${escapeHtml(data.error)}</div>`;
+      addLog(`訓練資料集載入失敗: ${data.error}`, "error");
+      return;
+    }
+    renderTrainingDatasetManager(bubbleEl, data.result);
+    addLog("Vanna 訓練資料集已載入。", "success");
+  })
+  .catch(err => {
+    bubbleEl.innerHTML = `<div style="color:#ef4444;">載入失敗: ${escapeHtml(err.message)}</div>`;
+    addLog(`訓練資料集載入失敗: ${err.message}`, "error");
+  });
+}
+
+function renderTrainingDatasetManager(bubbleEl, result) {
+  const summary = result.summary || {};
+  const ds = result.data_source || {};
+  const schemaRows = (result.schema_objects || []).map(item => `
+    <tr>
+      <td>${escapeHtml(item.schema)}.${escapeHtml(item.name)}</td>
+      <td>${escapeHtml(item.type)}</td>
+      <td>${escapeHtml(String(item.columns || 0))}</td>
+      <td>${item.enabled ? "啟用" : "停用"}</td>
+    </tr>
+  `).join("");
+  const exampleRows = (result.training_examples || []).map(item => `
+    <tr>
+      <td>${escapeHtml(item.question)}</td>
+      <td><code>${escapeHtml(item.status)}</code></td>
+      <td>${escapeHtml(item.created_by || "")}</td>
+    </tr>
+  `).join("");
+  const syncRows = (result.vanna_sync_records || []).map(item => `
+    <tr>
+      <td>${escapeHtml(item.type)}</td>
+      <td><code>${escapeHtml(item.status)}</code></td>
+      <td>${escapeHtml(item.training_id || "")}</td>
+    </tr>
+  `).join("");
+
+  bubbleEl.innerHTML = `
+    <div class="training-head">
+      <div>
+        <strong>Vanna 2.0 訓練資料集維護</strong>
+        <div class="muted-text">資料源：${escapeHtml(ds.name || ds.code || "")}｜DB：${escapeHtml(ds.db_type || "")}｜Schema：${escapeHtml(ds.schema || "")}</div>
+      </div>
+      <button class="btn btn-secondary mini-btn" onclick="loadTrainingDataset(this.closest('.msg-bubble'))">重新整理</button>
+    </div>
+    <div class="metric-grid">
+      <div class="metric-card"><span>Schema</span><strong>${summary.schema_objects || 0}</strong></div>
+      <div class="metric-card"><span>啟用 Schema</span><strong>${summary.enabled_schema_objects || 0}</strong></div>
+      <div class="metric-card"><span>Approved Examples</span><strong>${summary.approved_examples || 0}</strong></div>
+      <div class="metric-card"><span>Vanna Synced</span><strong>${summary.synced_records || 0}</strong></div>
+      <div class="metric-card"><span>Failed</span><strong>${summary.failed_records || 0}</strong></div>
+    </div>
+
+    <div class="training-form">
+      <div class="form-title">新增 Approved Example</div>
+      <input id="trainingQuestionInput" type="text" placeholder="自然語言問題，例如：[人事]205廠 查詢各單位目前在職人員數量">
+      <textarea id="trainingSqlInput" placeholder="對應 SQL，只允許 SELECT / WITH SELECT"></textarea>
+      <button class="btn btn-primary" onclick="submitTrainingExample(this)">新增到訓練資料集</button>
+    </div>
+
+    <div class="training-section">
+      <h3>Schema metadata</h3>
+      <div class="table-wrapper training-table-wrap">
+        <table class="result-table">
+          <thead><tr><th>Table/View</th><th>Type</th><th>Columns</th><th>Status</th></tr></thead>
+          <tbody>${schemaRows || `<tr><td colspan="4">尚無 schema metadata</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="training-section">
+      <h3>Approved examples</h3>
+      <div class="table-wrapper training-table-wrap">
+        <table class="result-table">
+          <thead><tr><th>Question</th><th>Status</th><th>Created by</th></tr></thead>
+          <tbody>${exampleRows || `<tr><td colspan="3">尚無 approved examples</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="training-section">
+      <h3>Vanna sync records</h3>
+      <div class="table-wrapper training-table-wrap">
+        <table class="result-table">
+          <thead><tr><th>Type</th><th>Status</th><th>Training ID</th></tr></thead>
+          <tbody>${syncRows || `<tr><td colspan="3">尚無 sync records</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function submitTrainingExample(btn) {
+  const bubbleEl = btn.closest(".msg-bubble");
+  const questionEl = bubbleEl.querySelector("#trainingQuestionInput");
+  const sqlEl = bubbleEl.querySelector("#trainingSqlInput");
+  const question = questionEl.value.trim();
+  const sql = sqlEl.value.trim();
+  if (!question || !sql) {
+    addLog("請輸入 question 與 SQL 後再新增訓練範例。", "error");
+    return;
+  }
+
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `<div class="spinner"></div> 新增中...`;
+  fetch(apiurl("/nl2sql/api/vanna/training-dataset/"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": getCookie("csrftoken")
+    },
+    body: JSON.stringify({
+      code: selectedDataSourceCode(),
+      question: question,
+      sql: sql
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (!data.ok) {
+      addLog(`新增訓練範例失敗: ${data.error}`, "error");
+      return;
+    }
+    addLog("已新增 approved example，請執行 Vanna Sync 使訓練資料生效。", "success");
+    loadTrainingDataset(bubbleEl);
+  })
+  .catch(err => {
+    addLog(`新增訓練範例失敗: ${err.message}`, "error");
+  })
+  .finally(() => {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  });
+}
+
 // 5. 對話工作區
 function appendUserMessage(text) {
   const chatMessages = document.getElementById("chatMessages");
@@ -183,19 +348,30 @@ function renderSqlResponse(bubbleEl, result) {
   const latency = result.latency_ms;
   const guardStatus = result.context_summary.guard_status;
   const guardMessage = result.context_summary.guard_message;
+  const executionPolicy = result.execution_policy || {};
+  const canExecute = executionPolicy.can_execute === true;
+  const policyMessage = executionPolicy.message || "";
 
   let guardHtml = "";
   let runButtonHtml = "";
+  let policyHtml = "";
+
+  if (policyMessage) {
+    const policyClass = canExecute ? "passed" : "blocked";
+    policyHtml = `<div class="guard-banner ${policyClass}">${escapeHtml(policyMessage)}</div>`;
+  }
 
   if (guardStatus === "passed") {
-    guardHtml = `<div class="guard-banner passed">🛡️ SQL Guard: 安全審查通過 (AST Passed)</div>`;
-    runButtonHtml = `
-      <div class="run-btn-row">
-        <button class="btn btn-primary" onclick="runQuery(${queryLogId}, this)">
-          ▶ 唯讀執行此查詢
-        </button>
-      </div>
-    `;
+    guardHtml = `<div class="guard-banner passed">SQL Guard: passed</div>`;
+    if (canExecute) {
+      runButtonHtml = `
+        <div class="run-btn-row">
+          <button class="btn btn-primary" onclick="runQuery(${queryLogId}, this)">
+            Execute Oracle Query
+          </button>
+        </div>
+      `;
+    }
   } else {
     guardHtml = `
       <div class="guard-banner blocked">
@@ -216,6 +392,7 @@ function renderSqlResponse(bubbleEl, result) {
       <pre><code>${escapeHtml(sql)}</code></pre>
     </div>
     ${guardHtml}
+    ${policyHtml}
     ${runButtonHtml}
     <div id="results-container-${queryLogId}" class="result-section" style="display:none;"></div>
   `;
@@ -265,10 +442,10 @@ function runQuery(queryLogId, btn) {
 function renderResultTable(containerEl, data) {
   const columns = data.columns || [];
   const rows = data.rows || [];
-  const isMock = data.is_mock;
+  const isSqlOnly = data.sql_only === true;
   const latency = data.latency_ms;
 
-  let mockBadgeHtml = isMock ? `<span style="background:rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.3); color:#f59e0b; padding:2px 6px; border-radius:4px; font-size:11px;">MOCK DATA</span>` : "";
+  let mockBadgeHtml = isSqlOnly ? `<span style="background:rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.3); color:#f59e0b; padding:2px 6px; border-radius:4px; font-size:11px;">SQL ONLY</span>` : "";
 
   if (rows.length === 0) {
     containerEl.innerHTML = `

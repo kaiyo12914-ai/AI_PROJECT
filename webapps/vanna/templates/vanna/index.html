@@ -33,9 +33,13 @@
         </div>
       </section>
 
-      <!-- 同步管理面板 -->
+      {% if can_manage_vanna %}
+      <!-- 同步管理面板：僅 Vanna 管理者可見 -->
       <section class="panel-card" aria-label="資料同步與管理">
         <h2>⚙️ 數據管理</h2>
+        <p style="margin: -4px 0 14px; color: #94a3b8; font-size: 12.5px; line-height: 1.5;">
+          管理 Vanna 訓練資料集、Schema metadata 與 approved examples。此區僅管理者可見。
+        </p>
         <div class="control-group">
           <label>指定資料源</label>
           <select id="dataSourceSelect">
@@ -51,21 +55,31 @@
           <button id="btnVannaSync" class="btn btn-secondary" onclick="triggerVannaSync()">
             🧠 同步 Vanna 訓練 (Vanna Sync)
           </button>
+          <button id="btnTrainingDataset" class="btn btn-secondary" onclick="openTrainingDatasetManager()">
+            📚 Vanna 訓練資料集維護
+          </button>
         </div>
       </section>
+      {% endif %}
 
       <!-- 快捷提問範例 -->
       <section class="panel-card" aria-label="快捷提問範例">
         <h2>💡 範例提問</h2>
         <div style="display: flex; flex-direction: column; gap: 8px;">
-          <button class="btn btn-secondary" style="font-size:12.5px; text-align:left; justify-content:flex-start;" onclick="askPreset('查詢有多少份公文')">
-            💬 查詢有多少份公文
+          <button class="btn btn-secondary" style="font-size:12.5px; text-align:left; justify-content:flex-start;" onclick="askPreset('[人事]MPC 查詢目前在職人員數量')">
+            💬 [人事]MPC 在職人員數量
           </button>
-          <button class="btn btn-secondary" style="font-size:12.5px; text-align:left; justify-content:flex-start;" onclick="askPreset('查詢前5筆公文的發文字號與主旨')">
-            💬 查詢前5筆公文的發文字號與主旨
+          <button class="btn btn-secondary" style="font-size:12.5px; text-align:left; justify-content:flex-start;" onclick="askPreset('[人事]202廠 列出前10筆員工姓名、工號與所屬單位')">
+            💬 [人事]202廠 員工與單位
           </button>
-          <button class="btn btn-secondary" style="font-size:12.5px; text-align:left; justify-content:flex-start;" onclick="askPreset('列出所有附件檔名中含有PDF的公文案號')">
-            💬 列出附件含有PDF的公文案號
+          <button class="btn btn-secondary" style="font-size:12.5px; text-align:left; justify-content:flex-start;" onclick="askPreset('[人事]205廠 查詢各單位目前在職人員數量')">
+            💬 [人事]205廠 各單位人數
+          </button>
+          <button class="btn btn-secondary" style="font-size:12.5px; text-align:left; justify-content:flex-start;" onclick="askPreset('[採購]209廠 查詢物料採購未交量前20筆')">
+            💬 [採購]209廠 未交物料
+          </button>
+          <button class="btn btn-secondary" style="font-size:12.5px; text-align:left; justify-content:flex-start;" onclick="askPreset('[物料]401廠 查詢低於安全庫存的前20筆料號')">
+            💬 [物料]401廠 安全庫存
           </button>
         </div>
       </section>
@@ -103,7 +117,7 @@
       <!-- 問題輸入區域 -->
       <footer class="chat-input-area">
         <div class="input-container">
-          <input type="text" id="questionInput" placeholder="在此輸入您的問題... (例如：查詢公文總數量)" autocomplete="off">
+          <input type="text" id="questionInput" placeholder="格式：[業務別]單位 查詢內容，例如：[人事]205廠 查詢在職人員，或 [採購]209廠 查詢未交物料" autocomplete="off">
           <button id="sendBtn" class="send-btn" onclick="sendQuestion()" aria-label="傳送提問">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#ffffff;">
               <line x1="22" y1="2" x2="11" y2="13"></line>

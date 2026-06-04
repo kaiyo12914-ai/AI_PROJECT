@@ -13,6 +13,7 @@ urlpatterns = [
     path("api/status/", api.status_api, name="api_status"),
     path("api/schema/sync/", api.schema_sync_api, name="api_schema_sync"),
     path("api/vanna/sync-training/", api.training_sync_api, name="api_training_sync"),
+    path("api/vanna/training-dataset/", api.training_dataset_api, name="api_training_dataset"),
     path("api/generate/", api.generate_api, name="api_generate"),
     path("api/execute/", api.execute_api, name="api_execute"),
 ]

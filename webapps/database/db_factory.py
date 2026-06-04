@@ -777,6 +777,24 @@ def _normalize_profile(profile: str) -> str:
     return re.sub(r"[^A-Z0-9_]+", "_", p)
 
 
+_PROFILE_ENV_PREFIXES = (
+    "CIM_DB",
+    "ERP_DB",
+    "DOC_DB",
+)
+
+
+def _profile_env_prefixes_and_name(profile: str) -> tuple[tuple[str, ...], str]:
+    p = _normalize_profile(profile)
+    if p.startswith("CIM_"):
+        return (("CIM_DB",), p[4:])
+    if p.startswith("ERP_"):
+        return (("ERP_DB",), p[4:])
+    if p.startswith("DOC_"):
+        return (("DOC_DB",), p[4:])
+    return (_PROFILE_ENV_PREFIXES, p)
+
+
 def _profile_env_key(profile: str, key: str) -> str:
     p = _normalize_profile(profile)
     if not p:
@@ -784,40 +802,56 @@ def _profile_env_key(profile: str, key: str) -> str:
     return f"DOC_DB_{p}_{key}"
 
 
+def _profile_env_keys(profile: str, key: str) -> List[str]:
+    prefixes, p = _profile_env_prefixes_and_name(profile)
+    if not p:
+        return [key]
+    keys: List[str] = []
+    for prefix in prefixes:
+        keys.append(f"{prefix}_{p}_{key}")
+        if key.startswith("ORA_"):
+            keys.append(f"{prefix}_{p}_{key[4:]}")
+        if key == "ORA_SERVICE_NAME":
+            keys.append(f"{prefix}_{p}_ORA_DB")
+            keys.append(f"{prefix}_{p}_DB")
+    return keys
+
+
 def _env_profile(profile: str, key: str, default: str = "") -> str:
-    prof_key = _profile_env_key(profile, key)
     md_overrides = _load_db_factory_md_overrides()
-    md_val = (md_overrides.get(prof_key) or "").strip()
-    if md_val:
-        return md_val
-    # DOC plant profile is now sourced from .env_DB_factory only.
+    for prof_key in _profile_env_keys(profile, key):
+        md_val = (md_overrides.get(prof_key) or "").strip()
+        if md_val:
+            return md_val
+        env_val = (os.getenv(prof_key) or "").strip()
+        if env_val:
+            return env_val
     # Keep global key fallback for compatibility.
     return _env(key, default)
 
 
 def _env_int_profile(profile: str, key: str, default: int) -> int:
-    prof_key = _profile_env_key(profile, key)
     md_overrides = _load_db_factory_md_overrides()
-    md_val = (md_overrides.get(prof_key) or "").strip()
-    if md_val:
-        try:
-            return int(md_val)
-        except Exception:
-            pass
-    # DOC plant profile is now sourced from .env_DB_factory only.
+    for prof_key in _profile_env_keys(profile, key):
+        raw_val = (md_overrides.get(prof_key) or os.getenv(prof_key) or "").strip()
+        if raw_val:
+            try:
+                return int(raw_val)
+            except Exception:
+                pass
     # Keep global key fallback for compatibility.
     return _env_int(key, default)
 
 
 def _env_float_profile(profile: str, key: str, default: float) -> float:
-    prof_key = _profile_env_key(profile, key)
     md_overrides = _load_db_factory_md_overrides()
-    md_val = (md_overrides.get(prof_key) or "").strip()
-    if md_val:
-        try:
-            return float(md_val)
-        except Exception:
-            pass
+    for prof_key in _profile_env_keys(profile, key):
+        raw_val = (md_overrides.get(prof_key) or os.getenv(prof_key) or "").strip()
+        if raw_val:
+            try:
+                return float(raw_val)
+            except Exception:
+                pass
     return _env_float(key, default)
 
 
@@ -900,9 +934,12 @@ def _is_db_factory_key_supported(key: str) -> bool:
         return False
     return (
         k.startswith("DOC_DB_")
+        or k.startswith("CIM_DB_")
+        or k.startswith("ERP_DB_")
         or k.startswith("ORA_")
         or k.startswith("SQL_SERVER_")
         or k.startswith("SYBASE_")
+        or k.startswith("PG_")
         or k == "TEXT_MAX_CHARS"
     )
 
@@ -911,6 +948,8 @@ def _load_db_factory_md_overrides() -> Dict[str, str]:
     """
     Parse DB-related key/value lines from .env_DB_factory.
     Supports plain env-style lines anywhere in markdown:
+      CIM_DB_MPC_ORA_HOST=10.29.136.198
+      ERP_DB_MPC_HOST=10.29.136.198
       DOC_DB_205_ORA_HOST=10.29.136.198
       ORA_HOST=10.29.136.198
       SQL_SERVER_HOST=mssql1.mpc.mil.tw

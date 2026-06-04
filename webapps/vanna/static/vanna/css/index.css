@@ -15,23 +15,28 @@ body {
 }
 
 .vanna-shell {
-  width: min(1200px, calc(100% - 32px));
+  width: calc(100vw - 24px);
+  max-width: 1880px;
+  min-height: calc(100vh - 24px);
   margin: 0 auto;
-  padding: 40px 0;
+  padding: 12px 0;
   display: grid;
-  grid-template-columns: 320px 1fr;
-  gap: 24px;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  gap: 16px;
 }
 
 /* --- Sidebar Panels --- */
 aside {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 .panel-card {
-  padding: 24px;
+  padding: 20px;
   border-radius: 20px;
   background: rgba(15, 23, 42, 0.65);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -152,7 +157,7 @@ select:focus, input:focus {
 .workspace {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 80px);
+  height: calc(100vh - 24px);
   background: rgba(15, 23, 42, 0.5);
   border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -182,7 +187,7 @@ select:focus, input:focus {
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 24px;
+  padding: 24px 28px;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -199,7 +204,7 @@ select:focus, input:focus {
 }
 
 .msg-bubble {
-  max-width: 85%;
+  max-width: 94%;
   padding: 16px 20px;
   border-radius: 16px;
   line-height: 1.6;
@@ -329,6 +334,105 @@ table.result-table tr:hover {
   gap: 12px;
 }
 
+/* --- Vanna training dataset manager --- */
+.training-manager {
+  max-width: 100%;
+}
+
+.training-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.muted-text {
+  color: #94a3b8;
+  font-size: 12.5px;
+  margin-top: 4px;
+}
+
+.mini-btn {
+  width: auto;
+  padding: 7px 12px;
+  font-size: 12px;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 10px;
+  margin: 12px 0 16px;
+}
+
+.metric-card {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.metric-card span {
+  display: block;
+  color: #94a3b8;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.metric-card strong {
+  color: #38bdf8;
+  font-size: 22px;
+}
+
+.training-form {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  margin-bottom: 16px;
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.form-title {
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f1f5f9;
+  font-size: 13.5px;
+  font-family: 'Fira Code', 'Courier New', Courier, monospace;
+  resize: vertical;
+  outline: none;
+}
+
+textarea:focus {
+  border-color: #06b6d4;
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2);
+}
+
+.training-section {
+  margin-top: 16px;
+}
+
+.training-section h3 {
+  margin: 0 0 8px;
+  color: #e2e8f0;
+  font-size: 15px;
+}
+
+.training-table-wrap {
+  max-height: 220px;
+}
+
 /* --- Input Area --- */
 .chat-input-area {
   padding: 20px 24px;
@@ -404,10 +508,20 @@ table.result-table tr:hover {
 @media (max-width: 900px) {
   .vanna-shell {
     grid-template-columns: 1fr;
-    padding: 20px 0;
+    width: calc(100vw - 16px);
+    padding: 8px 0;
+  }
+
+  aside {
+    max-height: none;
+    overflow-y: visible;
   }
   
   .workspace {
-    height: 600px;
+    height: calc(100vh - 16px);
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
   }
 }

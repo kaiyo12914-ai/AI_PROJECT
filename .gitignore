@@ -165,3 +165,4 @@ scratch/reports
 *.pid
 webapps/vanna/vendor/vanna2/papers/img/
 *.png
+.env_DB_factory
