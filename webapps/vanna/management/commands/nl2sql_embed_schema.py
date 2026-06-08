@@ -7,6 +7,12 @@ from webapps.llm.llm_factory import get_embedding_model
 from webapps.vanna.models import DataSource, SchemaEmbedding, ExampleEmbedding
 
 
+def _expected_dimension() -> int:
+    from django.conf import settings
+
+    return int(getattr(settings, "NL2SQL_EMBEDDING_DIMENSION", 1536) or 1536)
+
+
 class Command(BaseCommand):
     help = "Batch calculate and save embeddings for SchemaEmbedding and ExampleEmbedding using get_embedding_model()."
 
@@ -46,6 +52,7 @@ class Command(BaseCommand):
                 break
 
         self.stdout.write(self.style.SUCCESS(f"Using embedding model: {model_name}"))
+        self.stdout.write(self.style.NOTICE(f"Expected embedding dimension: {_expected_dimension()}"))
 
         # Process SchemaEmbedding
         schema_embeddings = SchemaEmbedding.objects.filter(
@@ -88,6 +95,14 @@ class Command(BaseCommand):
 
             with transaction.atomic():
                 for item, vector in zip(batch, vectors):
+                    if len(vector) != _expected_dimension():
+                        self.stdout.write(
+                            self.style.ERROR(
+                                f"  Skip SchemaEmbedding id={item.id}: vector dimension {len(vector)} "
+                                f"!= expected {_expected_dimension()}"
+                            )
+                        )
+                        continue
                     item.embedding = vector
                     item.embedding_model = model_name
                     item.embedding_dimension = len(vector)
@@ -111,6 +126,14 @@ class Command(BaseCommand):
 
             with transaction.atomic():
                 for item, vector in zip(batch, vectors):
+                    if len(vector) != _expected_dimension():
+                        self.stdout.write(
+                            self.style.ERROR(
+                                f"  Skip ExampleEmbedding id={item.id}: vector dimension {len(vector)} "
+                                f"!= expected {_expected_dimension()}"
+                            )
+                        )
+                        continue
                     item.embedding = vector
                     item.embedding_model = model_name
                     item.embedding_dimension = len(vector)

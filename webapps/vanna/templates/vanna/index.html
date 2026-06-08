@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Vanna 2.0 NL2SQL 查詢工作區</title>
+  <title>Vanna 2.0 自然語言資料庫智慧查詢工作區</title>
   <link rel="icon" type="image/png" sizes="32x32" href="{% custom_static 'portal/img/favicon-ai.png' %}?v=3">
   <!-- Google Font -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -17,6 +17,7 @@
   <div class="vanna-shell">
     <!-- 左側控制面板 -->
     <aside>
+      {% comment %}
       <!-- 系統狀態卡 -->
       <section class="panel-card" aria-label="系統狀態">
         <h2>🌐 整合狀態</h2>
@@ -32,6 +33,7 @@
           <code>{{ vendor_path }}</code>
         </div>
       </section>
+      {% endcomment %}
 
       {% if can_manage_vanna %}
       <!-- 同步管理面板：僅 Vanna 管理者可見 -->
@@ -40,11 +42,11 @@
         <p style="margin: -4px 0 14px; color: #94a3b8; font-size: 12.5px; line-height: 1.5;">
           管理 Vanna 訓練資料集、Schema metadata 與 approved examples。此區僅管理者可見。
         </p>
-        <div class="control-group">
+        <!-- 指定資料源 (目前隱藏，預設僅保留 Oracle 預載訓練集) -->
+        <div class="control-group" style="display: none;">
           <label>指定資料源</label>
           <select id="dataSourceSelect">
-            <option value="legacy_vanna_chroma">Chroma 歷史資料集 (Oracle)</option>
-            <option value="default_pg">PostgreSQL 資料源 (預設)</option>
+            <option value="legacy_vanna_chroma" selected>Oracle 預載訓練集</option>
           </select>
         </div>
         
@@ -97,17 +99,14 @@
     <main class="workspace">
       <!-- 頂部資訊列 -->
       <header class="chat-header">
-        <h1>Vanna 2.0 NL2SQL 智慧查詢工作區</h1>
-        <div style="font-size: 13px; color: #64748b;">
-          PostgreSQL / Oracle 唯讀安全查詢端點
-        </div>
+        <h1>Vanna 2.0 自然語言資料庫智慧查詢工作區</h1>
       </header>
 
       <!-- 對話訊息流 -->
       <section id="chatMessages" class="chat-messages">
         <div class="msg-row assistant">
           <div class="msg-bubble">
-            歡迎來到 **NL2SQL 查詢工作區**！👋<br>
+            歡迎來到 **自然語言資料庫智慧查詢工作區**！👋<br>
             您可以在下方輸入自然語言問題，AI 會自動比對向量資料庫中的 Schema 與範例，為您生成對應的 SQL 查詢。<br>
             所有生成的 SQL 皆會經過 **SQL Guard (AST 解析)** 的安全審查，唯讀且僅限 `SELECT` 操作，以確保資料庫安全。
           </div>

@@ -397,12 +397,25 @@ def _score_schema(question: str, obj: SchemaObject) -> int:
     return sum(3 if tok in obj.object_name.lower() else 1 for tok in tokens if tok and tok in text)
 
 
+def _expected_embedding_dimension() -> int:
+    return int(getattr(settings, "NL2SQL_EMBEDDING_DIMENSION", 1536) or 1536)
+
+
+def _embedding_vector_is_usable(vector: Any) -> bool:
+    try:
+        return bool(vector) and len(vector) == _expected_embedding_dimension()
+    except TypeError:
+        return False
+
+
 def retrieve_context(data_source: DataSource, question: str, *, top_k: int = 6) -> dict[str, Any]:
     # 嘗試獲取向量問題嵌入
     q_vector = None
     try:
         emb_model = get_embedding_model()
-        q_vector = emb_model.embed_query(question)
+        candidate_vector = emb_model.embed_query(question)
+        if _embedding_vector_is_usable(candidate_vector):
+            q_vector = candidate_vector
     except Exception:
         # Fallback to keyword if model fetch fails
         pass
@@ -413,20 +426,24 @@ def retrieve_context(data_source: DataSource, question: str, *, top_k: int = 6) 
     # 1. 檢索最相似的 SchemaObjects
     if q_vector:
         # 使用 pgvector 的 CosineDistance 來查詢相似的 DDL 與 Doc 向量
-        se_matches = SchemaEmbedding.objects.filter(
-            schema_object__data_source=data_source,
-            schema_object__is_enabled=True,
-            embedding__isnull=False
-        ).annotate(
-            distance=CosineDistance("embedding", q_vector)
-        ).order_by("distance")[:top_k]
+        try:
+            se_matches = SchemaEmbedding.objects.filter(
+                schema_object__data_source=data_source,
+                schema_object__is_enabled=True,
+                embedding__isnull=False,
+                embedding_dimension=_expected_embedding_dimension(),
+            ).annotate(
+                distance=CosineDistance("embedding", q_vector)
+            ).order_by("distance")[:top_k]
 
-        seen_ids = set()
-        for se in se_matches:
-            obj = se.schema_object
-            if obj.id not in seen_ids:
-                seen_ids.add(obj.id)
-                selected_objects.append(obj)
+            seen_ids = set()
+            for se in se_matches:
+                obj = se.schema_object
+                if obj.id not in seen_ids:
+                    seen_ids.add(obj.id)
+                    selected_objects.append(obj)
+        except Exception:
+            selected_objects = []
                 
     # Fallback to keyword-based score if no vector matches found
     if not selected_objects:
@@ -436,14 +453,18 @@ def retrieve_context(data_source: DataSource, question: str, *, top_k: int = 6) 
 
     # 2. 檢索最相似的 Approved SQL Examples
     if q_vector:
-        ee_matches = ExampleEmbedding.objects.filter(
-            data_source=data_source,
-            training_example__review_status="approved",
-            embedding__isnull=False
-        ).annotate(
-            distance=CosineDistance("embedding", q_vector)
-        ).order_by("distance")[:3]
-        examples = [ee.training_example for ee in ee_matches]
+        try:
+            ee_matches = ExampleEmbedding.objects.filter(
+                data_source=data_source,
+                training_example__review_status="approved",
+                embedding__isnull=False,
+                embedding_dimension=_expected_embedding_dimension(),
+            ).annotate(
+                distance=CosineDistance("embedding", q_vector)
+            ).order_by("distance")[:3]
+            examples = [ee.training_example for ee in ee_matches]
+        except Exception:
+            examples = []
 
     # Fallback to keyword-based if no vector examples found
     if not examples:

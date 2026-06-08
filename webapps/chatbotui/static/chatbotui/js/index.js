@@ -729,6 +729,22 @@
         editBtn.dataset.action = "resend";
         right.appendChild(editBtn);
       }
+      if (message.role === "assistant" && !message.pending) {
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.className = "message-action-btn";
+        copyBtn.textContent = "複製回答";
+        copyBtn.addEventListener("click", function () {
+          const text = String(message.content || "");
+          navigator.clipboard.writeText(text).then(function () {
+            copyBtn.textContent = "已複製 ✓";
+            setTimeout(function () { copyBtn.textContent = "複製回答"; }, 1500);
+          }).catch(function () {
+            window.alert("複製失敗，請手動選取文字。");
+          });
+        });
+        right.appendChild(copyBtn);
+      }
       if (messageId(message) > 0 && !state.sending) {
         const deleteBtn = document.createElement("button");
         deleteBtn.type = "button";

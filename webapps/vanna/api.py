@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import asdict, is_dataclass
 from typing import Any
@@ -11,7 +12,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from webapps.portal.decorators import require_node
-from webapps.vanna.models import DataSource, QueryLog, SchemaObject, TrainingExample, VannaTrainingSync
+from webapps.vanna.models import DataSource, QueryLog, SchemaEmbedding, SchemaObject, TrainingExample, VannaTrainingSync
 from webapps.vanna.views import is_vanna_admin
 from webapps.vanna.vanna_adapter import (
     ensure_vanna_vendor_loaded,
@@ -110,6 +111,35 @@ def _resolve_data_source(data: dict[str, Any]) -> DataSource:
     )
 
 
+def _parse_ddl_object(ddl_text: str, default_schema: str) -> tuple[str, str, str]:
+    patterns = [
+        (r"(?is)\bCREATE\s+MATERIALIZED\s+VIEW\s+([\"A-Za-z0-9_.$@]+)", "materialized_view"),
+        (r"(?is)\bCREATE\s+(?:OR\s+REPLACE\s+)?VIEW\s+([\"A-Za-z0-9_.$@]+)", "view"),
+        (r"(?is)\bCREATE\s+(?:GLOBAL\s+TEMPORARY\s+)?TABLE\s+([\"A-Za-z0-9_.$@]+)", "table"),
+    ]
+    for pattern, object_type in patterns:
+        match = re.search(pattern, ddl_text or "")
+        if not match:
+            continue
+        raw_name = match.group(1).strip().strip('"').split("@", 1)[0]
+        if "." in raw_name:
+            schema_name, object_name = raw_name.rsplit(".", 1)
+        else:
+            schema_name, object_name = default_schema or "LEGACY", raw_name
+        return schema_name.strip('"').upper(), object_name.strip('"').upper(), object_type
+    raise ValueError("DDL must contain CREATE TABLE, CREATE VIEW, or CREATE MATERIALIZED VIEW.")
+
+
+def _content_hash(text: str) -> str:
+    import hashlib
+
+    return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
+
+
+def _documentation_object_name(documentation: str) -> str:
+    return f"VANNA_DOCUMENTATION_{_content_hash(documentation)[:16].upper()}"
+
+
 @require_GET
 @require_node("nl2sql", api=True)
 def status_api(request: HttpRequest) -> JsonResponse:
@@ -173,6 +203,10 @@ def _training_dataset_payload(data_source: DataSource) -> dict[str, Any]:
     schema_qs = SchemaObject.objects.filter(data_source=data_source)
     examples_qs = TrainingExample.objects.filter(data_source=data_source)
     sync_qs = VannaTrainingSync.objects.filter(data_source=data_source)
+    doc_qs = SchemaEmbedding.objects.filter(
+        schema_object__data_source=data_source,
+        chunk_type="documentation",
+    ).select_related("schema_object")
 
     schema_items = [
         {
@@ -210,6 +244,16 @@ def _training_dataset_payload(data_source: DataSource) -> dict[str, Any]:
         }
         for item in sync_qs.order_by("-updated_at")[:30]
     ]
+    documentation_items = [
+        {
+            "id": item.id,
+            "schema": item.schema_object.schema_name,
+            "name": item.schema_object.object_name,
+            "documentation": item.chunk_text,
+            "created_at": item.created_at,
+        }
+        for item in doc_qs.order_by("-created_at")[:30]
+    ]
     return {
         "data_source": {
             "code": data_source.code,
@@ -226,8 +270,11 @@ def _training_dataset_payload(data_source: DataSource) -> dict[str, Any]:
             "vanna_sync_records": sync_qs.count(),
             "synced_records": sync_qs.filter(sync_status="synced").count(),
             "failed_records": sync_qs.filter(sync_status="failed").count(),
+            "ddl_items": schema_qs.exclude(ddl_text="").count(),
+            "documentation_items": doc_qs.count(),
         },
         "schema_objects": schema_items,
+        "documentation_items": documentation_items,
         "training_examples": example_items,
         "vanna_sync_records": sync_items,
     }
@@ -249,6 +296,92 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
 
     if request.method == "GET":
         return JsonResponse({"ok": True, "result": _training_dataset_payload(data_source)}, json_dumps_params={"default": str})
+
+    training_type = str(body.get("training_type") or body.get("type") or "sql").strip().lower()
+    if training_type not in {"ddl", "documentation", "sql"}:
+        return JsonResponse({"ok": False, "error": "training_type must be ddl, documentation, or sql"}, status=400)
+
+    if training_type == "ddl":
+        ddl_text = str(body.get("ddl") or body.get("ddl_text") or "").strip()
+        if not ddl_text:
+            return JsonResponse({"ok": False, "error": "ddl is required"}, status=400)
+        try:
+            schema_name, object_name, object_type = _parse_ddl_object(ddl_text, data_source.default_schema)
+        except ValueError as exc:
+            return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+        schema_obj, _ = SchemaObject.objects.update_or_create(
+            data_source=data_source,
+            schema_name=schema_name,
+            object_name=object_name,
+            defaults={
+                "object_type": object_type,
+                "ddl_text": ddl_text,
+                "is_enabled": True,
+            },
+        )
+        SchemaEmbedding.objects.update_or_create(
+            schema_object=schema_obj,
+            chunk_type="ddl",
+            content_hash=_content_hash(ddl_text),
+            defaults={
+                "chunk_text": ddl_text,
+                "embedding": None,
+                "embedding_model": "",
+            },
+        )
+        return JsonResponse(
+            {
+                "ok": True,
+                "result": {
+                    "id": schema_obj.id,
+                    "training_type": "ddl",
+                    "schema": schema_obj.schema_name,
+                    "name": schema_obj.object_name,
+                    "type": schema_obj.object_type,
+                },
+            }
+        )
+
+    if training_type == "documentation":
+        documentation = str(body.get("documentation") or "").strip()
+        title = str(body.get("title") or "").strip()
+        if not documentation:
+            return JsonResponse({"ok": False, "error": "documentation is required"}, status=400)
+        content = f"{title}\n{documentation}".strip() if title else documentation
+        object_name = _documentation_object_name(content)
+        doc_obj, _ = SchemaObject.objects.update_or_create(
+            data_source=data_source,
+            schema_name=data_source.default_schema or "LEGACY",
+            object_name=object_name,
+            defaults={
+                "object_type": "view",
+                "description": content,
+                "columns_json": [],
+                "ddl_text": "",
+                "is_enabled": True,
+            },
+        )
+        doc_embedding, _ = SchemaEmbedding.objects.update_or_create(
+            schema_object=doc_obj,
+            chunk_type="documentation",
+            content_hash=_content_hash(content),
+            defaults={
+                "chunk_text": content,
+                "embedding": None,
+                "embedding_model": "",
+            },
+        )
+        return JsonResponse(
+            {
+                "ok": True,
+                "result": {
+                    "id": doc_embedding.id,
+                    "training_type": "documentation",
+                    "name": doc_obj.object_name,
+                    "documentation": content,
+                },
+            }
+        )
 
     question = str(body.get("question") or "").strip()
     sql_text = str(body.get("sql") or "").strip()

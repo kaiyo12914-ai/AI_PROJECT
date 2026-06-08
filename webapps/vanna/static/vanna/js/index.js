@@ -166,6 +166,12 @@ function renderTrainingDatasetManager(bubbleEl, result) {
       <td>${item.enabled ? "啟用" : "停用"}</td>
     </tr>
   `).join("");
+  const documentationRows = (result.documentation_items || []).map(item => `
+    <tr>
+      <td>${escapeHtml(item.name)}</td>
+      <td>${escapeHtml((item.documentation || "").slice(0, 160))}</td>
+    </tr>
+  `).join("");
   const exampleRows = (result.training_examples || []).map(item => `
     <tr>
       <td>${escapeHtml(item.question)}</td>
@@ -191,21 +197,53 @@ function renderTrainingDatasetManager(bubbleEl, result) {
     </div>
     <div class="metric-grid">
       <div class="metric-card"><span>Schema</span><strong>${summary.schema_objects || 0}</strong></div>
-      <div class="metric-card"><span>啟用 Schema</span><strong>${summary.enabled_schema_objects || 0}</strong></div>
-      <div class="metric-card"><span>Approved Examples</span><strong>${summary.approved_examples || 0}</strong></div>
+      <div class="metric-card"><span>DDL</span><strong>${summary.ddl_items || 0}</strong></div>
+      <div class="metric-card"><span>Documentation</span><strong>${summary.documentation_items || 0}</strong></div>
+      <div class="metric-card"><span>SQL Examples</span><strong>${summary.approved_examples || 0}</strong></div>
       <div class="metric-card"><span>Vanna Synced</span><strong>${summary.synced_records || 0}</strong></div>
       <div class="metric-card"><span>Failed</span><strong>${summary.failed_records || 0}</strong></div>
     </div>
 
     <div class="training-form">
-      <div class="form-title">新增 Approved Example</div>
-      <input id="trainingQuestionInput" type="text" placeholder="自然語言問題，例如：[人事]205廠 查詢各單位目前在職人員數量">
-      <textarea id="trainingSqlInput" placeholder="對應 SQL，只允許 SELECT / WITH SELECT"></textarea>
-      <button class="btn btn-primary" onclick="submitTrainingExample(this)">新增到訓練資料集</button>
+      <div class="form-title">新增訓練資料</div>
+      <div class="training-type-tabs" role="tablist" aria-label="訓練資料分類">
+        <button class="training-type-tab active" type="button" data-training-type="ddl" onclick="selectTrainingType(this)">DDL</button>
+        <button class="training-type-tab" type="button" data-training-type="documentation" onclick="selectTrainingType(this)">Documentation</button>
+        <button class="training-type-tab" type="button" data-training-type="sql" onclick="selectTrainingType(this)">SQL</button>
+      </div>
+
+      <div class="training-fields" data-training-fields="ddl">
+        <div class="muted-text">放資料表或 View 結構。系統會解析 CREATE TABLE / CREATE VIEW 並寫入 Schema metadata。</div>
+        <textarea id="trainingDdlInput" placeholder="CREATE TABLE LEGACY.CT_EMPLOYEE (
+  EMPNO VARCHAR2(20) PRIMARY KEY,
+  EMPNAME NVARCHAR2(100),
+  DEPTNO VARCHAR2(20)
+);"></textarea>
+      </div>
+
+      <div class="training-fields hidden" data-training-fields="documentation">
+        <div class="muted-text">放業務語意、欄位含義、代碼規則。不要放 SQL。</div>
+        <input id="trainingDocTitleInput" type="text" placeholder="文件標題，例如：人事在職狀態代碼說明">
+        <textarea id="trainingDocInput" placeholder="status = 'ACTIVE' 代表在職員工。
+status = 'RESIGNED' 代表離職員工。
+查詢目前在職人數時，應只統計 ACTIVE。"></textarea>
+      </div>
+
+      <div class="training-fields hidden" data-training-fields="sql">
+        <div class="muted-text">放已驗證的自然語言問題與唯讀 SQL。只允許 SELECT / WITH SELECT。</div>
+        <input id="trainingQuestionInput" type="text" placeholder="自然語言問題，例如：[人事]205廠 查詢各單位目前在職人員數量">
+        <textarea id="trainingSqlInput" placeholder="SELECT d.DEPT_NAME, COUNT(*) AS CNT
+FROM CT_EMPLOYEE e
+JOIN CT_DEPARTMENT d ON d.DEPTNO = e.DEPTNO
+WHERE e.STATUS = 'ACTIVE'
+GROUP BY d.DEPT_NAME;"></textarea>
+      </div>
+
+      <button class="btn btn-primary" onclick="submitTrainingData(this)">新增到訓練資料集</button>
     </div>
 
     <div class="training-section">
-      <h3>Schema metadata</h3>
+      <h3>DDL / Schema metadata</h3>
       <div class="table-wrapper training-table-wrap">
         <table class="result-table">
           <thead><tr><th>Table/View</th><th>Type</th><th>Columns</th><th>Status</th></tr></thead>
@@ -214,7 +252,16 @@ function renderTrainingDatasetManager(bubbleEl, result) {
       </div>
     </div>
     <div class="training-section">
-      <h3>Approved examples</h3>
+      <h3>Documentation</h3>
+      <div class="table-wrapper training-table-wrap">
+        <table class="result-table">
+          <thead><tr><th>Name</th><th>Content</th></tr></thead>
+          <tbody>${documentationRows || `<tr><td colspan="2">尚無 documentation</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="training-section">
+      <h3>SQL approved examples</h3>
       <div class="table-wrapper training-table-wrap">
         <table class="result-table">
           <thead><tr><th>Question</th><th>Status</th><th>Created by</th></tr></thead>
@@ -234,14 +281,57 @@ function renderTrainingDatasetManager(bubbleEl, result) {
   `;
 }
 
-function submitTrainingExample(btn) {
-  const bubbleEl = btn.closest(".msg-bubble");
-  const questionEl = bubbleEl.querySelector("#trainingQuestionInput");
-  const sqlEl = bubbleEl.querySelector("#trainingSqlInput");
-  const question = questionEl.value.trim();
-  const sql = sqlEl.value.trim();
+function selectTrainingType(tabEl) {
+  const formEl = tabEl.closest(".training-form");
+  const trainingType = tabEl.dataset.trainingType;
+  formEl.querySelectorAll(".training-type-tab").forEach(el => {
+    el.classList.toggle("active", el === tabEl);
+  });
+  formEl.querySelectorAll(".training-fields").forEach(el => {
+    el.classList.toggle("hidden", el.dataset.trainingFields !== trainingType);
+  });
+}
+
+function activeTrainingType(formEl) {
+  const activeTab = formEl.querySelector(".training-type-tab.active");
+  return activeTab ? activeTab.dataset.trainingType : "ddl";
+}
+
+function trainingPayload(formEl, trainingType) {
+  if (trainingType === "ddl") {
+    const ddl = formEl.querySelector("#trainingDdlInput").value.trim();
+    if (!ddl) {
+      throw new Error("請輸入 DDL 後再新增。");
+    }
+    return { training_type: "ddl", ddl };
+  }
+
+  if (trainingType === "documentation") {
+    const title = formEl.querySelector("#trainingDocTitleInput").value.trim();
+    const documentation = formEl.querySelector("#trainingDocInput").value.trim();
+    if (!documentation) {
+      throw new Error("請輸入 Documentation 後再新增。");
+    }
+    return { training_type: "documentation", title, documentation };
+  }
+
+  const question = formEl.querySelector("#trainingQuestionInput").value.trim();
+  const sql = formEl.querySelector("#trainingSqlInput").value.trim();
   if (!question || !sql) {
-    addLog("請輸入 question 與 SQL 後再新增訓練範例。", "error");
+    throw new Error("請輸入 question 與 SQL 後再新增訓練範例。");
+  }
+  return { training_type: "sql", question, sql };
+}
+
+function submitTrainingData(btn) {
+  const bubbleEl = btn.closest(".msg-bubble");
+  const formEl = btn.closest(".training-form");
+  const trainingType = activeTrainingType(formEl);
+  let payload;
+  try {
+    payload = trainingPayload(formEl, trainingType);
+  } catch (err) {
+    addLog(err.message, "error");
     return;
   }
 
@@ -256,8 +346,7 @@ function submitTrainingExample(btn) {
     },
     body: JSON.stringify({
       code: selectedDataSourceCode(),
-      question: question,
-      sql: sql
+      ...payload
     })
   })
   .then(res => res.json())
@@ -266,7 +355,7 @@ function submitTrainingExample(btn) {
       addLog(`新增訓練範例失敗: ${data.error}`, "error");
       return;
     }
-    addLog("已新增 approved example，請執行 Vanna Sync 使訓練資料生效。", "success");
+    addLog(`已新增 ${trainingType} 訓練資料，請執行 Vanna Sync 使資料生效。`, "success");
     loadTrainingDataset(bubbleEl);
   })
   .catch(err => {

@@ -128,6 +128,86 @@ class VannaApiIntegrationTestCase(SimpleTestCase):
         self.assertEqual(res.status_code, 403)
         self.assertFalse(res.json()["ok"])
 
+    @patch("webapps.vanna.api.is_vanna_admin", return_value=True)
+    @patch("webapps.vanna.api.SchemaEmbedding.objects.update_or_create")
+    @patch("webapps.vanna.api.SchemaObject.objects.update_or_create")
+    @patch("webapps.vanna.api._resolve_data_source")
+    def test_training_dataset_api_post_adds_ddl(
+        self,
+        mock_resolve_ds,
+        mock_schema_update,
+        mock_embedding_update,
+        _mock_is_admin,
+    ):
+        mock_ds = MagicMock()
+        mock_ds.default_schema = "LEGACY"
+        mock_resolve_ds.return_value = mock_ds
+        mock_schema_obj = MagicMock()
+        mock_schema_obj.id = 91
+        mock_schema_obj.schema_name = "LEGACY"
+        mock_schema_obj.object_name = "CT_EMPLOYEE"
+        mock_schema_obj.object_type = "table"
+        mock_schema_update.return_value = (mock_schema_obj, True)
+        mock_embedding_update.return_value = (MagicMock(), True)
+
+        res = self.client.post(
+            self.training_dataset_url,
+            data=json.dumps(
+                {
+                    "code": "legacy_vanna_chroma",
+                    "training_type": "ddl",
+                    "ddl": "CREATE TABLE CT_EMPLOYEE (EMPNO VARCHAR2(20))",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["result"]["training_type"], "ddl")
+        self.assertEqual(mock_schema_update.call_args.kwargs["object_name"], "CT_EMPLOYEE")
+
+    @patch("webapps.vanna.api.is_vanna_admin", return_value=True)
+    @patch("webapps.vanna.api.SchemaEmbedding.objects.update_or_create")
+    @patch("webapps.vanna.api.SchemaObject.objects.update_or_create")
+    @patch("webapps.vanna.api._resolve_data_source")
+    def test_training_dataset_api_post_adds_documentation(
+        self,
+        mock_resolve_ds,
+        mock_schema_update,
+        mock_embedding_update,
+        _mock_is_admin,
+    ):
+        mock_ds = MagicMock()
+        mock_ds.default_schema = "LEGACY"
+        mock_resolve_ds.return_value = mock_ds
+        mock_doc_obj = MagicMock()
+        mock_doc_obj.object_name = "VANNA_DOCUMENTATION_ABC"
+        mock_schema_update.return_value = (mock_doc_obj, True)
+        mock_doc_embedding = MagicMock()
+        mock_doc_embedding.id = 92
+        mock_embedding_update.return_value = (mock_doc_embedding, True)
+
+        res = self.client.post(
+            self.training_dataset_url,
+            data=json.dumps(
+                {
+                    "code": "legacy_vanna_chroma",
+                    "training_type": "documentation",
+                    "title": "在職狀態",
+                    "documentation": "status = ACTIVE 代表在職。",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["result"]["training_type"], "documentation")
+        self.assertIn("在職狀態", data["result"]["documentation"])
+
     @patch("webapps.vanna.api.generate_sql")
     @patch("webapps.vanna.api._resolve_data_source")
     def test_generate_api_success(self, mock_resolve_ds, mock_generate_sql):
