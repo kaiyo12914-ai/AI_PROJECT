@@ -150,9 +150,11 @@ function openTrainingDatasetManager() {
   loadTrainingDataset(bubble);
 }
 
-function loadTrainingDataset(bubbleEl) {
+function loadTrainingDataset(bubbleEl, allItems = false) {
   const code = encodeURIComponent(selectedDataSourceCode());
-  fetch(apiurl(`/nl2sql/api/vanna/training-dataset/?code=${code}`), {
+  const allQuery = allItems ? "&all=true" : "";
+  bubbleEl.dataset.allItems = allItems ? "true" : "false";
+  fetch(apiurl(`/nl2sql/api/vanna/training-dataset/?code=${code}${allQuery}`), {
     method: "GET",
     headers: {
       "X-CSRFToken": getCookie("csrftoken")
@@ -165,7 +167,7 @@ function loadTrainingDataset(bubbleEl) {
       addLog(`訓練資料集載入失敗: ${data.error}`, "error");
       return;
     }
-    renderTrainingDatasetManager(bubbleEl, data.result);
+    renderTrainingDatasetManager(bubbleEl, data.result, allItems);
     addLog("Vanna 訓練資料集已載入。", "success");
   })
   .catch(err => {
@@ -174,7 +176,8 @@ function loadTrainingDataset(bubbleEl) {
   });
 }
 
-function renderTrainingDatasetManager(bubbleEl, result) {
+function renderTrainingDatasetManager(bubbleEl, result, allItems = false) {
+  bubbleEl.trainingDatasetResult = result;
   const summary = result.summary || {};
   const ds = result.data_source || {};
   const schemaRows = (result.schema_objects || []).map(item => `
@@ -183,12 +186,20 @@ function renderTrainingDatasetManager(bubbleEl, result) {
       <td>${escapeHtml(item.type)}</td>
       <td>${escapeHtml(String(item.columns || 0))}</td>
       <td>${item.enabled ? "啟用" : "停用"}</td>
+      <td>
+        <button class="btn btn-secondary mini-btn btn-edit-item" onclick="editTrainingItem(this, 'ddl', ${item.id})">編輯</button>
+        <button class="btn btn-danger mini-btn btn-delete-item" onclick="deleteTrainingItem(this, 'ddl', ${item.id})">刪除</button>
+      </td>
     </tr>
   `).join("");
   const documentationRows = (result.documentation_items || []).map(item => `
     <tr>
       <td>${escapeHtml(item.name)}</td>
       <td>${escapeHtml((item.documentation || "").slice(0, 160))}</td>
+      <td>
+        <button class="btn btn-secondary mini-btn btn-edit-item" onclick="editTrainingItem(this, 'documentation', ${item.id})">編輯</button>
+        <button class="btn btn-danger mini-btn btn-delete-item" onclick="deleteTrainingItem(this, 'documentation', ${item.id})">刪除</button>
+      </td>
     </tr>
   `).join("");
   const exampleRows = (result.training_examples || []).map(item => `
@@ -196,6 +207,10 @@ function renderTrainingDatasetManager(bubbleEl, result) {
       <td>${escapeHtml(item.question)}</td>
       <td><code>${escapeHtml(item.status)}</code></td>
       <td>${escapeHtml(item.created_by || "")}</td>
+      <td>
+        <button class="btn btn-secondary mini-btn btn-edit-item" onclick="editTrainingItem(this, 'sql', ${item.id})">編輯</button>
+        <button class="btn btn-danger mini-btn btn-delete-item" onclick="deleteTrainingItem(this, 'sql', ${item.id})">刪除</button>
+      </td>
     </tr>
   `).join("");
   const syncRows = (result.vanna_sync_records || []).map(item => `
@@ -206,13 +221,19 @@ function renderTrainingDatasetManager(bubbleEl, result) {
     </tr>
   `).join("");
 
+  const refreshBtn = `<button class="btn btn-secondary mini-btn" onclick="loadTrainingDataset(this.closest('.msg-bubble'), ${allItems})">重新整理</button>`;
+  const viewAllBtn = allItems ? "" : `<button class="btn btn-secondary mini-btn" onclick="loadTrainingDataset(this.closest('.msg-bubble'), true)">檢視全部</button>`;
+
   bubbleEl.innerHTML = `
     <div class="training-head">
       <div>
         <strong>Vanna 2.0 訓練資料集維護</strong>
         <div class="muted-text">資料源：${escapeHtml(ds.name || ds.code || "")}｜DB：${escapeHtml(ds.db_type || "")}｜Schema：${escapeHtml(ds.schema || "")}</div>
       </div>
-      <button class="btn btn-secondary mini-btn" onclick="loadTrainingDataset(this.closest('.msg-bubble'))">重新整理</button>
+      <div style="display:flex;gap:6px;">
+        ${refreshBtn}
+        ${viewAllBtn}
+      </div>
     </div>
     <div class="metric-grid">
       <div class="metric-card"><span>Schema</span><strong>${summary.schema_objects || 0}</strong></div>
@@ -256,20 +277,26 @@ FROM CT_EMPLOYEE e
 JOIN CT_DEPARTMENT d ON d.DEPTNO = e.DEPTNO
 WHERE e.STATUS = 'ACTIVE'
 GROUP BY d.DEPT_NAME;"></textarea>
+        <div class="current-sql-test-row" style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+          <button type="button" class="btn btn-secondary mini-btn" onclick="testCurrentSql(this)">測試此 SQL 語法</button>
+          <span class="muted-text" style="margin-left:8px;">最多回傳:</span>
+          <input id="currentSqlMaxRowsInput" type="number" min="1" max="1000" value="10" style="width: 70px; padding: 4px 8px; font-size:12px; height:28px;" aria-label="最多回傳筆數">
+        </div>
+        <div class="current-sql-test-result" style="display:none; margin-top:10px;"></div>
       </div>
 
       <button class="btn btn-primary" onclick="submitTrainingData(this)">新增到訓練資料集</button>
     </div>
 
-    <div class="training-form sql-test-form">
+    <div class="training-form sql-test-form disabled-form">
       <div class="form-title">執行 SQL 語法測試</div>
       <div class="muted-text">僅系統管理員可用；仍會經過 SQL Guard，只允許 SELECT / WITH SELECT。ENV=EXT 時 Oracle 只回傳 SQL ONLY，不連線執行。</div>
       <textarea id="adminSqlInput" placeholder="SELECT *
 FROM CT_EMPLOYEE
-WHERE ROWNUM <= 10;"></textarea>
+WHERE ROWNUM <= 10;" disabled></textarea>
       <div class="sql-test-actions">
-        <input id="adminSqlMaxRowsInput" type="number" min="1" max="1000" value="100" aria-label="最多回傳筆數">
-        <button class="btn btn-primary" onclick="executeAdminSqlTest(this)">執行 SQL 測試</button>
+        <input id="adminSqlMaxRowsInput" type="number" min="1" max="1000" value="100" aria-label="最多回傳筆數" disabled>
+        <button class="btn btn-primary" onclick="executeAdminSqlTest(this)" disabled>執行 SQL 測試</button>
       </div>
       <div class="result-section sql-test-result" style="display:none;"></div>
     </div>
@@ -278,8 +305,8 @@ WHERE ROWNUM <= 10;"></textarea>
       <h3>DDL / Schema metadata</h3>
       <div class="table-wrapper training-table-wrap">
         <table class="result-table">
-          <thead><tr><th>Table/View</th><th>Type</th><th>Columns</th><th>Status</th></tr></thead>
-          <tbody>${schemaRows || `<tr><td colspan="4">尚無 schema metadata</td></tr>`}</tbody>
+          <thead><tr><th>Table/View</th><th>Type</th><th>Columns</th><th>Status</th><th>操作</th></tr></thead>
+          <tbody>${schemaRows || `<tr><td colspan="5">尚無 schema metadata</td></tr>`}</tbody>
         </table>
       </div>
     </div>
@@ -287,8 +314,8 @@ WHERE ROWNUM <= 10;"></textarea>
       <h3>Documentation</h3>
       <div class="table-wrapper training-table-wrap">
         <table class="result-table">
-          <thead><tr><th>Name</th><th>Content</th></tr></thead>
-          <tbody>${documentationRows || `<tr><td colspan="2">尚無 documentation</td></tr>`}</tbody>
+          <thead><tr><th>Name</th><th>Content</th><th>操作</th></tr></thead>
+          <tbody>${documentationRows || `<tr><td colspan="3">尚無 documentation</td></tr>`}</tbody>
         </table>
       </div>
     </div>
@@ -296,8 +323,8 @@ WHERE ROWNUM <= 10;"></textarea>
       <h3>SQL approved examples</h3>
       <div class="table-wrapper training-table-wrap">
         <table class="result-table">
-          <thead><tr><th>Question</th><th>Status</th><th>Created by</th></tr></thead>
-          <tbody>${exampleRows || `<tr><td colspan="3">尚無 approved examples</td></tr>`}</tbody>
+          <thead><tr><th>Question</th><th>Status</th><th>Created by</th><th>操作</th></tr></thead>
+          <tbody>${exampleRows || `<tr><td colspan="4">尚無 approved examples</td></tr>`}</tbody>
         </table>
       </div>
     </div>
@@ -309,6 +336,16 @@ WHERE ROWNUM <= 10;"></textarea>
           <tbody>${syncRows || `<tr><td colspan="3">尚無 sync records</td></tr>`}</tbody>
         </table>
       </div>
+    </div>
+
+    <div class="training-form rag-debugger-form" style="margin-top: 20px;">
+      <div class="form-title">🔍 RAG 檢索與 LLM 提示詞除錯器</div>
+      <div class="muted-text">輸入提問，可查詢 SchemaEmbedding (DDL/Doc) 與 ExampleEmbedding (SQL 範例) 的相似度分數與 RAG 內容，以及最終組裝的 LLM 提示詞。</div>
+      <div style="display:flex; gap:10px; margin-top:8px;">
+        <input id="ragDebugQuestionInput" type="text" placeholder="輸入要測試的提問，例如：[人事]205廠 查詢在職人數" style="flex:1;">
+        <button class="btn btn-primary" style="width:auto; padding: 0 16px; height: 38px;" onclick="debugRagPrompt(this)">檢索並分析</button>
+      </div>
+      <div class="rag-debug-result" style="display:none; margin-top:12px; font-size:13px; color:#cbd5e1; display:flex; flex-direction:column; gap:12px;"></div>
     </div>
   `;
 }
@@ -322,6 +359,25 @@ function selectTrainingType(tabEl) {
   formEl.querySelectorAll(".training-fields").forEach(el => {
     el.classList.toggle("hidden", el.dataset.trainingFields !== trainingType);
   });
+
+  const bubbleEl = tabEl.closest(".msg-bubble");
+  const testForm = bubbleEl ? bubbleEl.querySelector(".sql-test-form") : null;
+  if (testForm) {
+    const textarea = testForm.querySelector("#adminSqlInput");
+    const input = testForm.querySelector("#adminSqlMaxRowsInput");
+    const btn = testForm.querySelector("button");
+    if (trainingType === "sql") {
+      testForm.classList.remove("disabled-form");
+      if (textarea) textarea.disabled = false;
+      if (input) input.disabled = false;
+      if (btn) btn.disabled = false;
+    } else {
+      testForm.classList.add("disabled-form");
+      if (textarea) textarea.disabled = true;
+      if (input) input.disabled = true;
+      if (btn) btn.disabled = true;
+    }
+  }
 }
 
 function activeTrainingType(formEl) {
@@ -367,11 +423,18 @@ function submitTrainingData(btn) {
     return;
   }
 
+  const editingId = formEl.dataset.editingId;
+  const isEditing = !!editingId;
+  const method = isEditing ? "PUT" : "POST";
+  if (isEditing) {
+    payload.id = parseInt(editingId, 10);
+  }
+
   const originalText = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = `<div class="spinner"></div> 新增中...`;
+  btn.innerHTML = isEditing ? `<div class="spinner"></div> 更新中...` : `<div class="spinner"></div> 新增中...`;
   fetch(apiurl("/nl2sql/api/vanna/training-dataset/"), {
-    method: "POST",
+    method: method,
     headers: {
       "Content-Type": "application/json",
       "X-CSRFToken": getCookie("csrftoken")
@@ -384,16 +447,141 @@ function submitTrainingData(btn) {
   .then(res => res.json())
   .then(data => {
     if (!data.ok) {
-      addLog(`新增訓練範例失敗: ${data.error}`, "error");
+      addLog(`${isEditing ? "更新" : "新增"}訓練資料失敗: ${data.error}`, "error");
       return;
     }
-    addLog(`已新增 ${trainingType} 訓練資料，請執行 Vanna Sync 使資料生效。`, "success");
-    loadTrainingDataset(bubbleEl);
+    addLog(`已${isEditing ? "更新" : "新增"} ${trainingType} 訓練資料，請執行 Vanna Sync 使資料生效。`, "success");
+    resetTrainingForm(formEl);
+    const allItems = bubbleEl.dataset.allItems === "true";
+    loadTrainingDataset(bubbleEl, allItems);
   })
   .catch(err => {
-    addLog(`新增訓練範例失敗: ${err.message}`, "error");
+    addLog(`${isEditing ? "更新" : "新增"}訓練資料失敗: ${err.message}`, "error");
   })
   .finally(() => {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  });
+}
+
+function editTrainingItem(btn, type, id) {
+  const bubbleEl = btn.closest(".msg-bubble");
+  const result = bubbleEl.trainingDatasetResult;
+  if (!result) return;
+
+  const formEl = bubbleEl.querySelector(".training-form");
+  const tabBtn = formEl.querySelector(`.training-type-tab[data-training-type="${type}"]`);
+  if (tabBtn) {
+    selectTrainingType(tabBtn);
+  }
+
+  formEl.dataset.editingId = id;
+  formEl.dataset.editingType = type;
+
+  const submitBtn = formEl.querySelector("button.btn-primary, button.btn-update-action");
+  if (submitBtn) {
+    submitBtn.innerText = "更新訓練資料";
+    submitBtn.className = "btn btn-primary btn-update-action";
+  }
+  
+  let cancelBtn = formEl.querySelector(".btn-cancel-edit");
+  if (!cancelBtn) {
+    cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "btn btn-secondary btn-cancel-edit";
+    cancelBtn.innerText = "取消編輯";
+    cancelBtn.style.marginLeft = "10px";
+    cancelBtn.onclick = () => resetTrainingForm(formEl);
+    submitBtn.parentNode.appendChild(cancelBtn);
+  }
+
+  if (type === "ddl") {
+    const item = result.schema_objects.find(x => x.id === id);
+    if (item) {
+      formEl.querySelector("#trainingDdlInput").value = item.ddl || "";
+    }
+  } else if (type === "documentation") {
+    const item = result.documentation_items.find(x => x.id === id);
+    if (item) {
+      const lines = (item.documentation || "").split("\n");
+      let title = "";
+      let documentation = item.documentation || "";
+      if (lines.length > 1 && lines[0].trim().length < 80) {
+        title = lines[0];
+        documentation = lines.slice(1).join("\n");
+      }
+      formEl.querySelector("#trainingDocTitleInput").value = title;
+      formEl.querySelector("#trainingDocInput").value = documentation;
+    }
+  } else if (type === "sql") {
+    const item = result.training_examples.find(x => x.id === id);
+    if (item) {
+      formEl.querySelector("#trainingQuestionInput").value = item.question || "";
+      formEl.querySelector("#trainingSqlInput").value = item.sql || "";
+    }
+  }
+
+  formEl.scrollIntoView({ behavior: "smooth" });
+}
+
+function resetTrainingForm(formEl) {
+  delete formEl.dataset.editingId;
+  delete formEl.dataset.editingType;
+  
+  const submitBtn = formEl.querySelector(".btn-update-action, button.btn-primary");
+  if (submitBtn) {
+    submitBtn.innerText = "新增到訓練資料集";
+    submitBtn.className = "btn btn-primary";
+  }
+
+  const cancelBtn = formEl.querySelector(".btn-cancel-edit");
+  if (cancelBtn) {
+    cancelBtn.remove();
+  }
+
+  formEl.querySelector("#trainingDdlInput").value = "";
+  formEl.querySelector("#trainingDocTitleInput").value = "";
+  formEl.querySelector("#trainingDocInput").value = "";
+  formEl.querySelector("#trainingQuestionInput").value = "";
+  formEl.querySelector("#trainingSqlInput").value = "";
+}
+
+function deleteTrainingItem(btn, type, id) {
+  if (!confirm("確定要刪除此筆訓練資料嗎？此動作將同時清除相關的 Vanna 同步與 Embedding 記錄，且無法復原。")) {
+    return;
+  }
+
+  const bubbleEl = btn.closest(".msg-bubble");
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = "...";
+
+  fetch(apiurl("/nl2sql/api/vanna/training-dataset/"), {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": getCookie("csrftoken")
+    },
+    body: JSON.stringify({
+      code: selectedDataSourceCode(),
+      training_type: type,
+      id: id
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (!data.ok) {
+      addLog(`刪除訓練資料失敗: ${data.error}`, "error");
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+      return;
+    }
+    addLog(`已刪除該筆 ${type} 訓練資料，請執行 Vanna Sync 使資料生效。`, "success");
+    const allItems = bubbleEl.dataset.allItems === "true";
+    loadTrainingDataset(bubbleEl, allItems);
+  })
+  .catch(err => {
+    addLog(`刪除訓練資料失敗: ${err.message}`, "error");
     btn.disabled = false;
     btn.innerHTML = originalText;
   });
@@ -693,6 +881,145 @@ function askPreset(presetText) {
     inputEl.value = presetText;
     sendQuestion();
   }
+}
+
+function testCurrentSql(btn) {
+  const fieldsEl = btn.closest(".training-fields");
+  const sqlEl = fieldsEl.querySelector("#trainingSqlInput");
+  const maxRowsEl = fieldsEl.querySelector("#currentSqlMaxRowsInput");
+  const resultEl = fieldsEl.querySelector(".current-sql-test-result");
+  const sql = sqlEl.value.trim();
+  const maxRows = parseInt(maxRowsEl.value || "10", 10);
+
+  if (!sql) {
+    addLog("請輸入 SQL 後再執行測試。", "error");
+    return;
+  }
+
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `<div class="spinner"></div> 執行中...`;
+  resultEl.style.display = "block";
+  resultEl.innerHTML = `<div style="display:flex;align-items:center;gap:10px;"><div class="spinner" style="border-top-color:#06b6d4;"></div> 正在執行 SQL 測試...</div>`;
+  addLog("訓練編輯器 SQL 測試開始執行。", "info");
+
+  const endpoint = apiurl("/nl2sql/api/vanna/admin-sql-execute/");
+  fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": getCookie("csrftoken")
+    },
+    body: JSON.stringify({
+      code: selectedDataSourceCode(),
+      sql: sql,
+      max_rows: Number.isFinite(maxRows) ? maxRows : 10
+    })
+  })
+  .then(res => responseTextOrJson(res))
+  .then(data => {
+    if (!data.ok) {
+      resultEl.innerHTML = `<div style="color:#ef4444;padding:12px;border:1px solid rgba(239,68,68,0.2);border-radius:8px;background:rgba(239,68,68,0.05);"><strong>執行失敗:</strong><br>${escapeHtml(data.error)}</div>`;
+      addLog(`編輯器 SQL 測試失敗: ${data.error}`, "error");
+      return;
+    }
+    addLog(`編輯器 SQL 測試成功，取得 ${(data.rows || []).length} 筆資料。`, "success");
+    renderResultTable(resultEl, data);
+  })
+  .catch(err => {
+    const statusText = err.status ? `HTTP ${err.status}` : "連線錯誤";
+    const urlText = err.url || endpoint;
+    resultEl.innerHTML = `<div style="color:#ef4444;padding:12px;border:1px solid rgba(239,68,68,0.2);border-radius:8px;background:rgba(239,68,68,0.05);"><strong>執行失敗 (${escapeHtml(statusText)}):</strong><br>${escapeHtml(err.message)}<br><small>URL: ${escapeHtml(urlText)}</small></div>`;
+    addLog(`編輯器 SQL 測試失敗: ${statusText} ${urlText}`, "error");
+  })
+  .finally(() => {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  });
+}
+
+function debugRagPrompt(btn) {
+  const formEl = btn.closest(".rag-debugger-form");
+  const questionEl = formEl.querySelector("#ragDebugQuestionInput");
+  const resultEl = formEl.querySelector(".rag-debug-result");
+  const question = questionEl.value.trim();
+
+  if (!question) {
+    addLog("請輸入提問後再執行除錯檢索。", "error");
+    return;
+  }
+
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `<div class="spinner"></div> 檢索中...`;
+  resultEl.style.display = "block";
+  resultEl.innerHTML = `<div style="display:flex;align-items:center;gap:10px;"><div class="spinner" style="border-top-color:#06b6d4;"></div> 正在進行 RAG 檢索與 Prompt 組裝...</div>`;
+  addLog("開始執行 RAG Prompt 除錯檢索...", "info");
+
+  fetch(apiurl("/nl2sql/api/vanna/rag-debug/"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": getCookie("csrftoken")
+    },
+    body: JSON.stringify({
+      code: selectedDataSourceCode(),
+      question: question
+    })
+  })
+  .then(res => responseTextOrJson(res))
+  .then(data => {
+    if (!data.ok) {
+      resultEl.innerHTML = `<div style="color:#ef4444;padding:12px;border:1px solid rgba(239,68,68,0.2);border-radius:8px;background:rgba(239,68,68,0.05);"><strong>檢索失敗:</strong><br>${escapeHtml(data.error)}</div>`;
+      addLog(`RAG 檢索失敗: ${data.error}`, "error");
+      return;
+    }
+    
+    addLog("RAG 檢索與 Prompt 組裝完成。", "success");
+
+    let seHtml = (data.schema_matches || []).map(item => `
+      <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); padding:8px 12px; border-radius:8px; margin-bottom:8px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+          <strong>🗂️ ${escapeHtml(item.schema_name)}.${escapeHtml(item.object_name)} (${escapeHtml(item.chunk_type)})</strong>
+          <span style="color:#14b8a6; font-weight:700;">相似度: ${(item.similarity * 100).toFixed(2)}% (Cos: ${item.distance.toFixed(4)})</span>
+        </div>
+        <pre style="margin:0; padding:6px; font-size:11.5px; background:#0f172a; border-radius:4px; max-height:120px; overflow-y:auto; color:#a5f3fc;"><code style="font-size:11.5px; color:#a5f3fc;">${escapeHtml(item.chunk_text)}</code></pre>
+      </div>
+    `).join("") || `<div style="color:#94a3b8; font-style:italic;">無 SchemaEmbedding 向量匹配結果 (可能未計算向量)</div>`;
+
+    let eeHtml = (data.example_matches || []).map(item => `
+      <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); padding:8px 12px; border-radius:8px; margin-bottom:8px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+          <strong>💬 問題: ${escapeHtml(item.question)}</strong>
+          <span style="color:#14b8a6; font-weight:700;">相似度: ${(item.similarity * 100).toFixed(2)}% (Cos: ${item.distance.toFixed(4)})</span>
+        </div>
+        <pre style="margin:0; padding:6px; font-size:11.5px; background:#0f172a; border-radius:4px; max-height:120px; overflow-y:auto; color:#a5f3fc;"><code style="font-size:11.5px; color:#38bdf8;">${escapeHtml(item.sql)}</code></pre>
+      </div>
+    `).join("") || `<div style="color:#94a3b8; font-style:italic;">無 ExampleEmbedding 向量匹配結果 (可能未計算向量)</div>`;
+
+    resultEl.innerHTML = `
+      <div>
+        <strong style="color:#38bdf8; display:block; margin-bottom:6px;">1. SchemaEmbedding (DDL / Documentation 向量匹配)</strong>
+        ${seHtml}
+      </div>
+      <div>
+        <strong style="color:#38bdf8; display:block; margin-bottom:6px;">2. ExampleEmbedding (Approved SQL 範例向量匹配)</strong>
+        ${eeHtml}
+      </div>
+      <div>
+        <strong style="color:#38bdf8; display:block; margin-bottom:6px;">3. 組裝後 LLM 系統提示詞 (Final Assembled Prompt)</strong>
+        <textarea style="font-family:monospace; font-size:12px; min-height:220px; background:#0f172a; color:#e2e8f0; width:100%;" readonly>${escapeHtml(data.prompt)}</textarea>
+      </div>
+    `;
+  })
+  .catch(err => {
+    resultEl.innerHTML = `<div style="color:#ef4444;padding:12px;border:1px solid rgba(239,68,68,0.2);border-radius:8px;background:rgba(239,68,68,0.05);"><strong>檢索失敗:</strong><br>${escapeHtml(err.message)}</div>`;
+    addLog(`RAG 檢索連線錯誤: ${err.message}`, "error");
+  })
+  .finally(() => {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  });
 }
 
 // 9. 綁定按鈕監聽 (等 DOMContentLoaded)

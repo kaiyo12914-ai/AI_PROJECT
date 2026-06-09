@@ -135,8 +135,8 @@ webapps/vanna/
 - 建立 PostgreSQL 儲存表，用於 schema、training examples、embeddings、query log 與治理資料。
 - 建立 schema import / sync command (`nl2sql_sync_schema`)；EXT 環境不得直接同步 Oracle 實體 schema。
 - 建立 pgvector migration。
-- 建立 schema / example embeddings：
-  - 實作 `nl2sql_embed_schema` 指令，批次處理尚未計算 Embedding 向量的 Schema DDL 與 Examples，呼叫嵌入模型計算 1536 維度向量並儲存，避免即時查詢時運算造成延遲。
+  - 建立 schema / example embeddings：
+    - 實作 `nl2sql_embed_schema` 指令，批次處理尚未計算 Embedding 向量的 Schema DDL 與 Examples，捨棄舊版 Chroma 預設 384 維度，統一使用當前設定的 Embedding Model（如 OpenAI text-embedding-ada-002 / text-embedding-3-small，維度為 1536）來批次計算與覆寫向量，解決先前向量為空或維度不符導致 RAG 無法比對相似度的問題。
   - 將 RAG 的 `retrieve_context` 由目前的關鍵字分詞打分升級為真正的 pgvector 餘弦相似度向量檢索。
 - 串接 Vanna 2.0 generate SQL。
 - 建立 generate API 與 query log。

@@ -21,6 +21,7 @@ from webapps.vanna.models import (
     SchemaObject,
     TrainingExample,
     VannaTrainingSync,
+    ExampleEmbedding,
 )
 from webapps.vanna.views import is_vanna_admin
 from webapps.vanna.vanna_adapter import (
@@ -102,20 +103,26 @@ def _user_id(request: HttpRequest) -> str:
 
 
 def _resolve_data_source(data: dict[str, Any]) -> DataSource:
-    code = str(data.get("data_source") or data.get("code") or "legacy_vanna_chroma").strip()
-    db_type = str(data.get("db_type") or "").strip().lower()
+    def _get_first(k: str) -> Any:
+        val = data.get(k)
+        if isinstance(val, (list, tuple)) and val:
+            return val[0]
+        return val
+
+    code = str(_get_first("data_source") or _get_first("code") or "legacy_vanna_chroma").strip()
+    db_type = str(_get_first("db_type") or "").strip().lower()
     if not db_type:
         db_type = "postgresql" if code == "default_pg" else "oracle"
     default_schema = str(
-        data.get("schema")
-        or data.get("default_schema")
+        _get_first("schema")
+        or _get_first("default_schema")
         or ("public" if db_type == "postgresql" else "LEGACY")
     ).strip()
     return get_or_create_data_source(
         code=code,
-        name=str(data.get("name") or code).strip(),
+        name=str(_get_first("name") or code).strip(),
         db_type=db_type,
-        db_profile=str(data.get("db_profile") or "").strip(),
+        db_profile=str(_get_first("db_profile") or "").strip(),
         default_schema=default_schema,
     )
 
@@ -396,7 +403,7 @@ def training_sync_api(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status=500)
 
 
-def _training_dataset_payload(data_source: DataSource) -> dict[str, Any]:
+def _training_dataset_payload(data_source: DataSource, all_items: bool = False) -> dict[str, Any]:
     schema_qs = SchemaObject.objects.filter(data_source=data_source)
     examples_qs = TrainingExample.objects.filter(data_source=data_source)
     sync_qs = VannaTrainingSync.objects.filter(data_source=data_source)
@@ -404,6 +411,17 @@ def _training_dataset_payload(data_source: DataSource) -> dict[str, Any]:
         schema_object__data_source=data_source,
         chunk_type="documentation",
     ).select_related("schema_object")
+
+    schema_list_qs = schema_qs.order_by("schema_name", "object_name")
+    examples_list_qs = examples_qs.order_by("-updated_at")
+    sync_list_qs = sync_qs.order_by("-updated_at")
+    doc_list_qs = doc_qs.order_by("-created_at")
+
+    if not all_items:
+        schema_list_qs = schema_list_qs[:30]
+        examples_list_qs = examples_list_qs[:30]
+        sync_list_qs = sync_list_qs[:30]
+        doc_list_qs = doc_list_qs[:30]
 
     schema_items = [
         {
@@ -414,9 +432,10 @@ def _training_dataset_payload(data_source: DataSource) -> dict[str, Any]:
             "enabled": obj.is_enabled,
             "columns": len(obj.columns_json or []),
             "description": obj.description,
+            "ddl": obj.ddl_text,
             "updated_at": obj.updated_at,
         }
-        for obj in schema_qs.order_by("schema_name", "object_name")[:30]
+        for obj in schema_list_qs
     ]
     example_items = [
         {
@@ -428,7 +447,7 @@ def _training_dataset_payload(data_source: DataSource) -> dict[str, Any]:
             "created_by": ex.created_by,
             "updated_at": ex.updated_at,
         }
-        for ex in examples_qs.order_by("-updated_at")[:30]
+        for ex in examples_list_qs
     ]
     sync_items = [
         {
@@ -439,7 +458,7 @@ def _training_dataset_payload(data_source: DataSource) -> dict[str, Any]:
             "error": item.error_message,
             "updated_at": item.updated_at,
         }
-        for item in sync_qs.order_by("-updated_at")[:30]
+        for item in sync_list_qs
     ]
     documentation_items = [
         {
@@ -449,7 +468,7 @@ def _training_dataset_payload(data_source: DataSource) -> dict[str, Any]:
             "documentation": item.chunk_text,
             "created_at": item.created_at,
         }
-        for item in doc_qs.order_by("-created_at")[:30]
+        for item in doc_list_qs
     ]
     return {
         "data_source": {
@@ -478,13 +497,13 @@ def _training_dataset_payload(data_source: DataSource) -> dict[str, Any]:
 
 
 @csrf_exempt
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET", "POST", "PUT", "DELETE"])
 @require_node("nl2sql", api=True)
 def training_dataset_api(request: HttpRequest) -> JsonResponse:
     if not is_vanna_admin(request):
         return JsonResponse({"ok": False, "error": "Only Vanna administrators can manage training dataset."}, status=403)
 
-    body = _json_body(request) if request.method == "POST" else {}
+    body = _json_body(request) if request.method in ("POST", "PUT", "DELETE") else {}
     params = request.GET if request.method == "GET" else body
     try:
         data_source = _resolve_data_source(dict(params))
@@ -492,7 +511,146 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"ok": False, "error": f"Failed to resolve data source: {exc}"}, status=400)
 
     if request.method == "GET":
-        return JsonResponse({"ok": True, "result": _training_dataset_payload(data_source)}, json_dumps_params={"default": str})
+        all_items = str(request.GET.get("all") or "").lower() == "true"
+        return JsonResponse({"ok": True, "result": _training_dataset_payload(data_source, all_items=all_items)}, json_dumps_params={"default": str})
+
+    if request.method == "DELETE":
+        training_type = str(body.get("training_type") or body.get("type") or "").strip().lower()
+        item_id = body.get("id")
+        if not item_id:
+            return JsonResponse({"ok": False, "error": "id is required for deletion"}, status=400)
+        if training_type not in ("ddl", "documentation", "sql"):
+            return JsonResponse({"ok": False, "error": "training_type must be ddl, documentation, or sql"}, status=400)
+
+        if training_type == "ddl":
+            try:
+                obj = SchemaObject.objects.get(id=item_id, data_source=data_source)
+                VannaTrainingSync.objects.filter(data_source=data_source, sync_type="ddl", source_object_id=obj.id).delete()
+                obj.delete()
+                return JsonResponse({"ok": True})
+            except SchemaObject.DoesNotExist:
+                return JsonResponse({"ok": False, "error": f"SchemaObject with id {item_id} not found"}, status=404)
+
+        elif training_type == "documentation":
+            try:
+                emb = SchemaEmbedding.objects.get(id=item_id, chunk_type="documentation", schema_object__data_source=data_source)
+                parent_obj = emb.schema_object
+                content_hash = emb.content_hash
+                VannaTrainingSync.objects.filter(data_source=data_source, sync_type="documentation", content_hash=content_hash).delete()
+                emb.delete()
+                if parent_obj.object_name.startswith("VANNA_DOCUMENTATION_") and not parent_obj.embeddings.exists():
+                    parent_obj.delete()
+                return JsonResponse({"ok": True})
+            except SchemaEmbedding.DoesNotExist:
+                return JsonResponse({"ok": False, "error": f"SchemaEmbedding with id {item_id} not found"}, status=404)
+
+        elif training_type == "sql":
+            try:
+                ex = TrainingExample.objects.get(id=item_id, data_source=data_source)
+                VannaTrainingSync.objects.filter(data_source=data_source, sync_type="example", source_object_id=ex.id).delete()
+                ex.delete()
+                return JsonResponse({"ok": True})
+            except TrainingExample.DoesNotExist:
+                return JsonResponse({"ok": False, "error": f"TrainingExample with id {item_id} not found"}, status=404)
+
+    if request.method == "PUT":
+        training_type = str(body.get("training_type") or body.get("type") or "").strip().lower()
+        item_id = body.get("id")
+        if not item_id:
+            return JsonResponse({"ok": False, "error": "id is required for update"}, status=400)
+        if training_type not in ("ddl", "documentation", "sql"):
+            return JsonResponse({"ok": False, "error": "training_type must be ddl, documentation, or sql"}, status=400)
+
+        if training_type == "ddl":
+            ddl_text = str(body.get("ddl") or body.get("ddl_text") or "").strip()
+            if not ddl_text:
+                return JsonResponse({"ok": False, "error": "ddl is required"}, status=400)
+            try:
+                obj = SchemaObject.objects.get(id=item_id, data_source=data_source)
+                schema_name, object_name, object_type = _parse_ddl_object(ddl_text, data_source.default_schema)
+                obj.schema_name = schema_name
+                obj.object_name = object_name
+                obj.object_type = object_type
+                obj.ddl_text = ddl_text
+                obj.save()
+
+                content_hash = _content_hash(ddl_text)
+                SchemaEmbedding.objects.update_or_create(
+                    schema_object=obj,
+                    chunk_type="ddl",
+                    defaults={
+                        "chunk_text": ddl_text,
+                        "content_hash": content_hash,
+                        "embedding": None,
+                        "embedding_model": "",
+                    }
+                )
+                VannaTrainingSync.objects.filter(data_source=data_source, sync_type="ddl", source_object_id=obj.id).delete()
+                return JsonResponse({"ok": True, "result": {"id": obj.id, "schema": obj.schema_name, "name": obj.object_name}})
+            except SchemaObject.DoesNotExist:
+                return JsonResponse({"ok": False, "error": f"SchemaObject with id {item_id} not found"}, status=404)
+            except ValueError as exc:
+                return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
+        elif training_type == "documentation":
+            documentation = str(body.get("documentation") or "").strip()
+            title = str(body.get("title") or "").strip()
+            if not documentation:
+                return JsonResponse({"ok": False, "error": "documentation is required"}, status=400)
+            content = f"{title}\n{documentation}".strip() if title else documentation
+            try:
+                emb = SchemaEmbedding.objects.get(id=item_id, chunk_type="documentation", schema_object__data_source=data_source)
+                parent_obj = emb.schema_object
+                VannaTrainingSync.objects.filter(data_source=data_source, sync_type="documentation", content_hash=emb.content_hash).delete()
+
+                emb.chunk_text = content
+                emb.content_hash = _content_hash(content)
+                emb.embedding = None
+                emb.embedding_model = ""
+                emb.save()
+
+                parent_obj.description = content
+                parent_obj.save()
+
+                return JsonResponse({"ok": True, "result": {"id": emb.id, "name": parent_obj.object_name, "documentation": content}})
+            except SchemaEmbedding.DoesNotExist:
+                return JsonResponse({"ok": False, "error": f"SchemaEmbedding with id {item_id} not found"}, status=404)
+
+        elif training_type == "sql":
+            question = str(body.get("question") or "").strip()
+            sql_text = str(body.get("sql") or "").strip()
+            if not question or not sql_text:
+                return JsonResponse({"ok": False, "error": "question and sql are required"}, status=400)
+
+            from webapps.vanna.sql_guard import validate_sql
+            is_safe, guard_err = validate_sql(sql_text)
+            if not is_safe:
+                return JsonResponse({"ok": False, "error": f"SQL blocked by SQL Guard: {guard_err}"}, status=403)
+
+            try:
+                ex = TrainingExample.objects.get(id=item_id, data_source=data_source)
+                ex.question = question
+                ex.sql_text = sql_text
+                if isinstance(body.get("tags"), list):
+                    ex.tags_json = body.get("tags")
+                ex.save()
+
+                content_hash = _content_hash(f"{question}\n{sql_text}")
+                ExampleEmbedding.objects.update_or_create(
+                    training_example=ex,
+                    data_source=data_source,
+                    defaults={
+                        "question_text": question,
+                        "sql_text": sql_text,
+                        "content_hash": content_hash,
+                        "embedding": None,
+                        "embedding_model": "",
+                    }
+                )
+                VannaTrainingSync.objects.filter(data_source=data_source, sync_type="example", source_object_id=ex.id).delete()
+                return JsonResponse({"ok": True, "result": {"id": ex.id, "question": ex.question, "sql": ex.sql_text}})
+            except TrainingExample.DoesNotExist:
+                return JsonResponse({"ok": False, "error": f"TrainingExample with id {item_id} not found"}, status=404)
 
     training_type = str(body.get("training_type") or body.get("type") or "sql").strip().lower()
     if training_type not in {"ddl", "documentation", "sql"}:
@@ -848,3 +1006,84 @@ def execute_api(request: HttpRequest) -> JsonResponse:
             "policy": policy,
         }
     )
+
+
+@csrf_exempt
+@require_POST
+@require_node("nl2sql", api=True)
+def rag_debug_api(request: HttpRequest) -> JsonResponse:
+    if not is_vanna_admin(request):
+        return JsonResponse({"ok": False, "error": "Only Vanna administrators can debug RAG."}, status=403)
+
+    body = _json_body(request)
+    question = str(body.get("question") or "").strip()
+    if not question:
+        return JsonResponse({"ok": False, "error": "question is required"}, status=400)
+
+    try:
+        data_source = _resolve_data_source(body)
+    except Exception as exc:
+        return JsonResponse({"ok": False, "error": f"Failed to resolve data source: {exc}"}, status=400)
+
+    from webapps.llm.llm_factory import get_embedding_model
+    from pgvector.django import CosineDistance
+
+    q_vector = None
+    se_results = []
+    ee_results = []
+
+    try:
+        emb_model = get_embedding_model()
+        q_vector = emb_model.embed_query(question)
+    except Exception as exc:
+        return JsonResponse({"ok": False, "error": f"Failed to calculate query embedding: {exc}"}, status=500)
+
+    if q_vector and len(q_vector) == 1536:
+        se_matches = SchemaEmbedding.objects.filter(
+            schema_object__data_source=data_source,
+            schema_object__is_enabled=True,
+            embedding__isnull=False,
+            embedding_dimension=1536,
+        ).annotate(
+            distance=CosineDistance("embedding", q_vector)
+        ).order_by("distance")[:6]
+
+        for se in se_matches:
+            se_results.append({
+                "id": se.id,
+                "schema_name": se.schema_object.schema_name,
+                "object_name": se.schema_object.object_name,
+                "chunk_type": se.chunk_type,
+                "chunk_text": se.chunk_text,
+                "distance": float(se.distance or 0.0),
+                "similarity": float(1.0 - (se.distance or 0.0)),
+            })
+
+        ee_matches = ExampleEmbedding.objects.filter(
+            data_source=data_source,
+            training_example__review_status="approved",
+            embedding__isnull=False,
+            embedding_dimension=1536,
+        ).annotate(
+            distance=CosineDistance("embedding", q_vector)
+        ).order_by("distance")[:3]
+
+        for ee in ee_matches:
+            ee_results.append({
+                "id": ee.id,
+                "question": ee.training_example.question,
+                "sql": ee.training_example.sql_text,
+                "distance": float(ee.distance or 0.0),
+                "similarity": float(1.0 - (ee.distance or 0.0)),
+            })
+
+    from webapps.vanna.vanna_adapter import retrieve_context, build_generate_prompt
+    context = retrieve_context(data_source, question)
+    prompt = build_generate_prompt(data_source, question, context)
+
+    return JsonResponse({
+        "ok": True,
+        "schema_matches": se_results,
+        "example_matches": ee_results,
+        "prompt": prompt,
+    })

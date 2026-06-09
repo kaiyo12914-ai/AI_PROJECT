@@ -147,6 +147,24 @@ select:focus, input:focus {
   background: rgba(71, 85, 105, 0.9);
 }
 
+.btn-danger {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3);
+}
+
+.btn-danger:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+table.result-table td .btn {
+  display: inline-flex;
+  width: auto;
+  padding: 4px 8px;
+  font-size: 11px;
+  margin-right: 4px;
+}
+
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -388,36 +406,37 @@ table.result-table tr:hover {
 
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(120px, 1fr));
-  gap: 10px;
-  margin: 12px 0 16px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin: 8px 0 12px;
 }
 
 .metric-card {
-  padding: 12px;
-  border-radius: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
   background: rgba(15, 23, 42, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
 }
 
 .metric-card span {
   display: block;
   color: #94a3b8;
-  font-size: 12px;
-  margin-bottom: 4px;
+  font-size: 11px;
+  margin-bottom: 2px;
 }
 
 .metric-card strong {
   color: #38bdf8;
-  font-size: 22px;
+  font-size: 18px;
 }
 
 .training-form {
   display: grid;
-  gap: 10px;
-  padding: 14px;
-  margin-bottom: 16px;
-  border-radius: 14px;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: 12px;
   background: rgba(2, 6, 23, 0.35);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -592,4 +611,14 @@ textarea:focus {
   .metric-grid {
     grid-template-columns: repeat(2, minmax(120px, 1fr));
   }
+}
+
+.disabled-form {
+  opacity: 0.45;
+  filter: grayscale(80%);
+  transition: opacity 0.3s, filter 0.3s;
+}
+
+.disabled-form * {
+  cursor: not-allowed !important;
 }
