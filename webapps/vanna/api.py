@@ -7,12 +7,21 @@ from dataclasses import asdict, is_dataclass
 from typing import Any
 
 from django.conf import settings
+from django.db.models import Q
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from webapps.portal.decorators import require_node
-from webapps.vanna.models import DataSource, QueryLog, SchemaEmbedding, SchemaObject, TrainingExample, VannaTrainingSync
+from webapps.vanna.models import (
+    DataSource,
+    QueryLog,
+    ReviewQueue,
+    SchemaEmbedding,
+    SchemaObject,
+    TrainingExample,
+    VannaTrainingSync,
+)
 from webapps.vanna.views import is_vanna_admin
 from webapps.vanna.vanna_adapter import (
     ensure_vanna_vendor_loaded,
@@ -140,6 +149,114 @@ def _documentation_object_name(documentation: str) -> str:
     return f"VANNA_DOCUMENTATION_{_content_hash(documentation)[:16].upper()}"
 
 
+def _oracle_config_diagnostics(profile: str = "") -> dict[str, Any]:
+    try:
+        from webapps.database.db_factory import _db_factory_md_path, load_db_config
+
+        cfg = load_db_config("oracle", profile=profile)
+        return {
+            "profile": profile or "",
+            "db_factory_md_path": str(_db_factory_md_path()),
+            "has_ora_host": bool(cfg.ora_host),
+            "ora_host": cfg.ora_host,
+            "ora_port": cfg.ora_port,
+            "has_ora_service_name": bool(cfg.ora_service),
+            "ora_service_name": cfg.ora_service,
+            "has_ora_user": bool(cfg.ora_user),
+            "ora_user": cfg.ora_user,
+            "has_ora_pass": bool(cfg.ora_pass),
+        }
+    except Exception as exc:
+        return {
+            "profile": profile or "",
+            "diagnostic_error": f"{type(exc).__name__}: {exc}",
+        }
+
+
+def _positive_int(value: Any, default: int, maximum: int) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        number = default
+    return max(1, min(number, maximum))
+
+
+def _schema_search_payload(data_source: DataSource, query: str, limit: int = 20) -> dict[str, Any]:
+    clean_query = str(query or "").strip()
+    max_items = _positive_int(limit, 20, 100)
+    schema_qs = SchemaObject.objects.filter(data_source=data_source, is_enabled=True)
+    if clean_query:
+        schema_qs = schema_qs.filter(
+            Q(schema_name__icontains=clean_query)
+            | Q(object_name__icontains=clean_query)
+            | Q(description__icontains=clean_query)
+            | Q(ddl_text__icontains=clean_query)
+        )
+    items = [
+        {
+            "id": obj.id,
+            "schema": obj.schema_name,
+            "name": obj.object_name,
+            "type": obj.object_type,
+            "description": obj.description,
+            "columns": obj.columns_json or [],
+            "column_count": len(obj.columns_json or []),
+            "has_ddl": bool(obj.ddl_text),
+            "updated_at": obj.updated_at,
+        }
+        for obj in schema_qs.order_by("schema_name", "object_name")[:max_items]
+    ]
+    return {
+        "data_source": data_source.code,
+        "query": clean_query,
+        "limit": max_items,
+        "items": items,
+    }
+
+
+def _query_logs_payload(request: HttpRequest, data_source: DataSource | None, limit: int = 50) -> dict[str, Any]:
+    max_items = _positive_int(limit, 50, 200)
+    logs_qs = QueryLog.objects.select_related("data_source")
+    if data_source is not None:
+        logs_qs = logs_qs.filter(data_source=data_source)
+    if not is_vanna_admin(request):
+        logs_qs = logs_qs.filter(user_id=_user_id(request))
+    items = [
+        {
+            "id": log.id,
+            "data_source": log.data_source.code if log.data_source else "",
+            "question": log.question,
+            "generated_sql": log.generated_sql,
+            "cleaned_sql": log.cleaned_sql,
+            "guard_status": log.guard_status,
+            "guard_message": log.guard_message,
+            "execution_status": log.execution_status,
+            "error_message": log.error_message,
+            "latency_ms": log.latency_ms,
+            "created_at": log.created_at,
+        }
+        for log in logs_qs.order_by("-created_at")[:max_items]
+    ]
+    return {"limit": max_items, "items": items}
+
+
+def _review_payload(review: ReviewQueue) -> dict[str, Any]:
+    query_log = review.query_log
+    return {
+        "id": review.id,
+        "query_log_id": query_log.id,
+        "data_source": query_log.data_source.code if query_log.data_source else "",
+        "question": query_log.question,
+        "generated_sql": query_log.generated_sql,
+        "suggested_sql": review.suggested_sql,
+        "reason": review.reason,
+        "status": review.review_status,
+        "reviewed_by": review.reviewed_by,
+        "created_at": review.created_at,
+        "updated_at": review.updated_at,
+    }
+
+
 @require_GET
 @require_node("nl2sql", api=True)
 def status_api(request: HttpRequest) -> JsonResponse:
@@ -154,6 +271,86 @@ def status_api(request: HttpRequest) -> JsonResponse:
                 "oracle": "execute_only_when_ENV_INT",
             },
         }
+    )
+
+
+@require_GET
+@require_node("nl2sql", api=True)
+def schema_search_api(request: HttpRequest) -> JsonResponse:
+    try:
+        data_source = _resolve_data_source(dict(request.GET))
+    except Exception as exc:
+        return JsonResponse({"ok": False, "error": f"Failed to resolve data source: {exc}"}, status=400)
+    payload = _schema_search_payload(
+        data_source,
+        str(request.GET.get("q") or request.GET.get("query") or ""),
+        _positive_int(request.GET.get("limit"), 20, 100),
+    )
+    return JsonResponse({"ok": True, "result": payload}, json_dumps_params={"default": str})
+
+
+@require_GET
+@require_node("nl2sql", api=True)
+def query_logs_api(request: HttpRequest) -> JsonResponse:
+    data_source = None
+    code = str(request.GET.get("code") or request.GET.get("data_source") or "").strip()
+    if code:
+        try:
+            data_source = _resolve_data_source(dict(request.GET))
+        except Exception as exc:
+            return JsonResponse({"ok": False, "error": f"Failed to resolve data source: {exc}"}, status=400)
+    payload = _query_logs_payload(request, data_source, _positive_int(request.GET.get("limit"), 50, 200))
+    return JsonResponse({"ok": True, "result": payload}, json_dumps_params={"default": str})
+
+
+@csrf_exempt
+@require_POST
+@require_node("nl2sql", api=True)
+def review_create_api(request: HttpRequest) -> JsonResponse:
+    if not is_vanna_admin(request):
+        return JsonResponse({"ok": False, "error": "Only Vanna administrators can create review queue items."}, status=403)
+
+    body = _json_body(request)
+    query_log_id = body.get("query_log_id") or body.get("id")
+    if not query_log_id:
+        return JsonResponse({"ok": False, "error": "query_log_id is required"}, status=400)
+
+    try:
+        query_log = QueryLog.objects.select_related("data_source").get(id=query_log_id)
+    except QueryLog.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "Query log not found"}, status=404)
+
+    suggested_sql = str(body.get("suggested_sql") or query_log.cleaned_sql or query_log.generated_sql or "").strip()
+    reason = str(body.get("reason") or "").strip()
+
+    review, created = ReviewQueue.objects.get_or_create(
+        query_log=query_log,
+        review_status="pending",
+        defaults={
+            "reason": reason,
+            "suggested_sql": suggested_sql,
+            "reviewed_by": _user_id(request),
+        },
+    )
+    if not created:
+        changed = False
+        if reason and review.reason != reason:
+            review.reason = reason
+            changed = True
+        if suggested_sql and review.suggested_sql != suggested_sql:
+            review.suggested_sql = suggested_sql
+            changed = True
+        reviewer = _user_id(request)
+        if reviewer and review.reviewed_by != reviewer:
+            review.reviewed_by = reviewer
+            changed = True
+        if changed:
+            review.save(update_fields=["reason", "suggested_sql", "reviewed_by", "updated_at"])
+
+    return JsonResponse(
+        {"ok": True, "created": created, "result": _review_payload(review)},
+        status=201 if created else 200,
+        json_dumps_params={"default": str},
     )
 
 
@@ -413,6 +610,102 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
                 "sql": example.sql_text,
                 "status": example.review_status,
             },
+        }
+    )
+
+
+@csrf_exempt
+@require_POST
+@require_node("nl2sql", api=True)
+def admin_sql_execute_api(request: HttpRequest) -> JsonResponse:
+    if not is_vanna_admin(request):
+        return JsonResponse({"ok": False, "error": "Only Vanna administrators can execute SQL tests."}, status=403)
+
+    body = _json_body(request)
+    sql = str(body.get("sql") or "").strip()
+    if not sql:
+        return JsonResponse({"ok": False, "error": "SQL statement is required"}, status=400)
+
+    try:
+        data_source = _resolve_data_source(body)
+    except Exception as exc:
+        return JsonResponse({"ok": False, "error": f"Failed to resolve data source: {exc}"}, status=400)
+
+    from webapps.vanna.sql_guard import validate_sql
+
+    is_safe, guard_err = validate_sql(sql)
+    if not is_safe:
+        return JsonResponse({"ok": False, "error": f"SQL blocked by SQL Guard: {guard_err}"}, status=403)
+
+    if not data_source.enabled:
+        return JsonResponse({"ok": False, "error": "Data source is disabled"}, status=403)
+
+    policy = _execution_policy(data_source)
+    try:
+        max_rows = int(body.get("max_rows") or getattr(settings, "NL2SQL_DEFAULT_ROW_LIMIT", 100) or 100)
+    except (TypeError, ValueError):
+        max_rows = int(getattr(settings, "NL2SQL_DEFAULT_ROW_LIMIT", 100) or 100)
+    max_limit = int(getattr(settings, "NL2SQL_MAX_ROW_LIMIT", 1000) or 1000)
+    max_rows = max(1, min(max_rows, max_limit))
+
+    if data_source.db_type == "postgresql":
+        return JsonResponse({"ok": False, "error": policy["message"], "policy": policy}, status=403)
+
+    if data_source.db_type == "oracle" and not _is_int_env():
+        return JsonResponse(
+            {
+                "ok": True,
+                "sql_only": True,
+                "sql": sql,
+                "columns": [],
+                "rows": [],
+                "latency_ms": 0,
+                "policy": policy,
+                "message": policy["message"],
+                "max_rows": max_rows,
+            }
+        )
+
+    started = time.monotonic()
+    rows = []
+    columns = []
+    error_msg = ""
+
+    try:
+        if data_source.db_type == "oracle":
+            from webapps.database.db_factory import db_connect
+
+            conn = db_connect("oracle", profile=data_source.db_profile)
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(sql)
+                    if cur.description:
+                        columns = [col[0] for col in cur.description]
+                    rows = list(cur.fetchmany(max_rows))
+            finally:
+                conn.close()
+        else:
+            error_msg = f"Unsupported database type for execution: '{data_source.db_type}'"
+    except Exception as exc:
+        error_msg = str(exc)
+
+    latency_ms = int((time.monotonic() - started) * 1000)
+    if error_msg:
+        payload = {"ok": False, "error": error_msg, "policy": policy}
+        if "Oracle config incomplete" in error_msg:
+            payload["oracle_config"] = _oracle_config_diagnostics(data_source.db_profile)
+        return JsonResponse(payload, status=500)
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "columns": columns,
+            "rows": rows,
+            "is_mock": False,
+            "sql_only": False,
+            "latency_ms": latency_ms,
+            "policy": policy,
+            "max_rows": max_rows,
         }
     )
 

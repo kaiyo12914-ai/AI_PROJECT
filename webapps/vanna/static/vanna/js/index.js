@@ -10,6 +10,25 @@ function apiurl(path) {
   return base + cleanPath;
 }
 
+function responseTextOrJson(res) {
+  return res.text().then(text => {
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch (err) {
+      data = null;
+    }
+    if (res.ok && data) {
+      return data;
+    }
+    const error = new Error(data && data.error ? data.error : (text || res.statusText || "Request failed"));
+    error.status = res.status;
+    error.url = res.url;
+    error.payload = data;
+    throw error;
+  });
+}
+
 // 2. 日誌記錄器
 function addLog(message, type = "info") {
   const consoleEl = document.getElementById("consoleLogs");
@@ -242,6 +261,19 @@ GROUP BY d.DEPT_NAME;"></textarea>
       <button class="btn btn-primary" onclick="submitTrainingData(this)">新增到訓練資料集</button>
     </div>
 
+    <div class="training-form sql-test-form">
+      <div class="form-title">執行 SQL 語法測試</div>
+      <div class="muted-text">僅系統管理員可用；仍會經過 SQL Guard，只允許 SELECT / WITH SELECT。ENV=EXT 時 Oracle 只回傳 SQL ONLY，不連線執行。</div>
+      <textarea id="adminSqlInput" placeholder="SELECT *
+FROM CT_EMPLOYEE
+WHERE ROWNUM <= 10;"></textarea>
+      <div class="sql-test-actions">
+        <input id="adminSqlMaxRowsInput" type="number" min="1" max="1000" value="100" aria-label="最多回傳筆數">
+        <button class="btn btn-primary" onclick="executeAdminSqlTest(this)">執行 SQL 測試</button>
+      </div>
+      <div class="result-section sql-test-result" style="display:none;"></div>
+    </div>
+
     <div class="training-section">
       <h3>DDL / Schema metadata</h3>
       <div class="table-wrapper training-table-wrap">
@@ -360,6 +392,61 @@ function submitTrainingData(btn) {
   })
   .catch(err => {
     addLog(`新增訓練範例失敗: ${err.message}`, "error");
+  })
+  .finally(() => {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  });
+}
+
+function executeAdminSqlTest(btn) {
+  const formEl = btn.closest(".sql-test-form");
+  const sqlEl = formEl.querySelector("#adminSqlInput");
+  const maxRowsEl = formEl.querySelector("#adminSqlMaxRowsInput");
+  const resultEl = formEl.querySelector(".sql-test-result");
+  const sql = sqlEl.value.trim();
+  const maxRows = parseInt(maxRowsEl.value || "100", 10);
+
+  if (!sql) {
+    addLog("請輸入 SQL 後再執行測試。", "error");
+    return;
+  }
+
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `<div class="spinner"></div> 執行中...`;
+  resultEl.style.display = "block";
+  resultEl.innerHTML = `<div style="display:flex;align-items:center;gap:10px;"><div class="spinner" style="border-top-color:#06b6d4;"></div> 正在執行 SQL 測試...</div>`;
+  addLog("管理員 SQL 測試開始執行。", "info");
+
+  const endpoint = apiurl("/nl2sql/api/vanna/admin-sql-execute/");
+  fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": getCookie("csrftoken")
+    },
+    body: JSON.stringify({
+      code: selectedDataSourceCode(),
+      sql: sql,
+      max_rows: Number.isFinite(maxRows) ? maxRows : 100
+    })
+  })
+  .then(res => responseTextOrJson(res))
+  .then(data => {
+    if (!data.ok) {
+      resultEl.innerHTML = `<div style="color:#ef4444;padding:12px;border:1px solid rgba(239,68,68,0.2);border-radius:8px;background:rgba(239,68,68,0.05);"><strong>執行失敗:</strong><br>${escapeHtml(data.error)}</div>`;
+      addLog(`管理員 SQL 測試失敗: ${data.error}`, "error");
+      return;
+    }
+    addLog(`管理員 SQL 測試成功，取得 ${(data.rows || []).length} 筆資料。`, "success");
+    renderResultTable(resultEl, data);
+  })
+  .catch(err => {
+    const statusText = err.status ? `HTTP ${err.status}` : "連線錯誤";
+    const urlText = err.url || endpoint;
+    resultEl.innerHTML = `<div style="color:#ef4444;padding:12px;border:1px solid rgba(239,68,68,0.2);border-radius:8px;background:rgba(239,68,68,0.05);"><strong>執行失敗 (${escapeHtml(statusText)}):</strong><br>${escapeHtml(err.message)}<br><small>URL: ${escapeHtml(urlText)}</small></div>`;
+    addLog(`管理員 SQL 測試失敗: ${statusText} ${urlText}`, "error");
   })
   .finally(() => {
     btn.disabled = false;

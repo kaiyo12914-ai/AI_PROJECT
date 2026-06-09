@@ -11,7 +11,7 @@
   <!-- Stylesheets -->
   <link rel="stylesheet" href="{% custom_static 'vanna/css/index.css' %}">
   <!-- Defer JS Entry -->
-  <script defer src="{% custom_static 'vanna/js/index.js' %}"></script>
+  <script defer src="{% custom_static 'vanna/js/index.js' %}?v=20260608b"></script>
 </head>
 <body data-base-url="{{ request.script_name }}">
   <div class="vanna-shell">
@@ -100,6 +100,13 @@
       <!-- 頂部資訊列 -->
       <header class="chat-header">
         <h1>Vanna 2.0 自然語言資料庫智慧查詢工作區</h1>
+        <div class="loginbar">
+          <span>歡迎：</span>
+          <span class="pill">{{ login_display_name|default:"使用者" }}</span>
+          {% if is_named_system_admin %}
+            <span class="pill admin-pill">系統管理員</span>
+          {% endif %}
+        </div>
       </header>
 
       <!-- 對話訊息流 -->

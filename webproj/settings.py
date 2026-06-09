@@ -38,6 +38,8 @@ def _load_db_factory_md_into_environ(base_dir: Path) -> None:
         k = (key or "").strip().upper()
         return (
             k.startswith("DOC_DB_")
+            or k.startswith("CIM_DB_")
+            or k.startswith("ERP_DB_")
             or k.startswith("ORA_")
             or k.startswith("SQL_SERVER_")
             or k.startswith("SYBASE_")
@@ -357,7 +359,7 @@ PORTAL_ACL = {
 # ============================================================
 ORA_HOST = env_str("ORA_HOST", "")
 ORA_PORT = env_int("ORA_PORT", 1521)
-ORA_SERVICE_NAME = env_str("ORA_SERVICE_NAME", "")
+ORA_SERVICE_NAME = env_str("ORA_SERVICE_NAME", env_str("ORA_SERVER_NAME", ""))
 ORA_USER = env_str("ORA_USER", "")
 ORA_PASS = env_str("ORA_PASS", "")
 ORA_ACL_TABLE = env_str("ORA_ACL_TABLE", "VIEW_ZZ_USER_GROUP_ACL")

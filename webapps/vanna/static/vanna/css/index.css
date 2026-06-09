@@ -184,6 +184,33 @@ select:focus, input:focus {
   -webkit-text-fill-color: transparent;
 }
 
+.loginbar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  color: #cbd5e1;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.14);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  color: #bfdbfe;
+  font-weight: 700;
+}
+
+.admin-pill {
+  background: rgba(245, 158, 11, 0.16);
+  border-color: rgba(245, 158, 11, 0.32);
+  color: #fbbf24;
+}
+
 .chat-messages {
   flex: 1;
   overflow-y: auto;
@@ -425,6 +452,16 @@ table.result-table tr:hover {
 .training-fields {
   display: grid;
   gap: 10px;
+}
+
+.sql-test-actions {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) minmax(220px, 1fr);
+  gap: 10px;
+}
+
+.sql-test-result {
+  margin-top: 4px;
 }
 
 .hidden {

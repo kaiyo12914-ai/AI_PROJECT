@@ -1,6 +1,6 @@
 # 整合 Vanna 2.0：Django + PostgreSQL + Oracle NL2SQL Roadmap
 
-最後更新：2026-06-04
+最後更新：2026-06-09
 
 ## 1. 策略定位
 
@@ -48,6 +48,26 @@ AI_TOOLS Django 負責：
   - `ENV=EXT`：Oracle schema sync 不可連實體 Oracle；需使用已匯入 PostgreSQL 的 schema / training data。
   - `ENV=INT`：Oracle SQL 經 SQL Guard 通過後，才可透過 `db_factory` 連線執行並回覆查詢結果。
   - 禁止 `ENV=EXT` 與 `ENV=INT` 混用 fallback 行為；不得在 EXT 偷連 Oracle，也不得在 INT 偷回 mock JSON。
+- **Oracle DB LINK 連線規則（Mandatory）**：
+  - NL2SQL 系統連接各廠 Oracle 業務 DB 時，生成 SQL 必須一律引用對應 DB LINK。
+  - Oracle data source 未指定 `db_profile` 時，預設必須使用 `ERP_MPC`，生成 SQL 必須引用 `@MPCDB`。
+  - 目前自然語言查詢要求格式為 `[業務]廠別...`；系統必須依問題中的業務別與廠別判定 profile / DB LINK。
+  - 一般業務別依廠別走 ERP DB LINK；`[主計]` 業務別依廠別走 CIM DB LINK。
+  - Oracle DB LINK 規則優先於 approved examples；若範例 SQL 未帶 DB LINK，生成 SQL 仍必須改用目前資料源 profile 對應 DB LINK。
+  - 目前正式對應如下：
+
+| 查詢格式 | Data Source Profile | Oracle DB LINK |
+| --- | --- | --- |
+| `MPC` / 一般業務別 `MPC` | `ERP_MPC` | `MPCDB` |
+| 一般業務別 `202廠` | `ERP_202` | `DBLT202DB` |
+| 一般業務別 `205廠` | `ERP_205` | `DBLT205DB` |
+| 一般業務別 `209廠` | `ERP_209` | `DBLT209DB` |
+| 一般業務別 `401廠` | `ERP_401` | `DBLT401DB` |
+| `[主計]MPC` | `CIM_MPC` | `DBLCIMMPC` |
+| `[主計]202廠` | `CIM_202` | `DBLCIM202A` |
+| `[主計]205廠` | `CIM_205` | `DBLCIM205A` |
+| `[主計]209廠` | `CIM_209` | `DBLCIM209A` |
+| `[主計]401廠` | `CIM_401` | `DBLCIM401A` |
 
 ## 4. 目標目錄
 

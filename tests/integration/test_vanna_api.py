@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-from django.test import Client, SimpleTestCase, override_settings
+from django.test import Client, RequestFactory, SimpleTestCase, override_settings
 from django.urls import reverse
 
 
@@ -16,12 +16,48 @@ class VannaApiIntegrationTestCase(SimpleTestCase):
 
     def setUp(self):
         self.client = Client()
+        self.factory = RequestFactory()
         self.page_url = reverse("nl2sql:page")
         self.schema_sync_url = reverse("nl2sql:api_schema_sync")
         self.training_sync_url = reverse("nl2sql:api_training_sync")
         self.training_dataset_url = reverse("nl2sql:api_training_dataset")
+        self.admin_sql_execute_url = reverse("nl2sql:api_admin_sql_execute")
+        self.schema_search_url = reverse("nl2sql:api_schema_search")
+        self.query_logs_url = reverse("nl2sql:api_query_logs")
         self.generate_url = reverse("nl2sql:api_generate")
         self.execute_url = reverse("nl2sql:api_execute")
+        self.review_create_url = reverse("nl2sql:api_review_create")
+
+    def test_vanna_admin_allows_staff_user(self):
+        from webapps.vanna.views import is_vanna_admin
+
+        request = self.factory.get(self.page_url)
+        request.user = MagicMock(is_staff=True, is_superuser=False)
+        self.assertTrue(is_vanna_admin(request))
+
+    @override_settings(VANNA_ADMIN_USERS="external_admin")
+    @patch("webapps.vanna.views.can_access", return_value=False)
+    def test_vanna_admin_allows_configured_external_user(self, _mock_can_access):
+        from webapps.vanna.views import is_vanna_admin
+
+        request = self.factory.get(self.page_url)
+        request.user = MagicMock(is_staff=False, is_superuser=False)
+        request.login_user = "external_admin"
+        self.assertTrue(is_vanna_admin(request))
+
+    @patch("webapps.vanna.views.ensure_vanna_vendor_loaded")
+    def test_page_shows_named_system_admin_badge(self, mock_runtime):
+        mock_runtime.return_value = MagicMock(version="2.0.0", error="")
+        session = self.client.session
+        session["login_user"] = "H121356578"
+        session.save()
+
+        res = self.client.get(self.page_url)
+        self.assertEqual(res.status_code, 200)
+        html = res.content.decode("utf-8")
+        self.assertIn("歡迎：", html)
+        self.assertIn("H121356578", html)
+        self.assertIn("系統管理員", html)
 
     @patch("webapps.vanna.views.is_vanna_admin", return_value=False)
     def test_page_hides_management_panel_for_non_admin(self, _mock_is_admin):
@@ -38,6 +74,105 @@ class VannaApiIntegrationTestCase(SimpleTestCase):
         html = res.content.decode("utf-8")
         self.assertIn("數據管理", html)
         self.assertIn("Vanna 訓練資料集維護", html)
+
+    @patch("webapps.vanna.api._schema_search_payload")
+    @patch("webapps.vanna.api._resolve_data_source")
+    def test_schema_search_api_success(self, mock_resolve_ds, mock_payload):
+        mock_ds = MagicMock(code="legacy_vanna_chroma")
+        mock_resolve_ds.return_value = mock_ds
+        mock_payload.return_value = {
+            "data_source": "legacy_vanna_chroma",
+            "query": "CT_EMPLOY",
+            "limit": 20,
+            "items": [{"schema": "LEGACY", "name": "CT_EMPLOY"}],
+        }
+
+        res = self.client.get(self.schema_search_url, {"code": "legacy_vanna_chroma", "q": "CT_EMPLOY"})
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["result"]["items"][0]["name"], "CT_EMPLOY")
+        mock_payload.assert_called_once()
+
+    @patch("webapps.vanna.api._query_logs_payload")
+    def test_query_logs_api_success(self, mock_payload):
+        mock_payload.return_value = {
+            "limit": 50,
+            "items": [{"id": 123, "question": "[人事]MPC 查詢在職人員"}],
+        }
+
+        res = self.client.get(self.query_logs_url)
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["result"]["items"][0]["id"], 123)
+        mock_payload.assert_called_once()
+
+    def test_review_create_api_forbidden_for_non_admin(self):
+        res = self.client.post(
+            self.review_create_url,
+            data=json.dumps({"query_log_id": 123}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(res.status_code, 403)
+        data = res.json()
+        self.assertFalse(data["ok"])
+
+    @patch("webapps.vanna.api.ReviewQueue.objects.get_or_create")
+    @patch("webapps.vanna.api.QueryLog.objects.select_related")
+    @patch("webapps.vanna.api.is_vanna_admin", return_value=True)
+    def test_review_create_api_success(self, _mock_is_admin, mock_select_related, mock_get_or_create):
+        mock_qlog = MagicMock()
+        mock_qlog.id = 123
+        mock_qlog.question = "[人事]MPC 查詢在職人員"
+        mock_qlog.cleaned_sql = "SELECT * FROM CT_EMPLOY@MPCDB"
+        mock_qlog.generated_sql = "SELECT * FROM CT_EMPLOY@MPCDB"
+        mock_qlog.data_source.code = "legacy_vanna_chroma"
+        mock_select_related.return_value.get.return_value = mock_qlog
+
+        mock_review = MagicMock()
+        mock_review.id = 77
+        mock_review.query_log = mock_qlog
+        mock_review.suggested_sql = "SELECT * FROM CT_EMPLOY@MPCDB"
+        mock_review.reason = "轉入審核"
+        mock_review.review_status = "pending"
+        mock_review.reviewed_by = ""
+        mock_get_or_create.return_value = (mock_review, True)
+
+        res = self.client.post(
+            self.review_create_url,
+            data=json.dumps({"query_log_id": 123, "reason": "轉入審核"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(res.status_code, 201)
+        data = res.json()
+        self.assertTrue(data["ok"])
+        self.assertTrue(data["created"])
+        self.assertEqual(data["result"]["id"], 77)
+        self.assertEqual(data["result"]["query_log_id"], 123)
+        mock_get_or_create.assert_called_once()
+
+    @patch("webapps.vanna.api.QueryLog.objects.select_related")
+    @patch("webapps.vanna.api.is_vanna_admin", return_value=True)
+    def test_review_create_api_query_log_not_found(self, _mock_is_admin, mock_select_related):
+        from webapps.vanna.models import QueryLog
+
+        mock_select_related.return_value.get.side_effect = QueryLog.DoesNotExist()
+
+        res = self.client.post(
+            self.review_create_url,
+            data=json.dumps({"query_log_id": 404}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(res.status_code, 404)
+        data = res.json()
+        self.assertFalse(data["ok"])
+        self.assertIn("not found", data["error"].lower())
 
     def test_schema_sync_api_forbidden_for_non_admin(self):
         res = self.client.post(
@@ -59,6 +194,15 @@ class VannaApiIntegrationTestCase(SimpleTestCase):
 
     def test_training_dataset_api_forbidden_for_non_admin(self):
         res = self.client.get(self.training_dataset_url, {"code": "legacy_vanna_chroma"})
+        self.assertEqual(res.status_code, 403)
+        self.assertFalse(res.json()["ok"])
+
+    def test_admin_sql_execute_api_forbidden_for_non_admin(self):
+        res = self.client.post(
+            self.admin_sql_execute_url,
+            data=json.dumps({"code": "legacy_vanna_chroma", "sql": "SELECT * FROM CT_EMPLOY"}),
+            content_type="application/json",
+        )
         self.assertEqual(res.status_code, 403)
         self.assertFalse(res.json()["ok"])
 
@@ -127,6 +271,48 @@ class VannaApiIntegrationTestCase(SimpleTestCase):
         )
         self.assertEqual(res.status_code, 403)
         self.assertFalse(res.json()["ok"])
+
+    @override_settings(ENV_NAME="INT")
+    @patch("webapps.vanna.api.is_vanna_admin", return_value=True)
+    @patch("webapps.database.db_factory.db_connect")
+    @patch("webapps.vanna.api._resolve_data_source")
+    def test_admin_sql_execute_api_oracle_int_executes(
+        self,
+        mock_resolve_ds,
+        mock_db_connect,
+        _mock_is_admin,
+    ):
+        mock_ds = MagicMock()
+        mock_ds.db_type = "oracle"
+        mock_ds.enabled = True
+        mock_ds.db_profile = ""
+        mock_resolve_ds.return_value = mock_ds
+
+        mock_cur = MagicMock()
+        mock_cur.description = [("EMPNO",), ("NAME",)]
+        mock_cur.fetchmany.return_value = [("001", "Alice")]
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+        mock_db_connect.return_value = mock_conn
+
+        res = self.client.post(
+            self.admin_sql_execute_url,
+            data=json.dumps(
+                {
+                    "code": "legacy_vanna_chroma",
+                    "sql": "SELECT EMPNO, NAME FROM CT_EMPLOY",
+                    "max_rows": 10,
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["columns"], ["EMPNO", "NAME"])
+        self.assertEqual(data["rows"], [["001", "Alice"]])
+        mock_cur.fetchmany.assert_called_once_with(10)
 
     @patch("webapps.vanna.api.is_vanna_admin", return_value=True)
     @patch("webapps.vanna.api.SchemaEmbedding.objects.update_or_create")

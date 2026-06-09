@@ -77,6 +77,94 @@ def _safe_text(value: Any) -> str:
     return str(value or "").strip()
 
 
+ORACLE_DB_LINK_BY_PROFILE = {
+    "ERP_MPC": "MPCDB",
+    "ERP_202": "DBLT202DB",
+    "ERP_205": "DBLT205DB",
+    "ERP_209": "DBLT209DB",
+    "ERP_401": "DBLT401DB",
+    "CIM_MPC": "DBLCIMMPC",
+    "CIM_202": "DBLCIM202A",
+    "CIM_205": "DBLCIM205A",
+    "CIM_209": "DBLCIM209A",
+    "CIM_401": "DBLCIM401A",
+}
+
+ERP_PROFILE_BY_FACTORY = {
+    "MPC": "ERP_MPC",
+    "202": "ERP_202",
+    "205": "ERP_205",
+    "209": "ERP_209",
+    "401": "ERP_401",
+}
+
+CIM_PROFILE_BY_FACTORY = {
+    "MPC": "CIM_MPC",
+    "202": "CIM_202",
+    "205": "CIM_205",
+    "209": "CIM_209",
+    "401": "CIM_401",
+}
+
+
+def oracle_db_link_for_profile(db_profile: str) -> str:
+    profile = _safe_text(db_profile).upper()
+    return ORACLE_DB_LINK_BY_PROFILE.get(profile, "")
+
+
+def _factory_from_question(question: str) -> str:
+    text = _safe_text(question).upper()
+    if "MPC" in text:
+        return "MPC"
+    for factory in ("202", "205", "209", "401"):
+        if re.search(rf"(?<!\d){factory}(?:\s*廠)?(?!\d)", text):
+            return factory
+    return ""
+
+
+def oracle_profile_for_question(question: str, default_profile: str = "ERP_MPC") -> str:
+    factory = _factory_from_question(question)
+    if not factory:
+        return _safe_text(default_profile).upper() or "ERP_MPC"
+    if re.search(r"\[\s*主計\s*\]", _safe_text(question)):
+        return CIM_PROFILE_BY_FACTORY[factory]
+    return ERP_PROFILE_BY_FACTORY[factory]
+
+
+def _oracle_db_link_prompt_rule(data_source: DataSource, question: str = "") -> str:
+    if data_source.db_type != "oracle":
+        return ""
+    effective_profile = oracle_profile_for_question(question, data_source.db_profile or "ERP_MPC")
+    db_link = oracle_db_link_for_profile(effective_profile)
+    mapping = "、".join(f"{profile}=>{link}" for profile, link in ORACLE_DB_LINK_BY_PROFILE.items())
+    if not db_link:
+        return (
+            "- Oracle 各廠資料必須透過 DB LINK 查詢；目前資料源 profile "
+            f"`{effective_profile or '(empty)'}` 未設定 DB LINK 對應，若無法判定請輸出：-- NEED_MORE_CONTEXT\n"
+            f"- 已知 DB LINK 對應：{mapping}。"
+        )
+    return (
+        "- 問題格式以 `[業務]廠別...` 判定 DB LINK；`[主計]` 走 CIM，其它業務別依廠別走 ERP。\n"
+        f"- 依本次問題判定使用 profile `{effective_profile}`，對應 DB LINK `{db_link}`。\n"
+        f"- 所有 schema context 內的實體表或檢視都必須引用 `@{db_link}`，例如 `TABLE_NAME@{db_link}` 或 `SCHEMA.TABLE_NAME@{db_link}`。\n"
+        f"- JOIN、子查詢、CTE 來源表也一律必須加上 `@{db_link}`；禁止輸出未帶 DB LINK 的遠端業務表。"
+    )
+
+
+def sql_uses_required_oracle_db_link(sql: str, data_source: DataSource, question: str = "") -> tuple[bool, str]:
+    if data_source.db_type != "oracle":
+        return True, ""
+    if (sql or "").strip().upper().startswith("-- NEED_MORE_CONTEXT"):
+        return True, ""
+    effective_profile = oracle_profile_for_question(question, data_source.db_profile or "ERP_MPC")
+    db_link = oracle_db_link_for_profile(effective_profile)
+    if not db_link:
+        return False, f"Oracle data source profile '{effective_profile}' has no DB LINK mapping."
+    if not re.search(rf"@{re.escape(db_link)}\b", sql or "", flags=re.IGNORECASE):
+        return False, f"Generated Oracle SQL must reference DB LINK '@{db_link}' for profile '{effective_profile}'."
+    return True, ""
+
+
 def _row_get(row: Any, index: int, key: str = "") -> Any:
     if isinstance(row, dict):
         return row.get(key) if key else None
@@ -137,13 +225,16 @@ def get_or_create_data_source(
 ) -> DataSource:
     code = _safe_text(code) or "default_pg"
     db_type = (_safe_text(db_type) or "postgresql").lower()
+    db_profile = _safe_text(db_profile)
+    if db_type == "oracle" and not db_profile:
+        db_profile = "ERP_MPC"
     default_schema = _safe_text(default_schema) or ("public" if db_type == "postgresql" else "")
     obj, _ = DataSource.objects.update_or_create(
         code=code,
         defaults={
             "name": _safe_text(name) or code,
             "db_type": db_type,
-            "db_profile": _safe_text(db_profile),
+            "db_profile": db_profile,
             "default_schema": default_schema,
             "enabled": True,
         },
@@ -508,6 +599,7 @@ def build_generate_prompt(data_source: DataSource, question: str, context: dict[
     )
     limit = int(getattr(settings, "NL2SQL_DEFAULT_ROW_LIMIT", 100) or 100)
     dialect = "PostgreSQL" if data_source.db_type == "postgresql" else "Oracle"
+    db_link_rule = _oracle_db_link_prompt_rule(data_source, question)
     return f"""你是 NL2SQL SQL 產生器。請只輸出 SQL，不要解釋，不要 Markdown code fence。
 
 規則：
@@ -515,6 +607,8 @@ def build_generate_prompt(data_source: DataSource, question: str, context: dict[
 - 只能產生 SELECT 或 WITH ... SELECT。
 - 不可產生 INSERT、UPDATE、DELETE、MERGE、DROP、ALTER、CREATE、TRUNCATE、EXEC、CALL、GRANT、REVOKE。
 - 不可查詢未列在 schema context 的 table。
+- Oracle DB LINK 規則優先於 approved examples；若範例未帶 DB LINK，也必須改成目前資料源對應 DB LINK。
+{db_link_rule}
 - 若使用者問題不足以產生 SQL，輸出：-- NEED_MORE_CONTEXT
 - 預設限制最多 {limit} 筆資料。
 
@@ -556,6 +650,8 @@ def generate_sql(data_source: DataSource, question: str, user_id: str = "") -> G
 
     # 整合 SQL Guard 進行安全審查
     is_safe, guard_err = validate_sql(sql)
+    if is_safe:
+        is_safe, guard_err = sql_uses_required_oracle_db_link(sql, data_source, question)
     guard_status = "passed" if is_safe else "blocked"
     guard_message = "" if is_safe else guard_err
 
@@ -589,6 +685,9 @@ def generate_sql(data_source: DataSource, question: str, user_id: str = "") -> G
             "vendor_version": runtime.version,
             "guard_status": guard_status,
             "guard_message": guard_message,
+            "oracle_profile": oracle_profile_for_question(question, data_source.db_profile or "ERP_MPC")
+            if data_source.db_type == "oracle"
+            else "",
         },
         query_log_id=qlog.id,
         latency_ms=latency_ms,

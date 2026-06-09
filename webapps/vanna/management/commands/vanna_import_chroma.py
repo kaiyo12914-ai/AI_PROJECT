@@ -137,7 +137,7 @@ class Command(BaseCommand):
             defaults={
                 "name": options["name"],
                 "db_type": "oracle",
-                "db_profile": "",
+                "db_profile": "ERP_MPC",
                 "default_schema": "LEGACY",
                 "enabled": True,
                 "execute_enabled": False,
@@ -325,3 +325,6 @@ class Command(BaseCommand):
                 )
             )
         )
+
+
+# H:\AI\AI_TOOLS\venv\Scripts\python.exe manage.py vanna_import_chroma --path "H:\AI\AI_TOOLS\chroma 1.sqlite3" --clear
