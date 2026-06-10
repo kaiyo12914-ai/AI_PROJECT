@@ -14,7 +14,8 @@ from django.utils import timezone
 
 from pgvector.django import CosineDistance
 from webapps.database.db_factory import db_query_all
-from webapps.llm.llm_factory import get_chat_model, get_embedding_model
+from webapps.llm.llm_factory import get_chat_model
+from webapps.vanna.embedding_factory import expected_embedding_dimension, get_nl2sql_embedding_model
 from webapps.vanna.models import (
     DataSource,
     QueryLog,
@@ -489,7 +490,7 @@ def _score_schema(question: str, obj: SchemaObject) -> int:
 
 
 def _expected_embedding_dimension() -> int:
-    return int(getattr(settings, "NL2SQL_EMBEDDING_DIMENSION", 1536) or 1536)
+    return expected_embedding_dimension()
 
 
 def _embedding_vector_is_usable(vector: Any) -> bool:
@@ -503,7 +504,7 @@ def retrieve_context(data_source: DataSource, question: str, *, top_k: int = 6) 
     # 嘗試獲取向量問題嵌入
     q_vector = None
     try:
-        emb_model = get_embedding_model()
+        emb_model = get_nl2sql_embedding_model()
         candidate_vector = emb_model.embed_query(question)
         if _embedding_vector_is_usable(candidate_vector):
             q_vector = candidate_vector

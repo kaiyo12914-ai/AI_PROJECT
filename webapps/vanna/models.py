@@ -6,7 +6,7 @@ from pgvector.django import HnswIndex, VectorField
 
 
 def _embedding_dimensions() -> int:
-    return int(getattr(settings, "NL2SQL_EMBEDDING_DIMENSION", 1536) or 1536)
+    return int(getattr(settings, "NL2SQL_EMBEDDING_DIMENSION", 1024) or 1024)
 
 
 class DataSource(models.Model):

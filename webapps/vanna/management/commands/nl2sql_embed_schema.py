@@ -1,20 +1,38 @@
 from __future__ import annotations
 
 import json
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from webapps.llm.llm_factory import get_embedding_model
 from webapps.vanna.models import DataSource, SchemaEmbedding, ExampleEmbedding
+from webapps.vanna.embedding_factory import expected_embedding_dimension
 
 
 def _expected_dimension() -> int:
-    from django.conf import settings
+    return expected_embedding_dimension()
 
-    return int(getattr(settings, "NL2SQL_EMBEDDING_DIMENSION", 1536) or 1536)
+
+def _get_command_embedding_model():
+    model_name = "snowflake-arctic-embed2"
+    base_url = str(
+        getattr(
+            settings,
+            "NL2SQL_OLLAMA_BASE_URL",
+            getattr(settings, "OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434"),
+        )
+        or "http://mpcai.mpc.mil.tw:11434"
+    )
+
+    try:
+        from langchain_ollama import OllamaEmbeddings
+    except ImportError:
+        from langchain_community.embeddings import OllamaEmbeddings
+
+    return OllamaEmbeddings(model=model_name, base_url=base_url), model_name
 
 
 class Command(BaseCommand):
-    help = "Batch calculate and save embeddings for SchemaEmbedding and ExampleEmbedding using get_embedding_model()."
+    help = "Batch calculate and save embeddings for SchemaEmbedding and ExampleEmbedding using Ollama snowflake-arctic-embed2."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -40,16 +58,9 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.NOTICE("Initializing embedding model..."))
         try:
-            embeddings_impl = get_embedding_model()
+            embeddings_impl, model_name = _get_command_embedding_model()
         except Exception as exc:
             raise CommandError(f"Failed to get embedding model: {exc}")
-
-        # Try to find model name
-        model_name = "unknown"
-        for attr in ("model", "model_name", "deployment_name", "model_id"):
-            if hasattr(embeddings_impl, attr):
-                model_name = str(getattr(embeddings_impl, attr))
-                break
 
         self.stdout.write(self.style.SUCCESS(f"Using embedding model: {model_name}"))
         self.stdout.write(self.style.NOTICE(f"Expected embedding dimension: {_expected_dimension()}"))

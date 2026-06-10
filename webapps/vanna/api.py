@@ -1025,7 +1025,7 @@ def rag_debug_api(request: HttpRequest) -> JsonResponse:
     except Exception as exc:
         return JsonResponse({"ok": False, "error": f"Failed to resolve data source: {exc}"}, status=400)
 
-    from webapps.llm.llm_factory import get_embedding_model
+    from webapps.vanna.embedding_factory import expected_embedding_dimension, get_nl2sql_embedding_model
     from pgvector.django import CosineDistance
 
     q_vector = None
@@ -1033,17 +1033,19 @@ def rag_debug_api(request: HttpRequest) -> JsonResponse:
     ee_results = []
 
     try:
-        emb_model = get_embedding_model()
+        emb_model = get_nl2sql_embedding_model()
         q_vector = emb_model.embed_query(question)
     except Exception as exc:
         return JsonResponse({"ok": False, "error": f"Failed to calculate query embedding: {exc}"}, status=500)
 
-    if q_vector and len(q_vector) == 1536:
+    expected_dim = expected_embedding_dimension()
+
+    if q_vector and len(q_vector) == expected_dim:
         se_matches = SchemaEmbedding.objects.filter(
             schema_object__data_source=data_source,
             schema_object__is_enabled=True,
             embedding__isnull=False,
-            embedding_dimension=1536,
+            embedding_dimension=expected_dim,
         ).annotate(
             distance=CosineDistance("embedding", q_vector)
         ).order_by("distance")[:6]
@@ -1063,7 +1065,7 @@ def rag_debug_api(request: HttpRequest) -> JsonResponse:
             data_source=data_source,
             training_example__review_status="approved",
             embedding__isnull=False,
-            embedding_dimension=1536,
+            embedding_dimension=expected_dim,
         ).annotate(
             distance=CosineDistance("embedding", q_vector)
         ).order_by("distance")[:3]
