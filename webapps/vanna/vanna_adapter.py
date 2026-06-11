@@ -15,7 +15,7 @@ from django.utils import timezone
 from pgvector.django import CosineDistance
 from webapps.database.db_factory import db_query_all
 from webapps.llm.llm_factory import get_chat_model
-from webapps.vanna.embedding_factory import expected_embedding_dimension, get_nl2sql_embedding_model
+from webapps.llm.embedding_factory import expected_embedding_dimension, get_shared_embedding_model
 from webapps.vanna.models import (
     DataSource,
     QueryLog,
@@ -504,7 +504,7 @@ def retrieve_context(data_source: DataSource, question: str, *, top_k: int = 6) 
     # 嘗試獲取向量問題嵌入
     q_vector = None
     try:
-        emb_model = get_nl2sql_embedding_model()
+        emb_model = get_shared_embedding_model()
         candidate_vector = emb_model.embed_query(question)
         if _embedding_vector_is_usable(candidate_vector):
             q_vector = candidate_vector
@@ -513,6 +513,7 @@ def retrieve_context(data_source: DataSource, question: str, *, top_k: int = 6) 
         pass
 
     selected_objects = []
+    schema_chunks = []
     examples = []
 
     # 1. 檢索最相似的 SchemaObjects
@@ -531,11 +532,23 @@ def retrieve_context(data_source: DataSource, question: str, *, top_k: int = 6) 
             seen_ids = set()
             for se in se_matches:
                 obj = se.schema_object
+                schema_chunks.append(
+                    {
+                        "id": se.id,
+                        "schema_object_id": obj.id,
+                        "schema": obj.schema_name,
+                        "name": obj.object_name,
+                        "chunk_type": se.chunk_type,
+                        "chunk_text": se.chunk_text,
+                        "distance": float(se.distance or 0.0),
+                    }
+                )
                 if obj.id not in seen_ids:
                     seen_ids.add(obj.id)
                     selected_objects.append(obj)
         except Exception:
             selected_objects = []
+            schema_chunks = []
                 
     # Fallback to keyword-based score if no vector matches found
     if not selected_objects:
@@ -581,6 +594,7 @@ def retrieve_context(data_source: DataSource, question: str, *, top_k: int = 6) 
             }
             for obj in selected_objects
         ],
+        "schema_chunks": schema_chunks,
         "examples": [
             {
                 "question": ex.question,
@@ -591,10 +605,67 @@ def retrieve_context(data_source: DataSource, question: str, *, top_k: int = 6) 
     }
 
 
-def build_generate_prompt(data_source: DataSource, question: str, context: dict[str, Any]) -> str:
+def _format_columns_context(columns: Any) -> str:
+    if not isinstance(columns, list):
+        return ""
+    lines = []
+    for col in columns:
+        if not isinstance(col, dict):
+            continue
+        name = _safe_text(col.get("name") or col.get("column_name"))
+        if not name:
+            continue
+        data_type = _safe_text(col.get("type") or col.get("data_type"))
+        description = _safe_text(col.get("description") or col.get("comment"))
+        detail = " ".join(part for part in [data_type, description] if part)
+        lines.append(f"- {name}: {detail}" if detail else f"- {name}")
+    return "\n".join(lines)
+
+
+def _build_schema_context(context: dict[str, Any]) -> str:
     tables = context.get("tables") or []
+    schema_chunks = context.get("schema_chunks") or []
+    blocks = []
+    seen_texts = set()
+
+    def _push(block: str) -> None:
+        text = _safe_text(block)
+        if not text or text in seen_texts:
+            return
+        seen_texts.add(text)
+        blocks.append(text)
+
+    for chunk in schema_chunks:
+        if not isinstance(chunk, dict):
+            continue
+        chunk_text = _safe_text(chunk.get("chunk_text"))
+        if not chunk_text:
+            continue
+        schema = _safe_text(chunk.get("schema"))
+        name = _safe_text(chunk.get("name"))
+        chunk_type = _safe_text(chunk.get("chunk_type")) or "schema"
+        object_label = ".".join(part for part in [schema, name] if part) or "schema"
+        _push(f"-- {object_label} ({chunk_type})\n{chunk_text}")
+
+    for table in tables:
+        if not isinstance(table, dict):
+            continue
+        schema = _safe_text(table.get("schema"))
+        name = _safe_text(table.get("name"))
+        object_label = ".".join(part for part in [schema, name] if part) or "schema"
+        ddl = _safe_text(table.get("ddl"))
+        if ddl:
+            _push(f"-- {object_label} (ddl)\n{ddl}")
+        columns_context = _format_columns_context(table.get("columns"))
+        if columns_context:
+            _push(f"-- {object_label} (columns)\n{columns_context}")
+
+    return "\n\n".join(blocks)
+
+
+def build_generate_prompt(data_source: DataSource, question: str, context: dict[str, Any]) -> str:
     examples = context.get("examples") or []
-    ddl_blocks = "\n\n".join(str(item.get("ddl") or "") for item in tables if item.get("ddl"))
+    schema_context = _build_schema_context(context)
     example_blocks = "\n\n".join(
         f"Q: {item.get('question')}\nSQL:\n{item.get('sql')}" for item in examples
     )
@@ -614,7 +685,7 @@ def build_generate_prompt(data_source: DataSource, question: str, context: dict[
 - 預設限制最多 {limit} 筆資料。
 
 Schema context:
-{ddl_blocks or "(no schema context)"}
+{schema_context or "(no schema context)"}
 
 Approved examples:
 {example_blocks or "(no approved examples)"}

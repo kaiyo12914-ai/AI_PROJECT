@@ -17,6 +17,8 @@ from webapps.llm.llm_factory import get_chat_model
 from webapps.portal.decorators import require_node
 from webapps.database.db_factory import db_connect
 from webapps.common.login_utils import get_login_user_idno
+from webapps.meetingreply.services.embedding_service import embed_text, embedding_enabled
+from webapps.meetingreply.services.vector_store_pgvector import similarity_search as embedding_similarity_search
 
 # ============================================================
 # helpers: env / request.script_name
@@ -324,13 +326,35 @@ def todo_list(request: HttpRequest):
 # ============================================================
 def _rag_ask_direct(q: str, *, k: int) -> Dict[str, Any]:
     """
-    改用 PostgreSQL keyword search
+    先走 meetingreply 本地 pgvector embedding 檢索；
+    若無結果或失敗，再 fallback 到既有 PostgreSQL keyword search。
     """
     q = (q or "").strip()
     if not q:
         return {"ok": True, "sources": [], "top_k": 0}
 
     k = _as_int(k, RAG_TOP_K, min_v=1, max_v=50)
+
+    if embedding_enabled():
+        try:
+            query_embedding = embed_text(q)
+            sources = embedding_similarity_search(query_embedding, k)
+            if sources:
+                return {
+                    "ok": True,
+                    "sources": sources,
+                    "top_k": k,
+                    "source_table": "meetingreply_record_embedding",
+                    "count": len(sources),
+                    "search_mode": "embedding",
+                }
+        except Exception as e:
+            # fail-open: 下方回退 keyword search
+            fallback_error = str(e)
+        else:
+            fallback_error = ""
+    else:
+        fallback_error = "embedding_disabled"
 
     try:
         conn = db_connect("postgresql")
@@ -401,6 +425,8 @@ def _rag_ask_direct(q: str, *, k: int) -> Dict[str, Any]:
             "top_k": k,
             "source_table": "public.meeting_records",
             "count": len(sources),
+            "search_mode": "keyword_fallback",
+            "fallback_reason": fallback_error,
         }
     except Exception as e:
         return {"ok": False, "error": str(e)}

@@ -25,7 +25,8 @@ class GoogleEmbeddingStrategy(EmbeddingStrategy):
         api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if not api_key:
             raise RuntimeError("GEMINI_API_KEY is required for Google Gemini embeddings.")
-        return GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
+        model = os.getenv("GLOBAL_GOOGLE_EMBEDDING_MODEL", "models/text-embedding-004")
+        return GoogleGenerativeAIEmbeddings(model=model, google_api_key=api_key)
 
 
 class OpenAIEmbeddingStrategy(EmbeddingStrategy):
@@ -35,7 +36,7 @@ class OpenAIEmbeddingStrategy(EmbeddingStrategy):
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise RuntimeError("OPENAI_API_KEY is required for OpenAI embeddings.")
-        model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+        model = os.getenv("GLOBAL_OPENAI_EMBEDDING_MODEL") or os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
         return OpenAIEmbeddings(model=model, api_key=api_key)
 
 
@@ -45,6 +46,6 @@ class OllamaEmbeddingStrategy(EmbeddingStrategy):
             from langchain_ollama import OllamaEmbeddings
         except ImportError:
             from langchain_community.embeddings import OllamaEmbeddings
-        base_url = os.getenv("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
-        model = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
+        base_url = os.getenv("GLOBAL_OLLAMA_EMBEDDING_BASE_URL") or os.getenv("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
+        model = os.getenv("GLOBAL_OLLAMA_EMBEDDING_MODEL") or os.getenv("OLLAMA_EMBEDDING_MODEL", "snowflake-arctic-embed2")
         return OllamaEmbeddings(model=model, base_url=base_url)

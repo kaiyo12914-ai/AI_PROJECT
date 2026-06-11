@@ -46,7 +46,11 @@ class DocumentChunk(models.Model):
     topic = models.CharField(max_length=255, blank=True)
     keywords = models.JSONField(default=list, blank=True)
     security_level = models.PositiveSmallIntegerField(default=1)
-    embedding = VectorField(dimensions=getattr(settings, "DIGITAL_TWIN_KB_EMBEDDING_DIMENSIONS", 384))
+    embedding = VectorField(
+        dimensions=getattr(settings, "DIGITAL_TWIN_KB_EMBEDDING_DIMENSIONS", 1024),
+        null=True,
+        blank=True,
+    )
     token_count = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 

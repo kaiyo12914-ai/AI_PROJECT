@@ -79,6 +79,65 @@ def test_generate_prompt_uses_question_specific_cim_db_link():
     assert "@DBLCIM202A" in prompt
 
 
+def test_generate_prompt_injects_schema_embedding_chunks_when_table_ddl_is_empty():
+    prompt = build_generate_prompt(
+        _oracle_source("ERP_202"),
+        "[人事]202廠 列出前10筆員工姓名、工號與所屬單位",
+        {
+            "tables": [
+                {
+                    "schema": "LEGACY",
+                    "name": "VANNA_LEGACY_DOCUMENTATION",
+                    "ddl": "",
+                    "columns": [],
+                }
+            ],
+            "schema_chunks": [
+                {
+                    "schema": "LEGACY",
+                    "name": "VANNA_LEGACY_DOCUMENTATION",
+                    "chunk_type": "documentation",
+                    "chunk_text": "[人事]人事主檔為CT_EMPLOY，所屬單位可關聯CT_DEPARTMENT。",
+                    "distance": 0.12,
+                }
+            ],
+            "examples": [],
+        },
+    )
+
+    assert "(no schema context)" not in prompt
+    assert "VANNA_LEGACY_DOCUMENTATION (documentation)" in prompt
+    assert "CT_EMPLOY" in prompt
+    assert "CT_DEPARTMENT" in prompt
+
+
+def test_generate_prompt_injects_ddl_and_columns_context():
+    prompt = build_generate_prompt(
+        _oracle_source("ERP_202"),
+        "[人事]202廠 查詢員工",
+        {
+            "tables": [
+                {
+                    "schema": "LEGACY",
+                    "name": "CT_EMPLOY",
+                    "ddl": "CREATE TABLE CT_EMPLOY (EMPNO VARCHAR2(20), NAME VARCHAR2(80));",
+                    "columns": [
+                        {"name": "EMPNO", "data_type": "VARCHAR2", "description": "工號"},
+                        {"name": "NAME", "data_type": "VARCHAR2", "description": "姓名"},
+                    ],
+                }
+            ],
+            "schema_chunks": [],
+            "examples": [],
+        },
+    )
+
+    assert "CREATE TABLE CT_EMPLOY" in prompt
+    assert "CT_EMPLOY (columns)" in prompt
+    assert "EMPNO: VARCHAR2 工號" in prompt
+    assert "NAME: VARCHAR2 姓名" in prompt
+
+
 def test_generated_oracle_sql_without_required_db_link_is_blocked():
     ok, error = sql_uses_required_oracle_db_link("SELECT * FROM CT_EMPLOY", _oracle_source("ERP_MPC"))
 

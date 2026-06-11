@@ -235,6 +235,17 @@ function renderTrainingDatasetManager(bubbleEl, result, allItems = false) {
         ${viewAllBtn}
       </div>
     </div>
+
+    <div class="training-form rag-debugger-form" style="margin-top: 14px;">
+      <div class="form-title">🔍 RAG 檢索與 LLM 提示詞除錯器</div>
+      <div class="muted-text">輸入提問，可查詢 SchemaEmbedding (DDL/Doc) 與 ExampleEmbedding (SQL 範例) 的相似度分數與 RAG 內容，以及最終組裝的 LLM 提示詞。</div>
+      <div style="display:flex; gap:10px; margin-top:8px;">
+        <input id="ragDebugQuestionInput" type="text" placeholder="輸入要測試的提問，例如：[人事]205廠 查詢在職人數" style="flex:1;">
+        <button class="btn btn-primary" style="width:auto; padding: 0 16px; height: 38px;" onclick="debugRagPrompt(this)">檢索並分析</button>
+      </div>
+      <div class="rag-debug-result" style="display:none; margin-top:12px; font-size:13px; color:#cbd5e1; display:flex; flex-direction:column; gap:12px;"></div>
+    </div>
+
     <div class="metric-grid">
       <div class="metric-card"><span>Schema</span><strong>${summary.schema_objects || 0}</strong></div>
       <div class="metric-card"><span>DDL</span><strong>${summary.ddl_items || 0}</strong></div>
@@ -336,16 +347,6 @@ WHERE ROWNUM <= 10;" disabled></textarea>
           <tbody>${syncRows || `<tr><td colspan="3">尚無 sync records</td></tr>`}</tbody>
         </table>
       </div>
-    </div>
-
-    <div class="training-form rag-debugger-form" style="margin-top: 20px;">
-      <div class="form-title">🔍 RAG 檢索與 LLM 提示詞除錯器</div>
-      <div class="muted-text">輸入提問，可查詢 SchemaEmbedding (DDL/Doc) 與 ExampleEmbedding (SQL 範例) 的相似度分數與 RAG 內容，以及最終組裝的 LLM 提示詞。</div>
-      <div style="display:flex; gap:10px; margin-top:8px;">
-        <input id="ragDebugQuestionInput" type="text" placeholder="輸入要測試的提問，例如：[人事]205廠 查詢在職人數" style="flex:1;">
-        <button class="btn btn-primary" style="width:auto; padding: 0 16px; height: 38px;" onclick="debugRagPrompt(this)">檢索並分析</button>
-      </div>
-      <div class="rag-debug-result" style="display:none; margin-top:12px; font-size:13px; color:#cbd5e1; display:flex; flex-direction:column; gap:12px;"></div>
     </div>
   `;
 }

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-import json
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from webapps.llm.embedding_factory import (
+    expected_embedding_dimension,
+    get_shared_embedding_model,
+    get_shared_embedding_model_name,
+)
 from webapps.vanna.models import DataSource, SchemaEmbedding, ExampleEmbedding
-from webapps.vanna.embedding_factory import expected_embedding_dimension
 
 
 def _expected_dimension() -> int:
@@ -13,26 +15,11 @@ def _expected_dimension() -> int:
 
 
 def _get_command_embedding_model():
-    model_name = "snowflake-arctic-embed2"
-    base_url = str(
-        getattr(
-            settings,
-            "NL2SQL_OLLAMA_BASE_URL",
-            getattr(settings, "OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434"),
-        )
-        or "http://mpcai.mpc.mil.tw:11434"
-    )
-
-    try:
-        from langchain_ollama import OllamaEmbeddings
-    except ImportError:
-        from langchain_community.embeddings import OllamaEmbeddings
-
-    return OllamaEmbeddings(model=model_name, base_url=base_url), model_name
+    return get_shared_embedding_model(), get_shared_embedding_model_name()
 
 
 class Command(BaseCommand):
-    help = "Batch calculate and save embeddings for SchemaEmbedding and ExampleEmbedding using Ollama snowflake-arctic-embed2."
+    help = "Batch calculate and save embeddings for SchemaEmbedding and ExampleEmbedding using the shared embedding factory."
 
     def add_arguments(self, parser):
         parser.add_argument(

@@ -1,6 +1,6 @@
 ﻿# AI_TOOLS 專案規範（Primary Rules）
 
-最後更新：2026-05-25  
+最後更新：2026-06-11  
 專案根目錄：`H:\AI\AI_TOOLS`
 專案使用Python根目錄：`H:\AI\AI_TOOLS\venv`
 ---
@@ -30,7 +30,9 @@
 ### 2.3 DB / LLM
 1. DB 存取只能走 `webapps/database/db_factory.py`。
 2. LLM 存取只能走 `webapps/llm/llm_factory.py`。
-3. 禁止在功能模組直接建立 DB 連線或模型客戶端。
+3. Embedding 存取與模型建立只能走 `webapps/llm/embedding_factory.py`。
+4. 全系統預設 embedding provider / model 統一為 `OLLAMA / snowflake-arctic-embed2`；新系統不得各自另建 embedding factory。
+5. 禁止在功能模組直接建立 DB 連線或模型客戶端。
 
 ### 2.4 ACL / require_node
 1. 頁面端點必須加 `@require_node("<node>")`。

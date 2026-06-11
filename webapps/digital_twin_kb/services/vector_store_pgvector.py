@@ -26,7 +26,7 @@ def similarity_search(query_embedding: list[float], top_k: int, user_security_le
         "top_k": int(top_k),
         "security_level": int(user_security_level),
     }
-    where = ["security_level <= %(security_level)s"]
+    where = ["security_level <= %(security_level)s", "embedding IS NOT NULL"]
     for key in ["twin_level", "isa95_level", "system_type", "topic"]:
         value = filters.get(key)
         if value:

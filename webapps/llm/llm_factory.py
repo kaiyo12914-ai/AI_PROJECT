@@ -5,6 +5,7 @@ import logging
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
+from webapps.llm.embedding_factory import get_shared_embedding_model, get_shared_embedding_provider
 from webapps.llm.strategies import (
     ChatBuildContext,
     ChatStrategyDeps,
@@ -585,7 +586,9 @@ def _get_embedding_strategy_registry():
 
 def get_embedding_model(model_type: str | None = None):
     """Create embedding model instance by MODEL_TYPE."""
-    provider = _normalize_provider_for_env((model_type or os.getenv("MODEL_TYPE") or "OLLAMA"))
+    if model_type is None:
+        return get_shared_embedding_model()
+    provider = _normalize_provider_for_env(model_type or get_shared_embedding_provider())
     strategy = _get_embedding_strategy_registry().get(provider)
     if not strategy:
         raise ValueError(f"Unknown MODEL_TYPE={provider}. Use GOOGLE/OLLAMA/OPENAI.")

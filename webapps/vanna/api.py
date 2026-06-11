@@ -1025,7 +1025,7 @@ def rag_debug_api(request: HttpRequest) -> JsonResponse:
     except Exception as exc:
         return JsonResponse({"ok": False, "error": f"Failed to resolve data source: {exc}"}, status=400)
 
-    from webapps.vanna.embedding_factory import expected_embedding_dimension, get_nl2sql_embedding_model
+    from webapps.llm.embedding_factory import expected_embedding_dimension, get_shared_embedding_model
     from pgvector.django import CosineDistance
 
     q_vector = None
@@ -1033,7 +1033,7 @@ def rag_debug_api(request: HttpRequest) -> JsonResponse:
     ee_results = []
 
     try:
-        emb_model = get_nl2sql_embedding_model()
+        emb_model = get_shared_embedding_model()
         q_vector = emb_model.embed_query(question)
     except Exception as exc:
         return JsonResponse({"ok": False, "error": f"Failed to calculate query embedding: {exc}"}, status=500)
