@@ -1,6 +1,6 @@
-﻿# AI_TOOLS 專案規範（Primary Rules）
+# AI_TOOLS 專案規範（Primary Rules）
 
-最後更新：2026-06-11  
+最後更新：2026-06-13  
 專案根目錄：`H:\AI\AI_TOOLS`
 專案使用Python根目錄：`H:\AI\AI_TOOLS\venv`
 ---
@@ -103,3 +103,24 @@
 ## 10) 合併門檻
 1. 違反本檔 Mandatory 規則，一律 `MUST NOT MERGE`。
 2. 任何例外都必須在 PR / commit 記錄理由與範圍。
+
+---
+
+## 11) 版本同步工具（Mandatory）
+1. 本專案版本同步優先使用專案根目錄工具：
+   - `H:\AI\AI_TOOLS\git-push.ps1`
+   - `H:\AI\AI_TOOLS\git-sync.ps1`
+2. 每次執行 `git commit` 後，必須立即執行版本同步作業，不得只停留在本地提交。
+3. 一般同步順序：
+   - 先執行：`& 'H:\AI\AI_TOOLS\git-push.ps1'`
+   - 再執行：`& 'H:\AI\AI_TOOLS\git-sync.ps1'`
+4. 若預設 `origin` 因 GitHub 權限或憑證問題無法推送，改用已驗證可寫入遠端 `upstream`：
+   - `& 'H:\AI\AI_TOOLS\git-push.ps1' -Remote upstream`
+   - `& 'H:\AI\AI_TOOLS\git-sync.ps1' -Remote upstream`
+5. 本機 Git 若出現 SSL 憑證鏈或撤銷檢查問題，可在本 repo local config 設定：
+   - `git config --local http.sslBackend schannel`
+   - `git config --local http.schannelCheckRevoke false`
+6. 同步完成判定：
+   - `git rev-list --left-right --count HEAD...upstream/main` 應為 `0 0`。
+   - `git status --short --branch` 應顯示 `main...upstream/main` 且無未提交檔案。
+7. 若 `origin/main` 仍顯示 ahead，但 `upstream/main` 已同步，需在回報中明確說明：`origin` 不可用或無權限，實際同步目標為 `upstream`。
