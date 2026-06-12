@@ -784,6 +784,22 @@ _PROFILE_ENV_PREFIXES = (
 )
 
 
+def _is_doc_caller() -> bool:
+    import sys
+    try:
+        frame = sys._getframe(2)
+        for _ in range(15):
+            if frame is None:
+                break
+            filename = frame.f_code.co_filename.replace('\\', '/')
+            if ('webapps/doc/' in filename) or ('tests/' in filename and 'doc' in filename.lower()):
+                return True
+            frame = frame.f_back
+    except Exception:
+        pass
+    return False
+
+
 def _profile_env_prefixes_and_name(profile: str) -> tuple[tuple[str, ...], str]:
     p = _normalize_profile(profile)
     if p.startswith("CIM_"):
@@ -792,7 +808,14 @@ def _profile_env_prefixes_and_name(profile: str) -> tuple[tuple[str, ...], str]:
         return (("ERP_DB",), p[4:])
     if p.startswith("DOC_"):
         return (("DOC_DB",), p[4:])
-    return (_PROFILE_ENV_PREFIXES, p)
+    
+    # DOC 子系統、自動化測試：優先順序（僅有 "DOC_DB"）
+    if _is_doc_caller():
+        prefixes = ("DOC_DB",)
+    # Vanna、其餘子系統與測試：預設優先順序為 ERP_DB -> CIM_DB -> DOC_DB
+    else:
+        prefixes = ("ERP_DB", "CIM_DB", "DOC_DB")
+    return (prefixes, p)
 
 
 def _profile_env_key(profile: str, key: str) -> str:
@@ -908,12 +931,22 @@ def _db_factory_md_path() -> Path:
     DB profile override file for DOC plant routing.
     Priority:
     1) DB_FACTORY_MD_PATH env
-    2) <project_root>/.env_DB_factory
-    3) webapps/database/.env_DB_factory
+    2) settings.BASE_DIR/.env_DB_factory (when settings is configured)
+    3) <project_root>/.env_DB_factory (CWD based)
+    4) webapps/database/.env_DB_factory
     """
     custom = (os.getenv("DB_FACTORY_MD_PATH") or "").strip()
     if custom:
         return Path(custom)
+
+    try:
+        from django.conf import settings
+        if hasattr(settings, "BASE_DIR") and settings.BASE_DIR:
+            cand = Path(settings.BASE_DIR) / ".env_DB_factory"
+            if cand.exists():
+                return cand
+    except Exception:
+        pass
 
     root_candidate = Path.cwd() / ".env_DB_factory"
     if root_candidate.exists():

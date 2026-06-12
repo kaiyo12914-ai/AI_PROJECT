@@ -6,6 +6,7 @@ from django.shortcuts import render
 from webapps.portal.acl import can_access
 from webapps.portal.decorators import require_node
 from webapps.portal.identity import resolve_effective_user_id
+from webapps.common.login_utils import get_login_user_org
 from webapps.vanna.vanna_adapter import VENDOR_ROOT, VENDOR_SRC, ensure_vanna_vendor_loaded
 
 
@@ -53,6 +54,7 @@ def page_index(request):
             "runtime_error": runtime.error,
             "can_manage_vanna": is_vanna_admin(request),
             "login_display_name": _login_display_name(request),
+            "login_user_org": get_login_user_org(request),
             "is_named_system_admin": _is_named_system_admin(request),
         },
     )

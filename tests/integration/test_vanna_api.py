@@ -59,6 +59,18 @@ class VannaApiIntegrationTestCase(SimpleTestCase):
         self.assertIn("H121356578", html)
         self.assertIn("系統管理員", html)
 
+    @patch("webapps.vanna.views.ensure_vanna_vendor_loaded")
+    def test_page_exposes_normalized_login_user_org_for_preset_questions(self, mock_runtime):
+        mock_runtime.return_value = MagicMock(version="2.0.0", error="")
+        session = self.client.session
+        session["login_user_org"] = "MNDV"
+        session.save()
+
+        res = self.client.get(self.page_url)
+        self.assertEqual(res.status_code, 200)
+        html = res.content.decode("utf-8")
+        self.assertIn('data-login-user-org="209"', html)
+
     @patch("webapps.vanna.views.is_vanna_admin", return_value=False)
     def test_page_hides_management_panel_for_non_admin(self, _mock_is_admin):
         res = self.client.get(self.page_url)
@@ -311,8 +323,48 @@ class VannaApiIntegrationTestCase(SimpleTestCase):
         data = res.json()
         self.assertTrue(data["ok"])
         self.assertEqual(data["columns"], ["EMPNO", "NAME"])
-        self.assertEqual(data["rows"], [["001", "Alice"]])
+        self.assertEqual(data["rows"], [["*****", "Alice"]])
         mock_cur.fetchmany.assert_called_once_with(10)
+
+    @override_settings(ENV_NAME="INT")
+    @patch("webapps.vanna.api.is_vanna_admin", return_value=True)
+    @patch("webapps.database.db_factory.db_connect")
+    @patch("webapps.vanna.api._resolve_data_source")
+    def test_admin_sql_execute_api_masks_ct_employ_idno_and_empno(
+        self,
+        mock_resolve_ds,
+        mock_db_connect,
+        _mock_is_admin,
+    ):
+        mock_ds = MagicMock()
+        mock_ds.db_type = "oracle"
+        mock_ds.enabled = True
+        mock_ds.db_profile = ""
+        mock_resolve_ds.return_value = mock_ds
+
+        mock_cur = MagicMock()
+        mock_cur.description = [("EMPNO",), ("IDNO",), ("NAME",)]
+        mock_cur.fetchmany.return_value = [("A123456789", "B223456789", "Alice")]
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+        mock_db_connect.return_value = mock_conn
+
+        res = self.client.post(
+            self.admin_sql_execute_url,
+            data=json.dumps(
+                {
+                    "code": "legacy_vanna_chroma",
+                    "sql": "SELECT EMPNO, IDNO, NAME FROM CT_EMPLOY",
+                    "max_rows": 10,
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["rows"], [["A1234*****", "B2234*****", "Alice"]])
 
     @patch("webapps.vanna.api.is_vanna_admin", return_value=True)
     @patch("webapps.vanna.api.SchemaEmbedding.objects.update_or_create")
@@ -431,6 +483,95 @@ class VannaApiIntegrationTestCase(SimpleTestCase):
         self.assertEqual(data["result"]["query_log_id"], 123)
         self.assertIn("execution_policy", data["result"])
 
+    @patch("webapps.vanna.api.generate_sql")
+    @patch("webapps.vanna.api._resolve_data_source")
+    def test_generate_api_blocks_question_outside_login_user_org_scope(self, mock_resolve_ds, mock_generate_sql):
+        mock_ds = MagicMock()
+        mock_ds.enabled = True
+        mock_ds.db_type = "oracle"
+        mock_resolve_ds.return_value = mock_ds
+
+        session = self.client.session
+        session["login_user_org"] = "202"
+        session.save()
+
+        res = self.client.post(
+            self.generate_url,
+            data=json.dumps({"code": "legacy_vanna_chroma", "question": "[人事]205廠 查詢在職人數"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(res.status_code, 403)
+        data = res.json()
+        self.assertFalse(data["ok"])
+        self.assertIn("僅可查詢 202", data["error"])
+        mock_generate_sql.assert_not_called()
+
+    @patch("webapps.vanna.api.generate_sql")
+    @patch("webapps.vanna.api._resolve_data_source")
+    def test_generate_api_allows_mpc_user_to_query_subordinate_factory(self, mock_resolve_ds, mock_generate_sql):
+        mock_ds = MagicMock()
+        mock_ds.enabled = True
+        mock_ds.db_type = "oracle"
+        mock_resolve_ds.return_value = mock_ds
+
+        from webapps.vanna.vanna_adapter import GenerateSqlResult
+
+        mock_generate_sql.return_value = GenerateSqlResult(
+            sql="SELECT * FROM CT_EMPLOY@DBLT205DB",
+            prompt="Dummy Prompt",
+            context_summary={"guard_status": "passed", "guard_message": ""},
+            query_log_id=321,
+            latency_ms=120,
+        )
+
+        session = self.client.session
+        session["login_user_org"] = "MPC"
+        session.save()
+
+        res = self.client.post(
+            self.generate_url,
+            data=json.dumps({"code": "legacy_vanna_chroma", "question": "[人事]205廠 查詢在職人數"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.json()["ok"])
+        mock_generate_sql.assert_called_once()
+
+    @patch("webapps.vanna.api.generate_sql")
+    @patch("webapps.vanna.api._resolve_data_source")
+    def test_generate_api_allows_named_system_admin_to_bypass_factory_scope(self, mock_resolve_ds, mock_generate_sql):
+        mock_ds = MagicMock()
+        mock_ds.enabled = True
+        mock_ds.db_type = "oracle"
+        mock_resolve_ds.return_value = mock_ds
+
+        from webapps.vanna.vanna_adapter import GenerateSqlResult
+
+        mock_generate_sql.return_value = GenerateSqlResult(
+            sql="SELECT * FROM CT_EMPLOY@DBLT205DB",
+            prompt="Dummy Prompt",
+            context_summary={"guard_status": "passed", "guard_message": ""},
+            query_log_id=654,
+            latency_ms=100,
+        )
+
+        session = self.client.session
+        session["login_user"] = "H121356578"
+        session["login_user_org"] = "202"
+        session.save()
+
+        res = self.client.post(
+            self.generate_url,
+            data=json.dumps({"code": "legacy_vanna_chroma", "question": "[人事]205廠 查詢在職人數"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.json()["ok"])
+        mock_generate_sql.assert_called_once()
+
     @patch("webapps.vanna.sql_guard.validate_sql")
     @patch("webapps.vanna.models.QueryLog.objects.get")
     def test_execute_api_blocked_by_guard(self, mock_qlog_get, mock_validate_sql):
@@ -497,6 +638,31 @@ class VannaApiIntegrationTestCase(SimpleTestCase):
         self.assertEqual(data["policy"]["mode"], "sql_only_ext")
         self.assertEqual(mock_qlog.execution_status, "not_executed_ext_sql_only")
 
+    @patch("webapps.vanna.models.QueryLog.objects.get")
+    def test_execute_api_blocks_query_log_outside_login_user_org_scope(self, mock_qlog_get):
+        mock_qlog = MagicMock()
+        mock_qlog.cleaned_sql = "SELECT * FROM CT_EMPLOY@DBLT205DB"
+        mock_qlog.generated_sql = "SELECT * FROM CT_EMPLOY@DBLT205DB"
+        mock_qlog.question = "[人事]205廠 查詢在職人數"
+        mock_qlog.data_source.db_type = "oracle"
+        mock_qlog.data_source.enabled = True
+        mock_qlog_get.return_value = mock_qlog
+
+        session = self.client.session
+        session["login_user_org"] = "202"
+        session.save()
+
+        res = self.client.post(
+            self.execute_url,
+            data=json.dumps({"query_log_id": 123}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(res.status_code, 403)
+        data = res.json()
+        self.assertFalse(data["ok"])
+        self.assertIn("僅可查詢 202", data["error"])
+
     @override_settings(ENV_NAME="INT")
     @patch("webapps.database.db_factory.db_connect")
     @patch("webapps.vanna.models.QueryLog.objects.get")
@@ -527,7 +693,38 @@ class VannaApiIntegrationTestCase(SimpleTestCase):
         self.assertTrue(data["ok"])
         self.assertFalse(data["sql_only"])
         self.assertEqual(data["columns"], ["EMPNO", "NAME"])
-        self.assertEqual(data["rows"], [["001", "Alice"]])
+        self.assertEqual(data["rows"], [["*****", "Alice"]])
         self.assertEqual(data["policy"]["mode"], "oracle_execute")
         self.assertEqual(mock_qlog.execution_status, "success")
         self.assertEqual(mock_qlog.row_count, 1)
+
+    @override_settings(ENV_NAME="INT")
+    @patch("webapps.database.db_factory.db_connect")
+    @patch("webapps.vanna.models.QueryLog.objects.get")
+    def test_execute_api_masks_ct_employ_idno_and_empno(self, mock_qlog_get, mock_db_connect):
+        mock_cur = MagicMock()
+        mock_cur.description = [("EMPNO",), ("IDNO",), ("NAME",)]
+        mock_cur.fetchall.return_value = [("A123456789", "B223456789", "Alice")]
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+        mock_db_connect.return_value = mock_conn
+
+        mock_qlog = MagicMock()
+        mock_qlog.cleaned_sql = "SELECT EMPNO, IDNO, NAME FROM CT_EMPLOY"
+        mock_qlog.generated_sql = "SELECT EMPNO, IDNO, NAME FROM CT_EMPLOY"
+        mock_qlog.question = "[人事]MPC 查詢員工資料"
+        mock_qlog.data_source.db_type = "oracle"
+        mock_qlog.data_source.enabled = True
+        mock_qlog.data_source.db_profile = ""
+        mock_qlog.latency_ms = 0
+        mock_qlog_get.return_value = mock_qlog
+
+        res = self.client.post(
+            self.execute_url,
+            data=json.dumps({"query_log_id": 123}),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["rows"], [["A1234*****", "B2234*****", "Alice"]])

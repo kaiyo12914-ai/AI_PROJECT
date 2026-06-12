@@ -70,7 +70,7 @@ def test_erp_oracle_profile_reads_existing_env_db_factory_names() -> None:
             assert cfg.ora_pass == "erp_pass"
 
 
-def test_profile_without_db_kind_prefers_cim_then_erp_then_doc() -> None:
+def test_profile_without_db_kind_prefers_erp_then_cim_then_doc() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         cfg_path = Path(tmp) / ".env_DB_factory"
         cfg_path.write_text(
@@ -94,10 +94,10 @@ def test_profile_without_db_kind_prefers_cim_then_erp_then_doc() -> None:
             _reset_db_factory_cache()
             cfg = db_factory.load_db_config("oracle", profile="MPC")
 
-            assert cfg.ora_host == "10.29.136.112"
-            assert cfg.ora_service == "cim_service"
-            assert cfg.ora_user == "cim_user"
-            assert cfg.ora_pass == "cim_pass"
+            assert cfg.ora_host == "10.29.136.113"
+            assert cfg.ora_service == "erp_service"
+            assert cfg.ora_user == "erp_user"
+            assert cfg.ora_pass == "erp_pass"
 
 
 def test_profile_resolution_keeps_doc_db_compatibility() -> None:

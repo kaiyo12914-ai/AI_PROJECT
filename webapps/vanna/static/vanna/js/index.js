@@ -59,6 +59,212 @@ function getCookie(name) {
   return cookieValue;
 }
 
+function stripDisplayPrefix(value, prefix) {
+  const raw = String(value || "");
+  if (!prefix) return raw;
+  return raw.toUpperCase().startsWith(prefix.toUpperCase()) ? raw.slice(prefix.length) : raw;
+}
+
+function formatSchemaObjectLabel(item) {
+  const schemaName = String(item && item.schema ? item.schema : "");
+  const rawName = String(item && item.name ? item.name : "");
+  const schemaPrefix = schemaName ? `${schemaName}.` : "";
+  const withoutSchemaPrefix = stripDisplayPrefix(rawName, schemaPrefix);
+  return stripDisplayPrefix(withoutSchemaPrefix, "LEGACY.");
+}
+
+function formatDocumentationName(name) {
+  return stripDisplayPrefix(name, "VANNA_LEGACY_");
+}
+
+function normalizePresetUnit(unit) {
+  const raw = String(unit || "").trim().toUpperCase();
+  if (!raw) return "MPC";
+  if (raw === "PC") return "MPC";
+  if (["MPC", "202", "205", "209", "401"].includes(raw)) return raw;
+  const compact = raw.replace(/[^A-Z0-9]+/g, "");
+  if (compact === "PC") return "MPC";
+  if (["MPC", "202", "205", "209", "401"].includes(compact)) return compact;
+  if (compact === "MNDQ") return "205";
+  if (compact === "MNDV") return "209";
+  if (compact === "MNDI") return "401";
+  const match = compact.match(/(202|205|209|401)/);
+  if (match) return match[1];
+  if (compact.includes("MPC")) return "MPC";
+  return "MPC";
+}
+
+function getCurrentLoginOrg() {
+  return normalizePresetUnit(document.body.dataset.loginUserOrg || "");
+}
+
+function replaceQuestionUnit(question, unit) {
+  const resolvedUnit = normalizePresetUnit(unit);
+  const raw = String(question || "").trim();
+  const match = raw.match(/^(\s*\[[^\]]+\]\s*)([^\s]+)(.*)$/);
+  if (!match) return raw;
+  return `${match[1]}${resolvedUnit}${match[3]}`;
+}
+
+function normalizeQuestionForCurrentOrg(question) {
+  return replaceQuestionUnit(question, getCurrentLoginOrg());
+}
+
+const BASE_PRESET_QUESTIONS = [
+  "[人事]MPC 查詢目前在職人員數量",
+  "[人事]202廠 列出前10筆員工姓名、工號與所屬單位",
+  "[人事]205廠 查詢各單位目前在職人員數量",
+  "[採購]209廠 查詢物料採購未交量前20筆",
+  "[物料]401廠 查詢低於安全庫存的前20筆料號"
+];
+
+function buildDefaultPresetQuestions() {
+  const unit = getCurrentLoginOrg();
+  return BASE_PRESET_QUESTIONS.map(question => replaceQuestionUnit(question, unit)).slice(0, 5);
+}
+
+function parseQuestionContext(question) {
+  const raw = String(question || "").trim();
+  if (!raw) return null;
+  const match = raw.match(/^\s*\[([^\]]+)\]\s*([^\s]+)\s*(.*)$/);
+  if (!match) {
+    return {
+      raw,
+      business: "",
+      unit: "",
+      intent: raw
+    };
+  }
+  return {
+    raw,
+    business: String(match[1] || "").trim(),
+    unit: String(match[2] || "").trim(),
+    intent: String(match[3] || "").trim()
+  };
+}
+
+function classifyIntent(intent) {
+  const text = String(intent || "");
+  if (!text) return "generic";
+  if (/(未交|待交|逾期|欠料|未到貨)/.test(text)) return "pending";
+  if (/(安全庫存|低於庫存|庫存不足|庫存|料號)/.test(text)) return "inventory";
+  if (/(前\d+筆|列出|明細|名單|姓名|工號|清單)/.test(text)) return "detail";
+  if (/(單位|部門|各課|各組)/.test(text) && /(人數|數量|統計|筆數)/.test(text)) return "group_count";
+  if (/(人數|數量|統計|筆數|總數)/.test(text)) return "count";
+  return "generic";
+}
+
+function questionLabel(question) {
+  return `💬 ${question}`;
+}
+
+function dedupeQuestions(questions, currentQuestion) {
+  const current = String(currentQuestion || "").trim();
+  const seen = new Set();
+  const result = [];
+  questions.forEach(item => {
+    const value = String(item || "").trim();
+    if (!value || value === current) return;
+    const key = value.toUpperCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    result.push(value);
+  });
+  return result;
+}
+
+function buildRelatedQuestions(question) {
+  const context = parseQuestionContext(question);
+  if (!context || !context.business || !context.unit) {
+    return buildDefaultPresetQuestions();
+  }
+
+  const prefix = `[${context.business}]${context.unit}`;
+  const intentType = classifyIntent(context.intent);
+  let candidates = [];
+
+  if (context.business.includes("人事")) {
+    candidates = [
+      `${prefix} 查詢目前在職人員數量`,
+      `${prefix} 查詢各單位目前在職人員數量`,
+      `${prefix} 列出前10筆員工姓名、工號與所屬單位`,
+      `${prefix} 查詢目前離職人員數量`,
+      `${prefix} 查詢各職稱目前在職人員數量`
+    ];
+    if (intentType === "detail") {
+      candidates.unshift(
+        `${prefix} 查詢目前在職人員數量`,
+        `${prefix} 查詢各單位目前在職人員數量`
+      );
+    }
+  } else if (context.business.includes("採購")) {
+    candidates = [
+      `${prefix} 查詢物料採購未交量前20筆`,
+      `${prefix} 查詢未交採購單前20筆`,
+      `${prefix} 查詢各供應商未交金額前10筆`,
+      `${prefix} 查詢逾期未交物料前20筆`,
+      `${prefix} 查詢各料號未交數量前20筆`
+    ];
+  } else if (context.business.includes("物料")) {
+    candidates = [
+      `${prefix} 查詢低於安全庫存的前20筆料號`,
+      `${prefix} 查詢目前零庫存的前20筆料號`,
+      `${prefix} 查詢各倉別低於安全庫存筆數`,
+      `${prefix} 查詢庫存最高的前20筆料號`,
+      `${prefix} 查詢近30日無異動的前20筆料號`
+    ];
+  } else {
+    candidates = [
+      `${prefix} 查詢目前筆數`,
+      `${prefix} 查詢各分類統計`,
+      `${prefix} 列出前10筆明細`,
+      `${prefix} 查詢最近異動前10筆`,
+      `${prefix} 查詢各單位統計`
+    ];
+  }
+
+  if (intentType === "count") {
+    candidates.unshift(
+      `${prefix} 查詢各單位目前筆數`,
+      `${prefix} 列出前10筆明細`
+    );
+  } else if (intentType === "group_count") {
+    candidates.unshift(
+      `${prefix} 查詢目前總數`,
+      `${prefix} 列出前10筆明細`
+    );
+  } else if (intentType === "pending") {
+    candidates.unshift(
+      `${prefix} 查詢逾期未處理前20筆`,
+      `${prefix} 查詢各供應商未結案件數`
+    );
+  } else if (intentType === "inventory") {
+    candidates.unshift(
+      `${prefix} 查詢低於安全庫存的前20筆料號`,
+      `${prefix} 查詢目前零庫存的前20筆料號`
+    );
+  }
+
+  return dedupeQuestions(candidates, context.raw).slice(0, 5);
+}
+
+function renderPresetQuestions(questions) {
+  const container = document.getElementById("presetQuestionList");
+  if (!container) return;
+  const items = (questions && questions.length ? questions : buildDefaultPresetQuestions()).slice(0, 5);
+  container.innerHTML = items.map(question => `
+    <button class="btn btn-secondary" style="font-size:12.5px; text-align:left; justify-content:flex-start;" onclick="askPreset('${escapeJs(question)}')">
+      ${escapeHtml(questionLabel(question))}
+    </button>
+  `).join("");
+}
+
+function updatePresetQuestionsByQuery(question) {
+  const normalizedQuestion = normalizeQuestionForCurrentOrg(question);
+  const questions = buildRelatedQuestions(normalizedQuestion);
+  renderPresetQuestions(questions);
+}
+
 // 4. 同步與管理 API 觸發
 function triggerSchemaSync() {
   const btn = document.getElementById("btnSchemaSync");
@@ -182,7 +388,7 @@ function renderTrainingDatasetManager(bubbleEl, result, allItems = false) {
   const ds = result.data_source || {};
   const schemaRows = (result.schema_objects || []).map(item => `
     <tr>
-      <td>${escapeHtml(item.schema)}.${escapeHtml(item.name)}</td>
+      <td>${escapeHtml(formatSchemaObjectLabel(item))}</td>
       <td>${escapeHtml(item.type)}</td>
       <td>${escapeHtml(String(item.columns || 0))}</td>
       <td>${item.enabled ? "啟用" : "停用"}</td>
@@ -194,7 +400,7 @@ function renderTrainingDatasetManager(bubbleEl, result, allItems = false) {
   `).join("");
   const documentationRows = (result.documentation_items || []).map(item => `
     <tr>
-      <td>${escapeHtml(item.name)}</td>
+      <td>${escapeHtml(formatDocumentationName(item.name))}</td>
       <td>${escapeHtml((item.documentation || "").slice(0, 160))}</td>
       <td>
         <button class="btn btn-secondary mini-btn btn-edit-item" onclick="editTrainingItem(this, 'documentation', ${item.id})">編輯</button>
@@ -213,14 +419,6 @@ function renderTrainingDatasetManager(bubbleEl, result, allItems = false) {
       </td>
     </tr>
   `).join("");
-  const syncRows = (result.vanna_sync_records || []).map(item => `
-    <tr>
-      <td>${escapeHtml(item.type)}</td>
-      <td><code>${escapeHtml(item.status)}</code></td>
-      <td>${escapeHtml(item.training_id || "")}</td>
-    </tr>
-  `).join("");
-
   const refreshBtn = `<button class="btn btn-secondary mini-btn" onclick="loadTrainingDataset(this.closest('.msg-bubble'), ${allItems})">重新整理</button>`;
   const viewAllBtn = allItems ? "" : `<button class="btn btn-secondary mini-btn" onclick="loadTrainingDataset(this.closest('.msg-bubble'), true)">檢視全部</button>`;
 
@@ -236,14 +434,14 @@ function renderTrainingDatasetManager(bubbleEl, result, allItems = false) {
       </div>
     </div>
 
-    <div class="training-form rag-debugger-form" style="margin-top: 14px;">
+    <div class="training-form rag-debugger-form">
       <div class="form-title">🔍 RAG 檢索與 LLM 提示詞除錯器</div>
       <div class="muted-text">輸入提問，可查詢 SchemaEmbedding (DDL/Doc) 與 ExampleEmbedding (SQL 範例) 的相似度分數與 RAG 內容，以及最終組裝的 LLM 提示詞。</div>
-      <div style="display:flex; gap:10px; margin-top:8px;">
-        <input id="ragDebugQuestionInput" type="text" placeholder="輸入要測試的提問，例如：[人事]205廠 查詢在職人數" style="flex:1;">
-        <button class="btn btn-primary" style="width:auto; padding: 0 16px; height: 38px;" onclick="debugRagPrompt(this)">檢索並分析</button>
+      <div class="rag-debug-input-row">
+        <input id="ragDebugQuestionInput" class="rag-debug-question-input" type="text" placeholder="輸入要測試的提問，例如：[人事]205廠 查詢在職人數">
+        <button class="btn btn-primary rag-debug-submit-btn" onclick="debugRagPrompt(this)">檢索並分析</button>
       </div>
-      <div class="rag-debug-result" style="display:none; margin-top:12px; font-size:13px; color:#cbd5e1; display:flex; flex-direction:column; gap:12px;"></div>
+      <div class="rag-debug-result" style="display:none;"></div>
     </div>
 
     <div class="metric-grid">
@@ -255,12 +453,13 @@ function renderTrainingDatasetManager(bubbleEl, result, allItems = false) {
       <div class="metric-card"><span>Failed</span><strong>${summary.failed_records || 0}</strong></div>
     </div>
 
-    <div class="training-form">
-      <div class="form-title">新增訓練資料</div>
+    <div class="training-form training-data-form">
+      <div class="form-title">新增與編輯訓練資料</div>
       <div class="training-type-tabs" role="tablist" aria-label="訓練資料分類">
         <button class="training-type-tab active" type="button" data-training-type="ddl" onclick="selectTrainingType(this)">DDL</button>
         <button class="training-type-tab" type="button" data-training-type="documentation" onclick="selectTrainingType(this)">Documentation</button>
         <button class="training-type-tab" type="button" data-training-type="sql" onclick="selectTrainingType(this)">SQL</button>
+        <button class="training-type-tab" type="button" data-training-type="failed" onclick="selectTrainingType(this)">Failed Query</button>
       </div>
 
       <div class="training-fields" data-training-fields="ddl">
@@ -295,8 +494,24 @@ GROUP BY d.DEPT_NAME;"></textarea>
         </div>
         <div class="current-sql-test-result" style="display:none; margin-top:10px;"></div>
       </div>
+      <div class="training-fields hidden" data-training-fields="failed">
+        <div class="muted-text">維護並優化內網執行失敗的自然語言 SQL 語法與精進措施。</div>
+        <input id="failedQuestionInput" type="text" placeholder="自然語言提問">
+        <textarea id="failedSqlInput" placeholder="失敗之 SQL" style="min-height: 150px;"></textarea>
+        <textarea id="failedErrorInput" placeholder="錯誤訊息 (唯讀)" style="min-height: 100px;" readonly></textarea>
+        <textarea id="failedAnalysisInput" placeholder="失敗根因剖析，例如：RAG 未正確檢索到特定欄位或資料表" style="min-height: 120px;"></textarea>
+        <textarea id="failedActionInput" placeholder="採取的精進措施，例如：新增 DDL 表結構或 documentation 說明" style="min-height: 120px;"></textarea>
+        <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+          <span style="font-size:13px; color:#cbd5e1;">處理狀態：</span>
+          <select id="failedStatusSelect" style="width: auto; padding: 4px 8px; font-size:12px; height:28px;">
+            <option value="pending">待處理</option>
+            <option value="optimized">已完成優化</option>
+            <option value="ignored">忽略/不處理</option>
+          </select>
+        </div>
+      </div>
 
-      <button class="btn btn-primary" onclick="submitTrainingData(this)">新增到訓練資料集</button>
+      <button class="btn btn-primary" onclick="submitTrainingData(this)">新增/更新訓練資料</button>
     </div>
 
     <div class="training-form sql-test-form disabled-form">
@@ -340,11 +555,23 @@ WHERE ROWNUM <= 10;" disabled></textarea>
       </div>
     </div>
     <div class="training-section">
-      <h3>Vanna sync records</h3>
+      <h3>Failed queries (內網失敗語法精進記錄)</h3>
       <div class="table-wrapper training-table-wrap">
         <table class="result-table">
-          <thead><tr><th>Type</th><th>Status</th><th>Training ID</th></tr></thead>
-          <tbody>${syncRows || `<tr><td colspan="3">尚無 sync records</td></tr>`}</tbody>
+          <thead><tr><th>Question</th><th>Error Message</th><th>Status</th><th>操作</th></tr></thead>
+          <tbody>${
+            (result.failed_queries || []).map(item => `
+              <tr>
+                <td>${escapeHtml(item.question)}</td>
+                <td title="${escapeHtml(item.error_message)}">${escapeHtml((item.error_message || "").slice(0, 120))}</td>
+                <td><code>${escapeHtml(item.status)}</code></td>
+                <td>
+                  <button class="btn btn-secondary mini-btn btn-edit-item" onclick="editTrainingItem(this, 'failed', ${item.id})">編輯</button>
+                  <button class="btn btn-danger mini-btn btn-delete-item" onclick="deleteTrainingItem(this, 'failed', ${item.id})">刪除</button>
+                </td>
+              </tr>
+            `).join("") || `<tr><td colspan="4">尚無失敗記錄</td></tr>`
+          }</tbody>
         </table>
       </div>
     </div>
@@ -402,6 +629,18 @@ function trainingPayload(formEl, trainingType) {
       throw new Error("請輸入 Documentation 後再新增。");
     }
     return { training_type: "documentation", title, documentation };
+  }
+
+  if (trainingType === "failed") {
+    const question = formEl.querySelector("#failedQuestionInput").value.trim();
+    const sql = formEl.querySelector("#failedSqlInput").value.trim();
+    const analysis = formEl.querySelector("#failedAnalysisInput").value.trim();
+    const action_taken = formEl.querySelector("#failedActionInput").value.trim();
+    const status = formEl.querySelector("#failedStatusSelect").value;
+    if (!question || !sql) {
+      throw new Error("問題與 SQL 欄位不可為空。");
+    }
+    return { training_type: "failed", question, sql, analysis, action_taken, status };
   }
 
   const question = formEl.querySelector("#trainingQuestionInput").value.trim();
@@ -470,7 +709,7 @@ function editTrainingItem(btn, type, id) {
   const result = bubbleEl.trainingDatasetResult;
   if (!result) return;
 
-  const formEl = bubbleEl.querySelector(".training-form");
+  const formEl = bubbleEl.querySelector(".training-form.training-data-form") || bubbleEl.querySelector(".training-form");
   const tabBtn = formEl.querySelector(`.training-type-tab[data-training-type="${type}"]`);
   if (tabBtn) {
     selectTrainingType(tabBtn);
@@ -520,6 +759,16 @@ function editTrainingItem(btn, type, id) {
       formEl.querySelector("#trainingQuestionInput").value = item.question || "";
       formEl.querySelector("#trainingSqlInput").value = item.sql || "";
     }
+  } else if (type === "failed") {
+    const item = result.failed_queries.find(x => x.id === id);
+    if (item) {
+      formEl.querySelector("#failedQuestionInput").value = item.question || "";
+      formEl.querySelector("#failedSqlInput").value = item.failed_sql || "";
+      formEl.querySelector("#failedErrorInput").value = item.error_message || "";
+      formEl.querySelector("#failedAnalysisInput").value = item.analysis || "";
+      formEl.querySelector("#failedActionInput").value = item.action_taken || "";
+      formEl.querySelector("#failedStatusSelect").value = item.status || "pending";
+    }
   }
 
   formEl.scrollIntoView({ behavior: "smooth" });
@@ -545,6 +794,12 @@ function resetTrainingForm(formEl) {
   formEl.querySelector("#trainingDocInput").value = "";
   formEl.querySelector("#trainingQuestionInput").value = "";
   formEl.querySelector("#trainingSqlInput").value = "";
+  formEl.querySelector("#failedQuestionInput").value = "";
+  formEl.querySelector("#failedSqlInput").value = "";
+  formEl.querySelector("#failedErrorInput").value = "";
+  formEl.querySelector("#failedAnalysisInput").value = "";
+  formEl.querySelector("#failedActionInput").value = "";
+  formEl.querySelector("#failedStatusSelect").value = "pending";
 }
 
 function deleteTrainingItem(btn, type, id) {
@@ -676,6 +931,7 @@ function sendQuestion() {
   inputEl.value = "";
   appendUserMessage(question);
   addLog(`提問: "${question}"`, "info");
+  updatePresetQuestionsByQuery(question);
 
   const bubble = createAssistantBubblePlaceholder();
 
@@ -716,10 +972,13 @@ function renderSqlResponse(bubbleEl, result) {
   const executionPolicy = result.execution_policy || {};
   const canExecute = executionPolicy.can_execute === true;
   const policyMessage = executionPolicy.message || "";
+  const canViewSqlCommand = result.can_view_sql_command === true;
+  const shouldAutoExecute = guardStatus === "passed" && executionPolicy.mode === "oracle_execute" && Boolean(queryLogId);
 
   let guardHtml = "";
-  let runButtonHtml = "";
   let policyHtml = "";
+  let sqlHtml = "";
+  let resultsHtml = queryLogId ? `<div id="results-container-${queryLogId}" class="result-section" style="display:none;"></div>` : "";
 
   if (policyMessage) {
     const policyClass = canExecute ? "passed" : "blocked";
@@ -728,14 +987,21 @@ function renderSqlResponse(bubbleEl, result) {
 
   if (guardStatus === "passed") {
     guardHtml = `<div class="guard-banner passed">SQL Guard: passed</div>`;
-    if (canExecute) {
-      runButtonHtml = `
-        <div class="run-btn-row">
-          <button class="btn btn-primary" onclick="runQuery(${queryLogId}, this)">
-            Execute Oracle Query
-          </button>
+    if (canViewSqlCommand && sql) {
+      sqlHtml = `
+        <div class="sql-container">
+          <div class="sql-header">
+            <span>SQL Query</span>
+            <button class="btn btn-secondary" style="padding: 4px 8px; font-size:11px;" onclick="navigator.clipboard.writeText(\`${escapeJs(sql)}\`); addLog('SQL 已複製到剪貼簿', 'success');">複製</button>
+          </div>
+          <pre><code>${escapeHtml(sql)}</code></pre>
         </div>
       `;
+    } else {
+      sqlHtml = `<div class="guard-banner passed">已通過 SQL Guard；依權限不顯示 SQL 指令內容。</div>`;
+    }
+    if (shouldAutoExecute) {
+      resultsHtml = `<div id="results-container-${queryLogId}" class="result-section" style="display:block;"><div style="display:flex;align-items:center;gap:10px;"><div class="spinner" style="border-top-color:#06b6d4;"></div> 自動執行 Oracle 查詢中...</div></div>`;
     }
   } else {
     guardHtml = `
@@ -758,9 +1024,12 @@ function renderSqlResponse(bubbleEl, result) {
     </div>
     ${guardHtml}
     ${policyHtml}
-    ${runButtonHtml}
-    <div id="results-container-${queryLogId}" class="result-section" style="display:none;"></div>
+    ${resultsHtml}
   `;
+
+  if (shouldAutoExecute) {
+    setTimeout(() => runQuery(queryLogId), 0);
+  }
 }
 
 // 6. 唯讀執行查詢
@@ -871,6 +1140,7 @@ function escapeJs(str) {
   if (!str) return "";
   return str
     .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'")
     .replace(/`/g, "\\`")
     .replace(/\$/g, "\\$");
 }
@@ -1026,6 +1296,7 @@ function debugRagPrompt(btn) {
 // 9. 綁定按鈕監聽 (等 DOMContentLoaded)
 document.addEventListener("DOMContentLoaded", () => {
   addLog("Vanna 2.0 整合對話工作區已載入。", "success");
+  renderPresetQuestions(buildDefaultPresetQuestions());
 
   // 監聽輸入框 Enter 送出
   const inputEl = document.getElementById("questionInput");

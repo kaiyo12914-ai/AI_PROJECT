@@ -704,6 +704,8 @@ def extract_sql(text: str) -> str:
     marker = re.search(r"(?is)\b(with|select)\b", raw)
     if marker:
         raw = raw[marker.start() :].strip()
+    # 移除尾隨分號，防範 Oracle 報 ORA-00933 錯誤
+    raw = raw.rstrip(";").strip()
     return raw
 
 

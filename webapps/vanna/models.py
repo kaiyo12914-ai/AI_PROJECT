@@ -342,3 +342,35 @@ class EvalCase(models.Model):
             models.Index(fields=["data_source", "enabled"]),
             models.Index(fields=["difficulty", "category"]),
         ]
+
+
+class FailedQueryRecord(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "待處理"),
+        ("optimized", "已完成優化"),
+        ("ignored", "忽略/不處理"),
+    ]
+
+    query_log = models.OneToOneField(
+        "QueryLog",
+        on_delete=models.CASCADE,
+        related_name="failed_record",
+        verbose_name="關聯查詢日誌"
+    )
+    question = models.TextField(verbose_name="自然語言提問")
+    failed_sql = models.TextField(verbose_name="失敗之 SQL")
+    error_message = models.TextField(verbose_name="錯誤訊息")
+    data_source_code = models.CharField(max_length=80, blank=True, default="", verbose_name="資料來源編號")
+    analysis = models.TextField(blank=True, default="", verbose_name="失敗根因剖析")
+    action_taken = models.TextField(blank=True, default="", verbose_name="精進措施 (如修正 DDL/新增 SQL 範例)")
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default="pending", verbose_name="處理狀態")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "nl2sql_failed_query_record"
+        ordering = ["-created_at"]
+        verbose_name = "失敗語法精進記錄"
+
+    def __str__(self) -> str:
+        return f"Fail Log {self.query_log_id}: {self.question[:40]}"

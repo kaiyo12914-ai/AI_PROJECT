@@ -12,6 +12,7 @@ from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from webapps.common.login_utils import get_login_user_org, normalize_org_code
 from webapps.portal.decorators import require_node
 from webapps.vanna.models import (
     DataSource,
@@ -22,8 +23,9 @@ from webapps.vanna.models import (
     TrainingExample,
     VannaTrainingSync,
     ExampleEmbedding,
+    FailedQueryRecord,
 )
-from webapps.vanna.views import is_vanna_admin
+from webapps.vanna.views import _is_named_system_admin, is_vanna_admin
 from webapps.vanna.vanna_adapter import (
     ensure_vanna_vendor_loaded,
     generate_sql,
@@ -100,6 +102,21 @@ def _user_id(request: HttpRequest) -> str:
         or getattr(getattr(request, "user", None), "username", "")
         or ""
     ).strip()
+
+
+def _can_view_sql_command(request: HttpRequest) -> bool:
+    return _is_named_system_admin(request)
+
+
+def _apply_sql_visibility(payload: dict[str, Any], request: HttpRequest, *sql_keys: str) -> dict[str, Any]:
+    can_view = _can_view_sql_command(request)
+    payload["can_view_sql_command"] = can_view
+    payload["sql_hidden"] = not can_view
+    if not can_view:
+        for key in sql_keys:
+            if key in payload:
+                payload[key] = ""
+    return payload
 
 
 def _resolve_data_source(data: dict[str, Any]) -> DataSource:
@@ -188,6 +205,80 @@ def _positive_int(value: Any, default: int, maximum: int) -> int:
     return max(1, min(number, maximum))
 
 
+_FACTORY_SCOPE_MAP: dict[str, set[str]] = {
+    "MPC": {"MPC", "202", "205", "209", "401"},
+    "202": {"202"},
+    "205": {"205"},
+    "209": {"209"},
+    "401": {"401"},
+}
+
+_PII_MASK_COLUMNS = {"IDNO", "EMPNO"}
+
+
+def _factory_from_question(question: str) -> str:
+    text = str(question or "").strip().upper()
+    if not text:
+        return ""
+    if re.search(r"(?<![A-Z0-9])MPC(?![A-Z0-9])", text):
+        return "MPC"
+    match = re.search(r"(?<!\d)(202|205|209|401)(?:\s*廠)?(?!\d)", text)
+    if not match:
+        return ""
+    return normalize_org_code(match.group(1), default="")
+
+
+def _validate_factory_scope(request: HttpRequest, question: str) -> tuple[bool, str]:
+    if _is_named_system_admin(request):
+        return True, ""
+
+    login_org = normalize_org_code(get_login_user_org(request), default="")
+    if login_org not in _FACTORY_SCOPE_MAP:
+        return True, ""
+
+    requested_factory = _factory_from_question(question)
+    if not requested_factory:
+        allowed_text = "、".join(sorted(_FACTORY_SCOPE_MAP[login_org], key=lambda x: (x != "MPC", x)))
+        return False, f"問題必須明確包含可查詢廠別；您目前僅可查詢：{allowed_text}。"
+
+    if requested_factory not in _FACTORY_SCOPE_MAP[login_org]:
+        allowed_text = "、".join(sorted(_FACTORY_SCOPE_MAP[login_org], key=lambda x: (x != "MPC", x)))
+        return False, f"login_user_org={login_org} 僅可查詢 {allowed_text} 資料，不能查詢 {requested_factory}。"
+
+    return True, ""
+
+
+def _mask_last_five(value: Any) -> Any:
+    if value is None:
+        return value
+    text = str(value)
+    if not text:
+        return text
+    if len(text) <= 5:
+        return "*****"
+    return f"{text[:-5]}*****"
+
+
+def _mask_ct_employ_pii(sql: str, columns: list[str], rows: list[Any]) -> list[Any]:
+    if not re.search(r"\bCT_EMPLOY\b", str(sql or ""), flags=re.IGNORECASE):
+        return rows
+    if not columns or not rows:
+        return rows
+
+    mask_indexes = [idx for idx, col in enumerate(columns) if str(col or "").strip().upper() in _PII_MASK_COLUMNS]
+    if not mask_indexes:
+        return rows
+
+    masked_rows: list[Any] = []
+    for row in rows:
+        items = list(row) if isinstance(row, (list, tuple)) else [row]
+        for idx in mask_indexes:
+            if idx < len(items):
+                items[idx] = _mask_last_five(items[idx])
+        masked_rows.append(items)
+    return masked_rows
+
+
 def _schema_search_payload(data_source: DataSource, query: str, limit: int = 20) -> dict[str, Any]:
     clean_query = str(query or "").strip()
     max_items = _positive_int(limit, 20, 100)
@@ -228,8 +319,9 @@ def _query_logs_payload(request: HttpRequest, data_source: DataSource | None, li
         logs_qs = logs_qs.filter(data_source=data_source)
     if not is_vanna_admin(request):
         logs_qs = logs_qs.filter(user_id=_user_id(request))
-    items = [
-        {
+    items = []
+    for log in logs_qs.order_by("-created_at")[:max_items]:
+        item = {
             "id": log.id,
             "data_source": log.data_source.code if log.data_source else "",
             "question": log.question,
@@ -242,8 +334,7 @@ def _query_logs_payload(request: HttpRequest, data_source: DataSource | None, li
             "latency_ms": log.latency_ms,
             "created_at": log.created_at,
         }
-        for log in logs_qs.order_by("-created_at")[:max_items]
-    ]
+        items.append(_apply_sql_visibility(item, request, "generated_sql", "cleaned_sql"))
     return {"limit": max_items, "items": items}
 
 
@@ -416,12 +507,15 @@ def _training_dataset_payload(data_source: DataSource, all_items: bool = False) 
     examples_list_qs = examples_qs.order_by("-updated_at")
     sync_list_qs = sync_qs.order_by("-updated_at")
     doc_list_qs = doc_qs.order_by("-created_at")
+    failed_qs = FailedQueryRecord.objects.filter(data_source_code=data_source.code)
+    failed_list_qs = failed_qs.order_by("-created_at")
 
     if not all_items:
         schema_list_qs = schema_list_qs[:30]
         examples_list_qs = examples_list_qs[:30]
         sync_list_qs = sync_list_qs[:30]
         doc_list_qs = doc_list_qs[:30]
+        failed_list_qs = failed_list_qs[:30]
 
     schema_items = [
         {
@@ -470,6 +564,21 @@ def _training_dataset_payload(data_source: DataSource, all_items: bool = False) 
         }
         for item in doc_list_qs
     ]
+    failed_items = [
+        {
+            "id": item.id,
+            "query_log_id": item.query_log_id,
+            "question": item.question,
+            "failed_sql": item.failed_sql,
+            "error_message": item.error_message,
+            "analysis": item.analysis,
+            "action_taken": item.action_taken,
+            "status": item.status,
+            "created_at": item.created_at,
+            "updated_at": item.updated_at,
+        }
+        for item in failed_list_qs
+    ]
     return {
         "data_source": {
             "code": data_source.code,
@@ -493,6 +602,7 @@ def _training_dataset_payload(data_source: DataSource, all_items: bool = False) 
         "documentation_items": documentation_items,
         "training_examples": example_items,
         "vanna_sync_records": sync_items,
+        "failed_queries": failed_items,
     }
 
 
@@ -519,8 +629,8 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
         item_id = body.get("id")
         if not item_id:
             return JsonResponse({"ok": False, "error": "id is required for deletion"}, status=400)
-        if training_type not in ("ddl", "documentation", "sql"):
-            return JsonResponse({"ok": False, "error": "training_type must be ddl, documentation, or sql"}, status=400)
+        if training_type not in ("ddl", "documentation", "sql", "failed"):
+            return JsonResponse({"ok": False, "error": "training_type must be ddl, documentation, sql, or failed"}, status=400)
 
         if training_type == "ddl":
             try:
@@ -553,13 +663,21 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
             except TrainingExample.DoesNotExist:
                 return JsonResponse({"ok": False, "error": f"TrainingExample with id {item_id} not found"}, status=404)
 
+        elif training_type == "failed":
+            try:
+                item = FailedQueryRecord.objects.get(id=item_id, data_source_code=data_source.code)
+                item.delete()
+                return JsonResponse({"ok": True})
+            except FailedQueryRecord.DoesNotExist:
+                return JsonResponse({"ok": False, "error": f"FailedQueryRecord with id {item_id} not found"}, status=404)
+
     if request.method == "PUT":
         training_type = str(body.get("training_type") or body.get("type") or "").strip().lower()
         item_id = body.get("id")
         if not item_id:
             return JsonResponse({"ok": False, "error": "id is required for update"}, status=400)
-        if training_type not in ("ddl", "documentation", "sql"):
-            return JsonResponse({"ok": False, "error": "training_type must be ddl, documentation, or sql"}, status=400)
+        if training_type not in ("ddl", "documentation", "sql", "failed"):
+            return JsonResponse({"ok": False, "error": "training_type must be ddl, documentation, sql, or failed"}, status=400)
 
         if training_type == "ddl":
             ddl_text = str(body.get("ddl") or body.get("ddl_text") or "").strip()
@@ -651,6 +769,34 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
                 return JsonResponse({"ok": True, "result": {"id": ex.id, "question": ex.question, "sql": ex.sql_text}})
             except TrainingExample.DoesNotExist:
                 return JsonResponse({"ok": False, "error": f"TrainingExample with id {item_id} not found"}, status=404)
+
+        elif training_type == "failed":
+            analysis = str(body.get("analysis") or "").strip()
+            action_taken = str(body.get("action_taken") or "").strip()
+            status = str(body.get("status") or "pending").strip()
+            try:
+                item = FailedQueryRecord.objects.get(id=item_id, data_source_code=data_source.code)
+                item.analysis = analysis
+                item.action_taken = action_taken
+                item.status = status
+                if "question" in body:
+                    item.question = str(body.get("question") or "").strip()
+                if "sql" in body:
+                    item.failed_sql = str(body.get("sql") or "").strip()
+                item.save()
+                return JsonResponse({
+                    "ok": True,
+                    "result": {
+                        "id": item.id,
+                        "question": item.question,
+                        "failed_sql": item.failed_sql,
+                        "analysis": item.analysis,
+                        "action_taken": item.action_taken,
+                        "status": item.status,
+                    }
+                })
+            except FailedQueryRecord.DoesNotExist:
+                return JsonResponse({"ok": False, "error": f"FailedQueryRecord with id {item_id} not found"}, status=404)
 
     training_type = str(body.get("training_type") or body.get("type") or "sql").strip().lower()
     if training_type not in {"ddl", "documentation", "sql"}:
@@ -789,6 +935,9 @@ def admin_sql_execute_api(request: HttpRequest) -> JsonResponse:
     except Exception as exc:
         return JsonResponse({"ok": False, "error": f"Failed to resolve data source: {exc}"}, status=400)
 
+    if data_source.db_type == "oracle":
+        sql = sql.rstrip(";").strip()
+
     from webapps.vanna.sql_guard import validate_sql
 
     is_safe, guard_err = validate_sql(sql)
@@ -854,6 +1003,8 @@ def admin_sql_execute_api(request: HttpRequest) -> JsonResponse:
             payload["oracle_config"] = _oracle_config_diagnostics(data_source.db_profile)
         return JsonResponse(payload, status=500)
 
+    rows = _mask_ct_employ_pii(sql, columns, rows)
+
     return JsonResponse(
         {
             "ok": True,
@@ -876,6 +1027,9 @@ def generate_api(request: HttpRequest) -> JsonResponse:
     question = str(body.get("question") or "").strip()
     if not question:
         return JsonResponse({"ok": False, "error": "question is required"}, status=400)
+    is_allowed, scope_error = _validate_factory_scope(request, question)
+    if not is_allowed:
+        return JsonResponse({"ok": False, "error": scope_error}, status=403)
 
     try:
         data_source = _resolve_data_source(body)
@@ -883,6 +1037,7 @@ def generate_api(request: HttpRequest) -> JsonResponse:
         payload = _generate_payload(result, include_prompt=bool(body.get("debug_prompt")))
         payload["execution_policy"] = _execution_policy(data_source)
         payload["env"] = _env_name()
+        _apply_sql_visibility(payload, request, "sql")
         return JsonResponse({"ok": True, "result": payload})
     except Exception as exc:
         return JsonResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status=500)
@@ -907,11 +1062,18 @@ def execute_api(request: HttpRequest) -> JsonResponse:
     sql = (sql or "").strip()
     if not sql:
         return JsonResponse({"ok": False, "error": "SQL statement is required"}, status=400)
+    if qlog is not None:
+        is_allowed, scope_error = _validate_factory_scope(request, qlog.question or "")
+        if not is_allowed:
+            return JsonResponse({"ok": False, "error": scope_error}, status=403)
 
     try:
         data_source = qlog.data_source if qlog else _resolve_data_source(body)
     except Exception as exc:
         return JsonResponse({"ok": False, "error": f"Failed to resolve data source: {exc}"}, status=400)
+
+    if data_source.db_type == "oracle":
+        sql = sql.rstrip(";").strip()
 
     from webapps.vanna.sql_guard import validate_sql
 
@@ -941,18 +1103,18 @@ def execute_api(request: HttpRequest) -> JsonResponse:
             qlog.execution_status = "not_executed_ext_sql_only"
             qlog.error_message = ""
             qlog.save()
-        return JsonResponse(
-            {
-                "ok": True,
-                "sql_only": True,
-                "sql": sql,
-                "columns": [],
-                "rows": [],
-                "latency_ms": 0,
-                "policy": policy,
-                "message": policy["message"],
-            }
-        )
+        payload = {
+            "ok": True,
+            "sql_only": True,
+            "sql": sql,
+            "columns": [],
+            "rows": [],
+            "latency_ms": 0,
+            "policy": policy,
+            "message": policy["message"],
+        }
+        _apply_sql_visibility(payload, request, "sql")
+        return JsonResponse(payload)
 
     started = time.monotonic()
     rows = []
@@ -992,20 +1154,35 @@ def execute_api(request: HttpRequest) -> JsonResponse:
             qlog.row_count = len(rows)
         qlog.save()
 
+        if error_msg:
+            from webapps.vanna.models import FailedQueryRecord
+            FailedQueryRecord.objects.update_or_create(
+                query_log=qlog,
+                defaults={
+                    "question": qlog.question,
+                    "failed_sql": sql,
+                    "error_message": error_msg,
+                    "data_source_code": qlog.data_source.code if qlog.data_source else "",
+                }
+            )
+
     if error_msg:
         return JsonResponse({"ok": False, "error": error_msg, "policy": policy}, status=500)
 
-    return JsonResponse(
-        {
-            "ok": True,
-            "columns": columns,
-            "rows": rows,
-            "is_mock": False,
-            "sql_only": False,
-            "latency_ms": latency_ms,
-            "policy": policy,
-        }
-    )
+    rows = _mask_ct_employ_pii(sql, columns, rows)
+
+    payload = {
+        "ok": True,
+        "columns": columns,
+        "rows": rows,
+        "is_mock": False,
+        "sql_only": False,
+        "latency_ms": latency_ms,
+        "policy": policy,
+    }
+    payload["can_view_sql_command"] = _can_view_sql_command(request)
+    payload["sql_hidden"] = not payload["can_view_sql_command"]
+    return JsonResponse(payload)
 
 
 @csrf_exempt

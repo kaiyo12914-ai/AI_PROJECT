@@ -9,11 +9,11 @@
   <!-- Google Font -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <!-- Stylesheets -->
-  <link rel="stylesheet" href="{% custom_static 'vanna/css/index.css' %}">
+  <link rel="stylesheet" href="{% custom_static 'vanna/css/index.css' %}?v=20260612a">
   <!-- Defer JS Entry -->
-  <script defer src="{% custom_static 'vanna/js/index.js' %}?v=20260608b"></script>
+  <script defer src="{% custom_static 'vanna/js/index.js' %}?v=20260612e"></script>
 </head>
-<body data-base-url="{{ request.script_name }}">
+<body data-base-url="{{ request.script_name }}" data-login-user-org="{{ login_user_org|default:'' }}">
   <div class="vanna-shell">
     <!-- 左側控制面板 -->
     <aside>
@@ -39,9 +39,6 @@
       <!-- 同步管理面板：僅 Vanna 管理者可見 -->
       <section class="panel-card" aria-label="資料同步與管理">
         <h2>⚙️ 數據管理</h2>
-        <p style="margin: -4px 0 14px; color: #94a3b8; font-size: 12.5px; line-height: 1.5;">
-          管理 Vanna 訓練資料集、Schema metadata 與 approved examples。此區僅管理者可見。
-        </p>
         <!-- 指定資料源 (目前隱藏，預設僅保留 Oracle 預載訓練集) -->
         <div class="control-group" style="display: none;">
           <label>指定資料源</label>
@@ -51,12 +48,6 @@
         </div>
         
         <div style="display: grid; gap: 10px;">
-          <button id="btnSchemaSync" class="btn btn-secondary" onclick="triggerSchemaSync()">
-            🔄 同步資料庫結構 (Schema Sync)
-          </button>
-          <button id="btnVannaSync" class="btn btn-secondary" onclick="triggerVannaSync()">
-            🧠 同步 Vanna 訓練 (Vanna Sync)
-          </button>
           <button id="btnTrainingDataset" class="btn btn-secondary" onclick="openTrainingDatasetManager()">
             📚 Vanna 訓練資料集維護
           </button>
@@ -67,23 +58,10 @@
       <!-- 快捷提問範例 -->
       <section class="panel-card" aria-label="快捷提問範例">
         <h2>💡 範例提問</h2>
-        <div style="display: flex; flex-direction: column; gap: 8px;">
-          <button class="btn btn-secondary" style="font-size:12.5px; text-align:left; justify-content:flex-start;" onclick="askPreset('[人事]MPC 查詢目前在職人員數量')">
-            💬 [人事]MPC 在職人員數量
-          </button>
-          <button class="btn btn-secondary" style="font-size:12.5px; text-align:left; justify-content:flex-start;" onclick="askPreset('[人事]202廠 列出前10筆員工姓名、工號與所屬單位')">
-            💬 [人事]202廠 員工與單位
-          </button>
-          <button class="btn btn-secondary" style="font-size:12.5px; text-align:left; justify-content:flex-start;" onclick="askPreset('[人事]205廠 查詢各單位目前在職人員數量')">
-            💬 [人事]205廠 各單位人數
-          </button>
-          <button class="btn btn-secondary" style="font-size:12.5px; text-align:left; justify-content:flex-start;" onclick="askPreset('[採購]209廠 查詢物料採購未交量前20筆')">
-            💬 [採購]209廠 未交物料
-          </button>
-          <button class="btn btn-secondary" style="font-size:12.5px; text-align:left; justify-content:flex-start;" onclick="askPreset('[物料]401廠 查詢低於安全庫存的前20筆料號')">
-            💬 [物料]401廠 安全庫存
-          </button>
-        </div>
+        <p style="margin: -4px 0 14px; color: #94a3b8; font-size: 12.5px; line-height: 1.5;">
+          格式：[業務別]單位別 查詢內容
+        </p>
+        <div id="presetQuestionList" style="display: flex; flex-direction: column; gap: 8px;"></div>
       </section>
 
       <!-- 控制台日誌 -->

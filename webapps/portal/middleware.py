@@ -15,8 +15,6 @@ from django.utils import timezone
 
 from webapps.portal.identity import resolve_effective_user_id
 from webapps.portal.models import PortalUsageLog
-from webapps.portal.oracle_emp import get_emp_full_info
-
 logger = logging.getLogger(__name__)
 
 
@@ -177,8 +175,8 @@ def _lookup_emp_display_from_oracle(emp_id: str, *, refresh: bool = False) -> st
     emp_id = (emp_id or "").strip()
     if not emp_id:
         return ""
-    # Rule: login_user -> login_user_name is resolved by MPC employee master only
-    # (webapps.portal.oracle_emp), not by per-plant DOC database routing.
+    # Shared employee lookup goes through webapps.portal.oracle_emp and uses
+    # the legacy/global Oracle config unless a subsystem explicitly overrides it.
     from webapps.portal.oracle_emp import get_emp_name, get_factory_plant_by_id
 
     name = (get_emp_name(emp_id, refresh=refresh) or "").strip()
@@ -298,8 +296,6 @@ class IISRemoteUserBridgeMiddleware:
             if (not emp_name) and _env_bool("EMP_NAME_LOOKUP", default=True):
                 emp_name = _cache_get_emp_name(emp_id)
 
-            employ = get_emp_full_info(emp_id)
-
             try:
                 request.session["login_user"] = emp_id
                 if emp_name:
@@ -328,7 +324,6 @@ class IISRemoteUserBridgeMiddleware:
             if org_code:
                 request.session["login_user_org"] = org_code
                 request.session["login_user_factory_plant"] = org_code
-                request.session["dep"] = employ['DEPTNO'] 
         except Exception:
             pass
         return self.get_response(request)

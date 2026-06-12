@@ -177,3 +177,232 @@ def test_need_more_context_does_not_require_db_link():
 
     assert ok
     assert error == ""
+
+
+def test_extract_sql_removes_trailing_semicolon():
+    from webapps.vanna.vanna_adapter import extract_sql
+    assert extract_sql("SELECT * FROM emp;") == "SELECT * FROM emp"
+    assert extract_sql("SELECT * FROM emp;;;") == "SELECT * FROM emp"
+    assert extract_sql("SELECT * FROM emp; \n") == "SELECT * FROM emp"
+    assert extract_sql("```sql\nSELECT * FROM emp;\n```") == "SELECT * FROM emp"
+
+
+@patch("webapps.portal.decorators._is_authenticated_user")
+@patch("webapps.portal.decorators.can_access")
+@patch("webapps.vanna.api._resolve_data_source")
+@patch("webapps.vanna.sql_guard.validate_sql")
+@patch("webapps.database.db_factory.db_connect")
+@patch("webapps.vanna.api._is_int_env")
+def test_execute_api_removes_oracle_trailing_semicolon(mock_is_int, mock_connect, mock_validate, mock_resolve, mock_can_access, mock_is_auth):
+    from webapps.vanna.api import execute_api
+    from django.test import RequestFactory
+    import json
+
+    mock_is_auth.return_value = True
+    mock_can_access.return_value = True
+    mock_is_int.return_value = True
+    mock_resolve.return_value = SimpleNamespace(code="test_oracle", db_type="oracle", enabled=True, db_profile="ERP_MPC")
+    mock_validate.return_value = (True, "")
+    
+    # Mock connection and cursor
+    mock_conn = mock_connect.return_value
+    mock_cur = mock_conn.cursor.return_value.__enter__.return_value
+    
+    rf = RequestFactory()
+    req = rf.post("/api/execute/", json.dumps({
+        "code": "test_oracle",
+        "sql": "SELECT * FROM CT_EMPLOY@MPCDB;"
+    }), content_type="application/json")
+    
+    # 呼叫 execute_api
+    resp = execute_api(req)
+    assert resp.status_code == 200
+    
+    # 驗證傳給 cur.execute 的 SQL 是否已去除分號
+    mock_cur.execute.assert_called_once_with("SELECT * FROM CT_EMPLOY@MPCDB")
+
+
+@patch("webapps.portal.decorators._is_authenticated_user")
+@patch("webapps.portal.decorators.can_access")
+@patch("webapps.vanna.api._resolve_data_source")
+@patch("webapps.vanna.sql_guard.validate_sql")
+@patch("webapps.database.db_factory.db_connect")
+@patch("webapps.vanna.api._is_int_env")
+@patch("webapps.vanna.api.is_vanna_admin")
+def test_admin_sql_execute_api_removes_oracle_trailing_semicolon(mock_is_admin, mock_is_int, mock_connect, mock_validate, mock_resolve, mock_can_access, mock_is_auth):
+    from webapps.vanna.api import admin_sql_execute_api
+    from django.test import RequestFactory
+    import json
+
+    mock_is_auth.return_value = True
+    mock_can_access.return_value = True
+    mock_is_int.return_value = True
+    mock_is_admin.return_value = True
+    mock_resolve.return_value = SimpleNamespace(code="test_oracle", db_type="oracle", enabled=True, db_profile="ERP_MPC")
+    mock_validate.return_value = (True, "")
+    
+    # Mock connection and cursor
+    mock_conn = mock_connect.return_value
+    mock_cur = mock_conn.cursor.return_value.__enter__.return_value
+    
+    rf = RequestFactory()
+    req = rf.post("/api/vanna/admin-sql-execute/", json.dumps({
+        "code": "test_oracle",
+        "sql": "SELECT * FROM CT_EMPLOY@MPCDB;"
+    }), content_type="application/json")
+    
+    # 呼叫 admin_sql_execute_api
+    resp = admin_sql_execute_api(req)
+    assert resp.status_code == 200
+    
+    # 驗證傳給 cur.execute 的 SQL 是否已去除分號
+    mock_cur.execute.assert_called_once_with("SELECT * FROM CT_EMPLOY@MPCDB")
+
+
+@patch("webapps.portal.decorators._is_authenticated_user")
+@patch("webapps.portal.decorators.can_access")
+@patch("webapps.vanna.api._resolve_data_source")
+@patch("webapps.vanna.sql_guard.validate_sql")
+@patch("webapps.database.db_factory.db_connect")
+@patch("webapps.vanna.api._is_int_env")
+def test_execute_api_records_failed_query_in_db(mock_is_int, mock_connect, mock_validate, mock_resolve, mock_can_access, mock_is_auth):
+    from webapps.vanna.api import execute_api
+    from webapps.vanna.models import QueryLog, FailedQueryRecord, DataSource
+    from django.test import RequestFactory
+    import json
+
+    mock_is_auth.return_value = True
+    mock_can_access.return_value = True
+    mock_is_int.return_value = True
+    
+    # 建立測試用的 DataSource 和 QueryLog，注意交易隔離
+    ds, _ = DataSource.objects.get_or_create(code="test_failed_ds", defaults={"name": "Failed DS", "db_type": "oracle", "enabled": True})
+    qlog = QueryLog.objects.create(
+        data_source=ds,
+        user_id="test_user",
+        question="Select all users",
+        generated_sql="SELECT * FROM users",
+        cleaned_sql="SELECT * FROM users",
+        guard_status="passed",
+        execution_status="not_executed"
+    )
+
+    mock_resolve.return_value = ds
+    mock_validate.return_value = (True, "")
+    
+    # 模擬連線執行拋出 Exception
+    mock_connect.side_effect = RuntimeError("Oracle DB connection timeout!")
+
+    rf = RequestFactory()
+    req = rf.post("/api/execute/", json.dumps({
+        "query_log_id": qlog.id
+    }), content_type="application/json")
+    
+    resp = execute_api(req)
+    assert resp.status_code == 500
+    
+    # 驗證 FailedQueryRecord 是否已被建立且包含正確資訊
+    record = FailedQueryRecord.objects.filter(query_log=qlog).first()
+    assert record is not None
+    assert record.question == "Select all users"
+    assert record.failed_sql == "SELECT * FROM users"
+    assert "Oracle DB connection timeout!" in record.error_message
+    assert record.status == "pending"
+    
+    # 清理測試資料
+    qlog.delete()
+    ds.delete()
+
+
+@patch("webapps.portal.decorators._is_authenticated_user")
+@patch("webapps.portal.decorators.can_access")
+@patch("webapps.vanna.api.is_vanna_admin")
+def test_training_dataset_api_failed_query_operations(mock_is_admin, mock_can_access, mock_is_auth):
+    from webapps.vanna.api import training_dataset_api
+    from webapps.vanna.models import DataSource, QueryLog, FailedQueryRecord
+    from django.test import RequestFactory
+    import json
+
+    mock_is_auth.return_value = True
+    mock_can_access.return_value = True
+    mock_is_admin.return_value = True
+
+    ds, _ = DataSource.objects.get_or_create(code="test_failed_ds_ops", defaults={"name": "Failed DS Ops", "db_type": "oracle", "enabled": True})
+    qlog = QueryLog.objects.create(
+        data_source=ds,
+        user_id="test_user",
+        question="Select all employees",
+        generated_sql="SELECT * FROM emp",
+        cleaned_sql="SELECT * FROM emp",
+        guard_status="passed"
+    )
+    
+    # 建立 FailedQueryRecord
+    record = FailedQueryRecord.objects.create(
+        query_log=qlog,
+        question="Select all employees",
+        failed_sql="SELECT * FROM emp",
+        error_message="ORA-00942: table or view does not exist",
+        data_source_code=ds.code,
+        status="pending"
+    )
+
+    rf = RequestFactory()
+
+    # 1. 測試 GET 請求
+    req_get = rf.get(f"/api/vanna/training-dataset/?code={ds.code}")
+    resp_get = training_dataset_api(req_get)
+    assert resp_get.status_code == 200
+    data_get = json.loads(resp_get.content.decode("utf-8"))
+    assert data_get["ok"] is True
+    failed_list = data_get["result"]["failed_queries"]
+    assert len(failed_list) > 0
+    assert failed_list[0]["id"] == record.id
+    assert failed_list[0]["question"] == "Select all employees"
+
+    # 2. 測試 PUT 請求
+    req_put = rf.put("/api/vanna/training-dataset/", json.dumps({
+        "code": ds.code,
+        "training_type": "failed",
+        "id": record.id,
+        "question": "Select all employees (updated)",
+        "sql": "SELECT * FROM emp_fixed",
+        "analysis": "Table name typo",
+        "action_taken": "Renamed table in query",
+        "status": "optimized"
+    }), content_type="application/json")
+    resp_put = training_dataset_api(req_put)
+    assert resp_put.status_code == 200
+    data_put = json.loads(resp_put.content.decode("utf-8"))
+    assert data_put["ok"] is True
+    assert data_put["result"]["question"] == "Select all employees (updated)"
+    assert data_put["result"]["status"] == "optimized"
+
+    # 再次從 DB 確認修改
+    record.refresh_from_db()
+    assert record.question == "Select all employees (updated)"
+    assert record.failed_sql == "SELECT * FROM emp_fixed"
+    assert record.analysis == "Table name typo"
+    assert record.action_taken == "Renamed table in query"
+    assert record.status == "optimized"
+
+    # 3. 測試 DELETE 請求
+    req_del = rf.delete("/api/vanna/training-dataset/", json.dumps({
+        "code": ds.code,
+        "training_type": "failed",
+        "id": record.id
+    }), content_type="application/json")
+    resp_del = training_dataset_api(req_del)
+    assert resp_del.status_code == 200
+    data_del = json.loads(resp_del.content.decode("utf-8"))
+    assert data_del["ok"] is True
+
+    # 驗證 DB 是否已無該筆 record
+    assert not FailedQueryRecord.objects.filter(id=record.id).exists()
+
+    # 清理
+    qlog.delete()
+    ds.delete()
+
+
+
