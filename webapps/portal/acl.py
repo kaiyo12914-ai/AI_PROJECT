@@ -398,7 +398,7 @@ def acl_debug(user) -> Dict[str, Any]:
         "enabled": _acl_enabled(),
         "backend": _effective_backend(),
         "model_type": _model_type(),
-        "user": getattr(user, "username", None),
+        "login_user": getattr(user, "username", None),
         "is_authenticated": _is_authenticated(user),
         "groups": sorted(get_user_groups(user)),
         "cache_ttl_sec": _acl_cache_ttl(),

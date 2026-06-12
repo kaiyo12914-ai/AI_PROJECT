@@ -116,7 +116,7 @@ class TestLoginUserOrgEnv(TestCase):
                 self.assertEqual(resp.status_code, 200)
                 data = json.loads(resp.content)
                 self.assertIn("acl", data)
-                self.assertEqual(data["acl"]["user"], "H121356578")
+                self.assertEqual(data["acl"]["login_user"], "H121356578")
 
         # 5. Test that _get_whoami_debug_info includes acl debug info
         from webapps.portal.middleware import _get_whoami_debug_info
@@ -124,7 +124,7 @@ class TestLoginUserOrgEnv(TestCase):
             with mock.patch("webapps.portal.acl._is_ext_env", return_value=False):
                 info = _get_whoami_debug_info(req)
                 self.assertIn("acl", info)
-                self.assertEqual(info["acl"]["user"], "H121356578")
+                self.assertEqual(info["acl"]["login_user"], "H121356578")
 
         # 6. Test _fetch_oracle_acl_groups stripping
         from webapps.portal.views import _fetch_oracle_acl_groups
