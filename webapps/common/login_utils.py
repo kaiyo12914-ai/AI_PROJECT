@@ -79,6 +79,8 @@ def get_login_user_idno(request: HttpRequest) -> str:
         if v is not None:
             s = str(v).strip()
             if s:
+                if s.upper().startswith("MPC-"):
+                    s = s[4:].strip()
                 return s
     except Exception:
         pass
@@ -90,6 +92,8 @@ def get_login_user_idno(request: HttpRequest) -> str:
             if name is not None:
                 s = str(name).strip()
                 if s:
+                    if s.upper().startswith("MPC-"):
+                        s = s[4:].strip()
                     return s
     except Exception:
         pass
@@ -107,12 +111,18 @@ def get_login_user_idno(request: HttpRequest) -> str:
 
             decoded = (aaadecode(aaa) or "").strip()
             if decoded:
-                return decoded
+                from webapps.portal.middleware import _strip_domain
+                s = _strip_domain(decoded)
+                if s.upper().startswith("MPC-"):
+                    s = s[4:].strip()
+                return s
     except Exception:
         pass
 
     dev = _dev_login_user()
     if dev:
+        if dev.upper().startswith("MPC-"):
+            dev = dev[4:].strip()
         return dev
 
     return ""
@@ -148,6 +158,10 @@ def get_login_user_name(request: HttpRequest) -> str:
 
 
 def get_login_user_org(request: HttpRequest) -> str:
+    env_val = (os.getenv("ENV") or os.getenv("ENX") or "").strip().upper()
+    if env_val == "EXT" and get_login_user_idno(request):
+        return "MPC"
+
     try:
         v = getattr(request, "login_user_org", None)
         if v is not None:

@@ -121,6 +121,13 @@ def whoami(request: HttpRequest) -> JsonResponse:
         "ora_emp_error": get_last_error(),
     }
 
+    # acl debug
+    try:
+        from webapps.portal.acl import acl_debug
+        data["acl"] = acl_debug(getattr(request, "user", None))
+    except Exception as e:
+        data["acl"] = {"error": str(e)}
+
     # ✅ DEBUG 才顯示：確認 .env 是否真的被 load 進 process env
     if getattr(settings, "DEBUG", False):
         data.update({
@@ -130,7 +137,7 @@ def whoami(request: HttpRequest) -> JsonResponse:
             "ENV_DEV_LOGIN_NAME": os.getenv("DEV_LOGIN_NAME"),
         })
 
-    return JsonResponse(data)
+    return JsonResponse(data, json_dumps_params={"indent": 4, "ensure_ascii": False})
 
 # =========================================================
 # helpers

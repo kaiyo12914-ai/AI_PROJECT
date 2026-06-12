@@ -115,12 +115,17 @@ const BASE_PRESET_QUESTIONS = [
   "[人事]202廠 列出前10筆員工姓名、工號與所屬單位",
   "[人事]205廠 查詢各單位目前在職人員數量",
   "[採購]209廠 查詢物料採購未交量前20筆",
-  "[物料]401廠 查詢低於安全庫存的前20筆料號"
+  "[物料]401廠 查詢低於安全庫存的前20筆料號",
+  "[人事]MPC 查詢各職稱目前在職人員數量",
+  "[人事]205廠 查詢目前離職人員數量",
+  "[採購]209廠 查詢逾期未交物料前20筆",
+  "[物料]401廠 查詢目前零庫存的前20筆料號",
+  "[主計]202廠 查詢各分類統計"
 ];
 
 function buildDefaultPresetQuestions() {
   const unit = getCurrentLoginOrg();
-  return BASE_PRESET_QUESTIONS.map(question => replaceQuestionUnit(question, unit)).slice(0, 5);
+  return BASE_PRESET_QUESTIONS.map(question => replaceQuestionUnit(question, unit)).slice(0, 10);
 }
 
 function parseQuestionContext(question) {
@@ -158,14 +163,27 @@ function questionLabel(question) {
   return `💬 ${question}`;
 }
 
+function normalizeForDedupe(str) {
+  return String(str || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s\[\]\-\,\，\.\。]/g, "")
+    .replace(/(人員數量|人數|數量|筆數|總數|在職數|在職人員數量)/g, "數")
+    .replace(/(員工姓名、工號與所屬單位|員工姓名、工號及所屬單位|前10筆員工姓名、工號與所屬單位)/g, "員工明細")
+    .replace(/(物料採購未交量前20筆|物料採購未交量)/g, "物料未交")
+    .replace(/(低於安全庫存的前20筆料號|低於安全庫存)/g, "低於安全庫存");
+}
+
 function dedupeQuestions(questions, currentQuestion) {
-  const current = String(currentQuestion || "").trim();
+  const current = normalizeForDedupe(currentQuestion);
   const seen = new Set();
   const result = [];
   questions.forEach(item => {
     const value = String(item || "").trim();
-    if (!value || value === current) return;
-    const key = value.toUpperCase();
+    if (!value) return;
+    const normalizedVal = normalizeForDedupe(value);
+    if (normalizedVal === current) return;
+    const key = normalizedVal.toUpperCase();
     if (seen.has(key)) return;
     seen.add(key);
     result.push(value);
@@ -245,13 +263,13 @@ function buildRelatedQuestions(question) {
     );
   }
 
-  return dedupeQuestions(candidates, context.raw).slice(0, 5);
+  return dedupeQuestions(candidates, context.raw).slice(0, 10);
 }
 
 function renderPresetQuestions(questions) {
   const container = document.getElementById("presetQuestionList");
   if (!container) return;
-  const items = (questions && questions.length ? questions : buildDefaultPresetQuestions()).slice(0, 5);
+  const items = (questions && questions.length ? questions : buildDefaultPresetQuestions()).slice(0, 10);
   container.innerHTML = items.map(question => `
     <button class="btn btn-secondary" style="font-size:12.5px; text-align:left; justify-content:flex-start;" onclick="askPreset('${escapeJs(question)}')">
       ${escapeHtml(questionLabel(question))}
@@ -931,7 +949,6 @@ function sendQuestion() {
   inputEl.value = "";
   appendUserMessage(question);
   addLog(`提問: "${question}"`, "info");
-  updatePresetQuestionsByQuery(question);
 
   const bubble = createAssistantBubblePlaceholder();
 
@@ -952,6 +969,22 @@ function sendQuestion() {
       const r = data.result;
       addLog("SQL 候選生成成功，啟動安全審查...", "success");
       renderSqlResponse(bubble, r);
+      if (r.context_summary && r.context_summary.related_questions && r.context_summary.related_questions.length > 0) {
+        const related = dedupeQuestions(r.context_summary.related_questions, question);
+        const dynamicPart = related.slice(0, 3);
+        const defaultQs = buildDefaultPresetQuestions();
+        const finalQuestions = [...dynamicPart];
+        for (let i = 0; i < defaultQs.length; i++) {
+          if (finalQuestions.length >= 10) break;
+          const q = defaultQs[i];
+          const normQ = normalizeForDedupe(q);
+          const isDuplicate = finalQuestions.some(existing => normalizeForDedupe(existing) === normQ);
+          if (!isDuplicate) {
+            finalQuestions.push(q);
+          }
+        }
+        renderPresetQuestions(finalQuestions);
+      }
     } else {
       bubble.innerHTML = `<div style="color:#ef4444;">錯誤: ${escapeHtml(data.error)}</div>`;
       addLog(`生成失敗: ${data.error}`, "error");
@@ -1015,13 +1048,7 @@ function renderSqlResponse(bubbleEl, result) {
 
   bubbleEl.innerHTML = `
     <div><strong>產生的 SQL 候選：</strong> (耗時 ${latency}ms)</div>
-    <div class="sql-container">
-      <div class="sql-header">
-        <span>SQL Query</span>
-        <button class="btn btn-secondary" style="padding: 4px 8px; font-size:11px;" onclick="navigator.clipboard.writeText(\`${escapeJs(sql)}\`); addLog('SQL 已複製到剪貼簿', 'success');">複製</button>
-      </div>
-      <pre><code>${escapeHtml(sql)}</code></pre>
-    </div>
+    ${sqlHtml}
     ${guardHtml}
     ${policyHtml}
     ${resultsHtml}
@@ -1034,9 +1061,12 @@ function renderSqlResponse(bubbleEl, result) {
 
 // 6. 唯讀執行查詢
 function runQuery(queryLogId, btn) {
-  const originalText = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = `<div class="spinner"></div> 執行中...`;
+  let originalText = "";
+  if (btn) {
+    originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<div class="spinner"></div> 執行中...`;
+  }
   addLog(`開始執行查詢 (Log ID: ${queryLogId})...`, "info");
 
   const resultsContainer = document.getElementById(`results-container-${queryLogId}`);

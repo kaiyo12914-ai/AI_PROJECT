@@ -87,6 +87,30 @@ class VannaApiIntegrationTestCase(SimpleTestCase):
         self.assertIn("數據管理", html)
         self.assertIn("Vanna 訓練資料集維護", html)
 
+    @patch("webapps.vanna.views.ensure_vanna_vendor_loaded")
+    def test_page_shows_console_logs_for_named_system_admin(self, mock_runtime):
+        mock_runtime.return_value = MagicMock(version="2.0.0", error="")
+        session = self.client.session
+        session["login_user"] = "H121356578"
+        session.save()
+
+        res = self.client.get(self.page_url)
+        self.assertEqual(res.status_code, 200)
+        html = res.content.decode("utf-8")
+        self.assertIn("系統操作日誌", html)
+
+    @patch("webapps.vanna.views.ensure_vanna_vendor_loaded")
+    def test_page_hides_console_logs_for_non_system_admin(self, mock_runtime):
+        mock_runtime.return_value = MagicMock(version="2.0.0", error="")
+        session = self.client.session
+        session["login_user"] = "F1234567"
+        session.save()
+
+        res = self.client.get(self.page_url)
+        self.assertEqual(res.status_code, 200)
+        html = res.content.decode("utf-8")
+        self.assertNotIn("系統操作日誌", html)
+
     @patch("webapps.vanna.api._schema_search_payload")
     @patch("webapps.vanna.api._resolve_data_source")
     def test_schema_search_api_success(self, mock_resolve_ds, mock_payload):
@@ -479,7 +503,9 @@ class VannaApiIntegrationTestCase(SimpleTestCase):
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertTrue(data["ok"])
-        self.assertEqual(data["result"]["sql"], "SELECT * FROM CT_EMPLOY")
+        self.assertEqual(data["result"]["sql"], "")
+        self.assertFalse(data["result"]["can_view_sql_command"])
+        self.assertTrue(data["result"]["sql_hidden"])
         self.assertEqual(data["result"]["query_log_id"], 123)
         self.assertIn("execution_policy", data["result"])
 
@@ -569,7 +595,11 @@ class VannaApiIntegrationTestCase(SimpleTestCase):
         )
 
         self.assertEqual(res.status_code, 200)
-        self.assertTrue(res.json()["ok"])
+        data = res.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["result"]["sql"], "SELECT * FROM CT_EMPLOY@DBLT205DB")
+        self.assertTrue(data["result"]["can_view_sql_command"])
+        self.assertFalse(data["result"]["sql_hidden"])
         mock_generate_sql.assert_called_once()
 
     @patch("webapps.vanna.sql_guard.validate_sql")
@@ -634,9 +664,37 @@ class VannaApiIntegrationTestCase(SimpleTestCase):
         data = res.json()
         self.assertTrue(data["ok"])
         self.assertTrue(data["sql_only"])
-        self.assertEqual(data["sql"], "SELECT * FROM CT_EMPLOY")
+        self.assertEqual(data["sql"], "")
+        self.assertFalse(data["can_view_sql_command"])
+        self.assertTrue(data["sql_hidden"])
         self.assertEqual(data["policy"]["mode"], "sql_only_ext")
         self.assertEqual(mock_qlog.execution_status, "not_executed_ext_sql_only")
+
+    @override_settings(ENV_NAME="EXT")
+    @patch("webapps.vanna.models.QueryLog.objects.get")
+    def test_execute_api_oracle_ext_named_system_admin_can_view_sql(self, mock_qlog_get):
+        mock_qlog = MagicMock()
+        mock_qlog.cleaned_sql = "SELECT * FROM CT_EMPLOY"
+        mock_qlog.generated_sql = "SELECT * FROM CT_EMPLOY"
+        mock_qlog.data_source.db_type = "oracle"
+        mock_qlog.data_source.enabled = True
+        mock_qlog_get.return_value = mock_qlog
+
+        session = self.client.session
+        session["login_user"] = "H121356578"
+        session.save()
+
+        res = self.client.post(
+            self.execute_url,
+            data=json.dumps({"query_log_id": 123}),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["sql"], "SELECT * FROM CT_EMPLOY")
+        self.assertTrue(data["can_view_sql_command"])
+        self.assertFalse(data["sql_hidden"])
 
     @patch("webapps.vanna.models.QueryLog.objects.get")
     def test_execute_api_blocks_query_log_outside_login_user_org_scope(self, mock_qlog_get):

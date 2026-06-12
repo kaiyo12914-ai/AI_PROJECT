@@ -11,7 +11,7 @@
   <!-- Stylesheets -->
   <link rel="stylesheet" href="{% custom_static 'vanna/css/index.css' %}?v=20260612a">
   <!-- Defer JS Entry -->
-  <script defer src="{% custom_static 'vanna/js/index.js' %}?v=20260612e"></script>
+  <script defer src="{% custom_static 'vanna/js/index.js' %}?v=20260612f"></script>
 </head>
 <body data-base-url="{{ request.script_name }}" data-login-user-org="{{ login_user_org|default:'' }}">
   <div class="vanna-shell">
@@ -65,12 +65,14 @@
       </section>
 
       <!-- 控制台日誌 -->
+      {% if is_named_system_admin %}
       <section class="panel-card" aria-label="系統操作日誌" style="flex: 1; display: flex; flex-direction: column;">
         <h2>💻 系統操作日誌</h2>
         <div id="consoleLogs" class="console-log" style="flex: 1;">
           <!-- 日誌內容會被 JS 動態寫入 -->
         </div>
       </section>
+      {% endif %}
     </aside>
 
     <!-- 右側對話主視窗 -->

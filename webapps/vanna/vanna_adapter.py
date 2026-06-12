@@ -566,11 +566,11 @@ def retrieve_context(data_source: DataSource, question: str, *, top_k: int = 6) 
                 embedding_dimension=_expected_embedding_dimension(),
             ).annotate(
                 distance=CosineDistance("embedding", q_vector)
-            ).order_by("distance")[:3]
+            ).order_by("distance")[:10]
             examples = [ee.training_example for ee in ee_matches]
         except Exception:
             examples = []
-
+ 
     # Fallback to keyword-based if no vector examples found
     if not examples:
         example_tokens = _tokenize(question)
@@ -580,7 +580,7 @@ def retrieve_context(data_source: DataSource, question: str, *, top_k: int = 6) 
             score = sum(1 for tok in example_tokens if tok in text)
             if score > 0:
                 temp_examples.append((score, ex))
-        examples = [ex for _, ex in sorted(temp_examples, key=lambda item: item[0], reverse=True)[:3]]
+        examples = [ex for _, ex in sorted(temp_examples, key=lambda item: item[0], reverse=True)[:10]]
 
     return {
         "tables": [
@@ -755,6 +755,7 @@ def generate_sql(data_source: DataSource, question: str, user_id: str = "") -> G
         context_summary={
             "tables": [{"schema": t["schema"], "name": t["name"]} for t in context.get("tables", [])],
             "examples": len(context.get("examples", [])),
+            "related_questions": [str(ex.get("question") or "").strip() for ex in context.get("examples", []) if isinstance(ex, dict)],
             "vendor_available": runtime.available,
             "vendor_version": runtime.version,
             "guard_status": guard_status,

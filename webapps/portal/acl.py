@@ -201,6 +201,10 @@ def _get_user_groups_from_oracle_uncached(user) -> Set[str]:
     if not username:
         return set()
 
+    # Strip MPC- prefix if present for Oracle ACL query safety
+    if username.upper().startswith("MPC-"):
+        username = username[4:].strip()
+
     table = (getattr(settings, "ORA_ACL_TABLE", None) or "VIEW_ZZ_USER_GROUP_ACL").strip()
     user_col = (getattr(settings, "ORA_ACL_USER_COL", None) or "USERNAME").strip()
     group_col = (getattr(settings, "ORA_ACL_GROUP_COL", None) or "GROUP_NAME").strip()

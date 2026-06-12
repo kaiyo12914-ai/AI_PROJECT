@@ -46,6 +46,10 @@ def _strip_domain(user: str) -> str:
     # user@domain
     if "@" in user:
         user = user.split("@", 1)[0].strip()
+    
+    # Strip MPC- prefix if present (intranet login user fallback mitigation)
+    if user.upper().startswith("MPC-"):
+        user = user[4:].strip()
     return user
 
 
@@ -183,8 +187,9 @@ def _lookup_emp_display_from_oracle(emp_id: str, *, refresh: bool = False) -> st
     if not name:
         return ""
     plant = (get_factory_plant_by_id(emp_id) or "").strip()
-    if plant:
-        return f"{_normalize_plant_label(plant)}-{name}"
+    plant_label = _normalize_plant_label(plant)
+    if plant_label and plant_label != "MPC":
+        return f"{plant_label}-{name}"
     return name
 
 
@@ -312,6 +317,15 @@ class IISRemoteUserBridgeMiddleware:
             emp_name = sess_emp_name
 
         org_code = _resolve_login_user_org(emp_id, emp_name) or _normalize_org_code(sess_org)
+        env_val = (os.getenv("ENV") or os.getenv("ENX") or "").strip().upper()
+        if env_val == "EXT" and emp_id:
+            org_code = "MPC"
+            if emp_name:
+                if "-" not in emp_name:
+                    emp_name = f"MPC-{emp_name}"
+                else:
+                    parts = emp_name.split("-", 1)
+                    emp_name = f"MPC-{parts[1]}"
         org_label = _org_label(org_code)        
         request.login_user_name = emp_name or ""
         request.login_user_org = org_code or ""
@@ -324,6 +338,8 @@ class IISRemoteUserBridgeMiddleware:
             if org_code:
                 request.session["login_user_org"] = org_code
                 request.session["login_user_factory_plant"] = org_code
+            if emp_name:
+                request.session["login_user_name"] = emp_name
         except Exception:
             pass
         return self.get_response(request)
@@ -452,9 +468,7 @@ def _match_program_code(path: str, request=None) -> Optional[str]:
             continue
         if p0.startswith(prefix) or p1.startswith(prefix): return code
     return None
-
-
-# ???啣?嚗?敺?WhoAmI ?日鞈?
+# 診斷用：收集 WhoAmI 偵錯資訊
 def _get_whoami_debug_info(
     request,
     *,
@@ -462,6 +476,15 @@ def _get_whoami_debug_info(
     norm_path: str = "",
     raw_path: str = "",
 ) -> Dict[str, Any]:
+    acl_info = {}
+    try:
+        from webapps.portal.acl import acl_debug
+        user = getattr(request, "user", None)
+        if user:
+            acl_info = acl_debug(user)
+    except Exception as e:
+        acl_info = {"error": str(e)}
+
     return {
         "ENV": (os.getenv("ENV") or "").strip().upper(),
         "timestamp": timezone.now().isoformat(),
@@ -491,8 +514,8 @@ def _get_whoami_debug_info(
             if hasattr(request, "session")
             else ""
         ),
+        "acl": acl_info,
     }
-
 
 class PortalUsageLogMiddleware:
     def __init__(self, get_response):
