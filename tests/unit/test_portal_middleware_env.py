@@ -126,3 +126,14 @@ class TestLoginUserOrgEnv(TestCase):
                 self.assertIn("acl", info)
                 self.assertEqual(info["acl"]["user"], "H121356578")
 
+        # 6. Test _fetch_oracle_acl_groups stripping
+        from webapps.portal.views import _fetch_oracle_acl_groups
+        with mock.patch("webapps.portal.views.db_query_all") as mock_db_query:
+            mock_db_query.return_value = []
+            with mock.patch.dict(os.environ, {"ENV": "INT"}):
+                with self.settings(ORA_ACL_TABLE="VIEW_ZZ_USER_GROUP_ACL", ORA_ACL_USER_COL="USERNAME", ORA_ACL_GROUP_COL="GROUP_NAME"):
+                    _fetch_oracle_acl_groups("MPC-H121356578")
+                    mock_db_query.assert_called_once()
+                    bind_params = mock_db_query.call_args[0][2]
+                    self.assertEqual(bind_params.get("u"), "H121356578")
+

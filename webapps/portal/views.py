@@ -498,6 +498,12 @@ def _fetch_oracle_acl_groups(user_id: str) -> Tuple[List[Dict[str, str]], str]:
     if not user_id:
         return [], "missing user_id"
 
+    # Strip domain and MPC- prefix for Oracle query safety
+    from webapps.portal.middleware import _strip_domain
+    user_id = _strip_domain(user_id)
+    if user_id.upper().startswith("MPC-"):
+        user_id = user_id[4:].strip()
+
     table = (getattr(settings, "ORA_ACL_TABLE", "") or "").strip()
     user_col = (getattr(settings, "ORA_ACL_USER_COL", "") or "").strip()
     group_col = (getattr(settings, "ORA_ACL_GROUP_COL", "") or "GROUP_NAME").strip()
