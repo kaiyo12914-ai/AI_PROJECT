@@ -511,11 +511,11 @@ def _fetch_oracle_acl_groups(user_id: str) -> Tuple[List[Dict[str, str]], str]:
     if not (table and user_col and group_col):
         return [], "oracle acl settings missing"
 
-    sql = f"SELECT {group_col} AS GROUP_NAME FROM {table} WHERE TRIM({user_col}) = :u"
+    sql = f"SELECT {group_col} AS GROUP_NAME FROM {table} WHERE TRIM({user_col}) = :login_user"
     rows: List[Any] = []
     err = ""
     try:
-        rows = db_query_all("oracle", sql, {"u": user_id}) or []
+        rows = db_query_all("oracle", sql, {"login_user": user_id}) or []
     except Exception as e:
         return [], str(e)
 

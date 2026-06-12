@@ -135,5 +135,5 @@ class TestLoginUserOrgEnv(TestCase):
                     _fetch_oracle_acl_groups("MPC-H121356578")
                     mock_db_query.assert_called_once()
                     bind_params = mock_db_query.call_args[0][2]
-                    self.assertEqual(bind_params.get("u"), "H121356578")
+                    self.assertEqual(bind_params.get("login_user"), "H121356578")
 
