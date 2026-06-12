@@ -476,15 +476,6 @@ def _get_whoami_debug_info(
     norm_path: str = "",
     raw_path: str = "",
 ) -> Dict[str, Any]:
-    acl_info = {}
-    try:
-        from webapps.portal.acl import acl_debug
-        user = getattr(request, "user", None)
-        if user:
-            acl_info = acl_debug(user)
-    except Exception as e:
-        acl_info = {"error": str(e)}
-
     return {
         "ENV": (os.getenv("ENV") or "").strip().upper(),
         "timestamp": timezone.now().isoformat(),
@@ -514,7 +505,10 @@ def _get_whoami_debug_info(
             if hasattr(request, "session")
             else ""
         ),
-        "acl": acl_info,
+        "acl": {
+            "skipped": True,
+            "reason": "usage_log_middleware_does_not_query_acl",
+        },
     }
 
 class PortalUsageLogMiddleware:

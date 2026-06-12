@@ -259,7 +259,7 @@ def _resolve_display_user_name(user_id: str, user_name: str, cache: Dict[str, st
 # =========================================================
 # 1) usage page
 # =========================================================
-@require_node("portal")
+@require_node("usage")
 def usage_log_page(request: HttpRequest) -> HttpResponse:
     filters, ui = _get_filters(request)
 
@@ -304,7 +304,7 @@ def usage_log_page(request: HttpRequest) -> HttpResponse:
 # 2) export excel
 # - 下載不一定帶 XHR header，故不強制 api=True（避免誤判）
 # =========================================================
-@require_node("portal")
+@require_node("usage")
 def usage_log_export_xlsx(request: HttpRequest) -> HttpResponse:
     """
     /portal/usage/export.xlsx (或 /portal/usage/export.xlsx/)
@@ -406,7 +406,7 @@ def usage_log_export_xlsx(request: HttpRequest) -> HttpResponse:
     return resp
 
 
-@require_node("portal")
+@require_node("usage")
 def usage_whoami_page(request: HttpRequest) -> HttpResponse:
     """
     Show whoami_json detail for a usage log row.
@@ -554,7 +554,7 @@ def _compute_portal_nodes(user_id: str, groups: List[Dict[str, str]]) -> List[st
     return sorted(allowed)
 
 
-@require_node("portal")
+@require_node("usage")
 def usage_user_acl_page(request: HttpRequest) -> HttpResponse:
     user_id = (request.GET.get("user_id") or "").strip()
     user_name = (request.GET.get("user_name") or "").strip()

@@ -41,7 +41,7 @@
       {% allow "pdf" as can_pdf %}
       {% allow "pptx" as can_pptx %}
       {% allow "tts" as can_tts %}
-      {% allow "portal" as can_portal %}
+      {% allow "usage" as can_usage %}
       {% allow "vanna" as can_vanna %}
       {% allow "nl2sql" as can_nl2sql %}
       {% allow "formalize" as can_formalize %}
@@ -120,7 +120,7 @@
         {% include "portal/_svg_card.html" with href=tts_href title="語音轉文字" subtitle="TTS / STT" tone="cyan" icon="tts" variant=card_variant %}
       {% endif %}
 
-      {% if can_portal %}
+      {% if can_usage %}
         {% url 'portal:usage_page' as usage_href %}
         {% include "portal/_svg_card.html" with href=usage_href title="Portal 使用統計" subtitle="使用紀錄與匯出" tone="gray" icon="usage" variant=card_variant %}
       {% endif %}

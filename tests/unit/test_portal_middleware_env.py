@@ -99,7 +99,7 @@ class TestLoginUserOrgEnv(TestCase):
             mock_db_query.return_value = []
             with mock.patch("webapps.portal.acl._is_ext_env", return_value=False):
                 _get_user_groups_from_oracle_uncached(user)
-                mock_db_query.assert_called_once()
+                self.assertGreaterEqual(mock_db_query.call_count, 1)
                 # Check that the username passed to the SQL bind parameters is stripped
                 bind_params = mock_db_query.call_args[0][2]
                 self.assertEqual(bind_params.get("login_user"), "H121356578")
@@ -118,13 +118,14 @@ class TestLoginUserOrgEnv(TestCase):
                 self.assertIn("acl", data)
                 self.assertEqual(data["acl"]["login_user"], "H121356578")
 
-        # 5. Test that _get_whoami_debug_info includes acl debug info
+        # 5. Test that _get_whoami_debug_info does not query ACL in middleware hot path
         from webapps.portal.middleware import _get_whoami_debug_info
-        with mock.patch("webapps.portal.acl.db_query_all", return_value=[]):
+        with mock.patch("webapps.portal.acl.db_query_all") as mock_db_query:
             with mock.patch("webapps.portal.acl._is_ext_env", return_value=False):
                 info = _get_whoami_debug_info(req)
                 self.assertIn("acl", info)
-                self.assertEqual(info["acl"]["login_user"], "H121356578")
+                self.assertTrue(info["acl"]["skipped"])
+                mock_db_query.assert_not_called()
 
         # 6. Test _fetch_oracle_acl_groups stripping
         from webapps.portal.views import _fetch_oracle_acl_groups
@@ -137,3 +138,28 @@ class TestLoginUserOrgEnv(TestCase):
                     bind_params = mock_db_query.call_args[0][2]
                     self.assertEqual(bind_params.get("login_user"), "H121356578")
 
+    def test_oracle_acl_falls_back_to_username_column_when_user_id_has_no_groups(self):
+        from django.contrib.auth.models import User
+        from webapps.portal.acl import _get_user_groups_from_oracle_uncached
+
+        user = User(username="H121356578")
+
+        def fake_query(_profile, sql, params):
+            self.assertEqual(params.get("login_user"), "H121356578")
+            if "USER_ID" in sql:
+                return []
+            if "USERNAME" in sql:
+                return [("網頁系統管理員",)]
+            return []
+
+        with mock.patch("webapps.portal.acl.db_query_all", side_effect=fake_query) as mock_db_query:
+            with mock.patch("webapps.portal.acl._is_ext_env", return_value=False):
+                with self.settings(
+                    ORA_ACL_TABLE="VIEW_ZZ_USER_GROUP_ACL",
+                    ORA_ACL_USER_COL="USER_ID",
+                    ORA_ACL_GROUP_COL="GROUP_NAME",
+                ):
+                    groups = _get_user_groups_from_oracle_uncached(user)
+
+        self.assertEqual(groups, {"網頁系統管理員"})
+        self.assertEqual(mock_db_query.call_count, 2)

@@ -183,6 +183,21 @@ def _oracle_acl_sql(table: str, user_col: str, group_col: str) -> str:
     """
 
 
+def _rows_to_group_set(rows: Any) -> Set[str]:
+    out: Set[str] = set()
+    for r in rows or []:
+        if not r:
+            continue
+        try:
+            v = r[0]
+        except Exception:
+            continue
+        s = str(v or "").strip()
+        if s:
+            out.add(s)
+    return out
+
+
 def _get_user_groups_from_oracle_uncached(user) -> Set[str]:
     """
     ✅ 改走 DBFactory（統一 DB 連線）
@@ -217,28 +232,25 @@ def _get_user_groups_from_oracle_uncached(user) -> Set[str]:
     if _is_ext_env():
         return _load_oracle_acl_groups_from_mock()
 
-    sql = _oracle_acl_sql(table, user_col, group_col)
+    def _query_groups(col: str) -> Set[str]:
+        sql = _oracle_acl_sql(table, col, group_col)
+        rows = db_query_all("oracle", sql, {"login_user": username}) or []
+        return _rows_to_group_set(rows)
 
     # ✅ soft timeout + negative cache：避免 Oracle 慢/掛導致 request 卡死
     t0 = time.monotonic()
-    rows = db_query_all("oracle", sql, {"login_user": username}) or []
+    groups = _query_groups(user_col)
+    if not groups and user_col.upper() != "USERNAME":
+        try:
+            groups = _query_groups("USERNAME")
+        except Exception:
+            pass
     dt = time.monotonic() - t0
 
     if dt > _oracle_acl_query_timeout_sec():
         raise TimeoutError(f"oracle acl query slow dt={dt:.3f}s > limit")
 
-    out: Set[str] = set()
-    for r in rows:
-        if not r:
-            continue
-        try:
-            v = r[0]
-        except Exception:
-            continue
-        s = str(v or "").strip()
-        if s:
-            out.add(s)
-    return out
+    return groups
 
 
 def _get_user_groups_from_oracle(user) -> Set[str]:
