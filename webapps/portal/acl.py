@@ -206,7 +206,7 @@ def _get_user_groups_from_oracle_uncached(user) -> Set[str]:
         username = username[4:].strip()
 
     table = (getattr(settings, "ORA_ACL_TABLE", None) or "VIEW_ZZ_USER_GROUP_ACL").strip()
-    user_col = (getattr(settings, "ORA_ACL_USER_COL", None) or "USERNAME").strip()
+    user_col = (getattr(settings, "ORA_ACL_USER_COL", None) or "USER_ID").strip()
     group_col = (getattr(settings, "ORA_ACL_GROUP_COL", None) or "GROUP_NAME").strip()
 
     if not (_SAFE_IDENT.match(table) and _SAFE_IDENT.match(user_col) and _SAFE_IDENT.match(group_col)):
