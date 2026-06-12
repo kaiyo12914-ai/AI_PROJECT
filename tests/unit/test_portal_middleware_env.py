@@ -102,7 +102,7 @@ class TestLoginUserOrgEnv(TestCase):
                 mock_db_query.assert_called_once()
                 # Check that the username passed to the SQL bind parameters is stripped
                 bind_params = mock_db_query.call_args[0][2]
-                self.assertEqual(bind_params.get("username"), "H121356578")
+                self.assertEqual(bind_params.get("login_user"), "H121356578")
 
         # 4. Test that whoami API returns acl debug info
         from webapps.portal.views import whoami

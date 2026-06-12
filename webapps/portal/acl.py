@@ -179,7 +179,7 @@ def _oracle_acl_sql(table: str, user_col: str, group_col: str) -> str:
     return f"""
         SELECT {group_col}
         FROM {table}
-        WHERE {user_col} = :username
+        WHERE {user_col} = :login_user
     """
 
 
@@ -221,7 +221,7 @@ def _get_user_groups_from_oracle_uncached(user) -> Set[str]:
 
     # ✅ soft timeout + negative cache：避免 Oracle 慢/掛導致 request 卡死
     t0 = time.monotonic()
-    rows = db_query_all("oracle", sql, {"username": username}) or []
+    rows = db_query_all("oracle", sql, {"login_user": username}) or []
     dt = time.monotonic() - t0
 
     if dt > _oracle_acl_query_timeout_sec():
