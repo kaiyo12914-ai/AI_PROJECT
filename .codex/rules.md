@@ -43,6 +43,12 @@
 2. 所有內部路徑必須使用相對於專案根目錄的相對路徑（例如 `./git-push.ps1`）。
 3. 與本專案相鄰的外部目錄（例如 `H:\AI\openclaw-workspace`），應使用相對路徑表示（例如 `../openclaw-workspace`），避免硬編碼磁碟機代號與絕對路徑。
 
+### 2.6 版本同步規範
+1. 每次執行 `git commit` 後，必須立即執行版本同步作業，不得只留於本地提交。
+2. 版本同步應優先使用專案根目錄工具，且同步順序必須為：
+   - 先執行：`& './git-push.ps1' -Remote upstream`
+   - 再執行：`& './git-sync.ps1' -Remote upstream`
+
 ---
 
 ## 3) ENV 與連線政策（Mandatory）
