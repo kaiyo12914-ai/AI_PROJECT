@@ -54,7 +54,7 @@ export_out/
 
 # Env
 .env
-.env.*
+.env*
 !.env.example
 
 webapps/text2pptx/pptx_templates/~$*
