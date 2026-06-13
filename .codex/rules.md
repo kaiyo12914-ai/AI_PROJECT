@@ -1,4 +1,4 @@
-# AI_TOOLS 專案規範（Primary Rules）
+﻿# AI_TOOLS 專案規範（Primary Rules）
 
 最後更新：2026-06-13  
 專案根目錄：`H:\AI\AI_TOOLS`
@@ -112,8 +112,8 @@
    - `H:\AI\AI_TOOLS\git-sync.ps1`
 2. 每次執行 `git commit` 後，必須立即執行版本同步作業，不得只停留在本地提交。
 3. 一般同步順序：
-   - 先執行：`& 'H:\AI\AI_TOOLS\git-push.ps1'`
-   - 再執行：`& 'H:\AI\AI_TOOLS\git-sync.ps1'`
+   - 先執行：`& 'H:\AI\AI_TOOLS\git-push.ps1' -Remote upstream`
+   - 再執行：`& 'H:\AI\AI_TOOLS\git-sync.ps1' -Remote upstream`
 4. 若預設 `origin` 因 GitHub 權限或憑證問題無法推送，改用已驗證可寫入遠端 `upstream`：
    - `& 'H:\AI\AI_TOOLS\git-push.ps1' -Remote upstream`
    - `& 'H:\AI\AI_TOOLS\git-sync.ps1' -Remote upstream`

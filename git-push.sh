@@ -2,7 +2,7 @@
 set -euo pipefail
 
 MSG="${1:-chore: update}"
-REMOTE="${GIT_REMOTE:-origin}"
+REMOTE="${GIT_REMOTE:-upstream}"
 
 die() {
   echo "ERROR: $*" >&2

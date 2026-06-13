@@ -1,6 +1,6 @@
 param(
     [string]$Branch = "main",
-    [string]$Remote = "origin"
+    [string]$Remote = "upstream"
 )
 
 $ErrorActionPreference = "Stop"

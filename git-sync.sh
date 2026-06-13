@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BRANCH="${1:-main}"
-REMOTE="${GIT_REMOTE:-origin}"
+REMOTE="${GIT_REMOTE:-upstream}"
 
 die() {
   echo "ERROR: $*" >&2

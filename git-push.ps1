@@ -1,6 +1,6 @@
 param(
     [string]$Message = "chore: update",
-    [string]$Remote = "origin"
+    [string]$Remote = "upstream"
 )
 
 $ErrorActionPreference = "Stop"
