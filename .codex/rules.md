@@ -1,15 +1,15 @@
 ﻿# AI_TOOLS 專案規範（Primary Rules）
 
 最後更新：2026-06-13  
-專案根目錄：`H:\AI\AI_TOOLS`
-專案使用Python根目錄：`H:\AI\AI_TOOLS\venv`
+專案根目錄：專案根資料夾
+專案使用 Python 根目錄：`.venv/` 或 `venv/`
 ---
 
 ## 1) 啟動必讀（Mandatory Startup Rule）
 1. 每次進入本專案工作前，必讀 `/.codex/rules.md`。
 2. 若全域規則與本專案規則衝突，以本檔為準。
-3. 每次 session 也要讀取：`H:\AI\openclaw-workspace\LONG_TERM_MEMORY.md`。
-4. 重要決策與操作紀錄請寫入 `H:\AI\openclaw-workspace`（檔名建議：`AI_TOOLS_<主題>_YYYY-MM-DD.md`）。
+3. 每次 session 也要讀取：`../openclaw-workspace/LONG_TERM_MEMORY.md`（若存在）。
+4. 重要決策與操作紀錄請寫入同層的 `../openclaw-workspace/`（檔名建議：`AI_TOOLS_<主題>_YYYY-MM-DD.md`）。
 
 ---
 
@@ -108,15 +108,15 @@
 
 ## 11) 版本同步工具（Mandatory）
 1. 本專案版本同步優先使用專案根目錄工具：
-   - `H:\AI\AI_TOOLS\git-push.ps1`
-   - `H:\AI\AI_TOOLS\git-sync.ps1`
+   - `./git-push.ps1`
+   - `./git-sync.ps1`
 2. 每次執行 `git commit` 後，必須立即執行版本同步作業，不得只停留在本地提交。
 3. 一般同步順序：
-   - 先執行：`& 'H:\AI\AI_TOOLS\git-push.ps1' -Remote upstream`
-   - 再執行：`& 'H:\AI\AI_TOOLS\git-sync.ps1' -Remote upstream`
+   - 先執行：`& './git-push.ps1' -Remote upstream`
+   - 再執行：`& './git-sync.ps1' -Remote upstream`
 4. 若預設 `origin` 因 GitHub 權限或憑證問題無法推送，改用已驗證可寫入遠端 `upstream`：
-   - `& 'H:\AI\AI_TOOLS\git-push.ps1' -Remote upstream`
-   - `& 'H:\AI\AI_TOOLS\git-sync.ps1' -Remote upstream`
+   - `& './git-push.ps1' -Remote upstream`
+   - `& './git-sync.ps1' -Remote upstream`
 5. 本機 Git 若出現 SSL 憑證鏈或撤銷檢查問題，可在本 repo local config 設定：
    - `git config --local http.sslBackend schannel`
    - `git config --local http.schannelCheckRevoke false`
