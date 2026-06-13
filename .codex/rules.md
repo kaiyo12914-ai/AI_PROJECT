@@ -1,4 +1,4 @@
-﻿# AI_TOOLS 專案規範（Primary Rules）
+# AI_TOOLS 專案規範（Primary Rules）
 
 最後更新：2026-06-13  
 專案根目錄：`./`
@@ -37,6 +37,11 @@
 ### 2.4 ACL / require_node
 1. 頁面端點必須加 `@require_node("<node>")`。
 2. API 端點必須加 `@require_node("<node>", api=True)`。
+
+### 2.5 路徑表示規範
+1. 全專案（包含說明文件、程式碼、測試案例與範例）一律禁止使用絕對路徑（例如 `H:\AI\AI_TOOLS\...` ）。
+2. 所有內部路徑必須使用相對於專案根目錄的相對路徑（例如 `./git-push.ps1`）。
+3. 與本專案相鄰的外部目錄（例如 `H:\AI\openclaw-workspace`），應使用相對路徑表示（例如 `../openclaw-workspace`），避免硬編碼磁碟機代號與絕對路徑。
 
 ---
 
@@ -111,7 +116,7 @@
    - `./git-push.ps1`
    - `./git-sync.ps1`
 
-路徑表示規則：文件與範例中不得使用絕對路徑（例如 `H:\AI\AI_TOOLS\...`）；應使用相對於專案根目錄的路徑（例如 `./git-push.ps1`）。
+路徑表示規則：請遵循第 2.5 節路徑表示規範，禁止使用絕對路徑，應使用相對於專案根目錄的相對路徑。
 2. 每次執行 `git commit` 後，必須立即執行版本同步作業，不得只停留在本地提交。
 3. 一般同步順序：
    - 先執行：`& './git-push.ps1' -Remote upstream`
