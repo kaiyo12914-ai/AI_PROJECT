@@ -8,8 +8,7 @@
   - AI_PROMPT.txt：可直接貼給 AI 的「依專案規範」修正提示詞（由外部檔讀入，避免三引號地雷）
   - docs/專案規範.docx（若提供 --spec）
 用法：
-  python tools/package_mines_zip.py --root . --list tools/mine_files.txt --out mines_bundle.zip --spec 專案規範.docx
-  python tools/package_mines_zip.py --root H:\\AI\\Django --list tools\\mine_files.txt --out mines_bundle.zip --spec H:\\AI\\Django\\專案規範.docx
+  python tools/package_mines_zip.py --root . --list tools/mine_files.txt --out mines_bundle.zip --spec ./tools/專案規範.docx
 """
 
 from __future__ import annotations

@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import shutil
 from datetime import datetime
 from typing import List, Tuple
 
@@ -45,9 +46,9 @@ def _resolve_tesseract_cmd() -> str:
     if env_cmd and os.path.exists(env_cmd):
         return env_cmd
 
-    default_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    if os.path.exists(default_cmd):
-        return default_cmd
+    candidate = shutil.which("tesseract") or shutil.which("tesseract.exe")
+    if candidate and os.path.exists(candidate):
+        return candidate
     return ""
 
 
@@ -63,7 +64,7 @@ def _resolve_tessdata_dir(tesseract_cmd: str) -> str:
     if tesseract_cmd:
         candidates.append(os.path.join(os.path.dirname(tesseract_cmd), "tessdata"))
 
-    candidates.append(r"C:\Program Files\Tesseract-OCR\tessdata")
+    # No hard-coded Windows install path; rely on TESSDATA_PREFIX or the tesseract binary directory.
 
     for d in candidates:
         if d and os.path.isdir(d):

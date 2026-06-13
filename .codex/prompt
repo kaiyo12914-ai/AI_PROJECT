@@ -1,6 +1,6 @@
 請以playwright進行驗證並修改相關程式至正常後再回覆予我
 
-Set-Location -Path "H:\\AI\\ai_tools"
+Set-Location -Path "."
 git add -A
 git commit -m (Get-Date -Format 'yyyy-MM-dd_HHmmss')
 

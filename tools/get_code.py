@@ -190,11 +190,11 @@ def main():
     if len(sys.argv) < 2:
         print("使用方法: python generate_needed_code.py <root_dir> [options]")
         print("\n常用範例:")
-        print("  python generate_needed_code.py H:\\AI\\Django")
-        print("  python generate_needed_code.py H:\\AI\\Django --pattern urls.py")
-        print("  python generate_needed_code.py H:\\AI\\Django --pattern urls.py --pattern views.py")
-        print('  python generate_needed_code.py H:\\AI\\Django --glob "**/urls.py"')
-        print("  python generate_needed_code.py H:\\AI\\Django --all-urls")
+        print("  python tools/generate_needed_code.py .")
+        print("  python tools/generate_needed_code.py . --pattern urls.py")
+        print("  python tools/generate_needed_code.py . --pattern urls.py --pattern views.py")
+        print('  python tools/generate_needed_code.py . --glob "**/urls.py"')
+        print("  python tools/generate_needed_code.py . --all-urls")
         sys.exit(1)
 
     root_dir = Path(sys.argv[1]).resolve()

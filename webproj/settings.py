@@ -11,8 +11,7 @@ import re
 import sys
 from dotenv import load_dotenv
 
-# Tesseract
-os.environ.setdefault("TESSDATA_PREFIX", r"C:\Program Files\Tesseract-OCR")
+# Tesseract: prefer runtime env, and resolve the executable/tessdata at runtime.
 
 # ============================================================
 # Base

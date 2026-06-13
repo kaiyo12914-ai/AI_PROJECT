@@ -292,7 +292,7 @@
         btn.setAttribute("aria-selected", active ? "true" : "false");
       });
       if (hint) {
-        if (mode === "mp3") hint.textContent = "MP3：僅轉檔輸出至 H:\\Mp3，不寫入影片清單。";
+        if (mode === "mp3") hint.textContent = "MP3：僅轉檔輸出至 MP3 輸出資料夾，不寫入影片清單。";
         else hint.textContent = "MP4：維持原功能，寫入影片清單。";
       }
     }

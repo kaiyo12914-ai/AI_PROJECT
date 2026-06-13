@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -30,8 +31,11 @@ def _upload_root() -> Path:
 
 
 def _mp3_output_root() -> Path:
-    # Requirement: MP3 outputs are fixed to this folder and not managed by DB.
-    return Path(r"H:\Mp3")
+    # Requirement: MP3 outputs are kept under the project media tree, not DB-managed.
+    env_root = (os.environ.get("MP3_OUTPUT_ROOT") or "").strip()
+    if env_root:
+        return Path(env_root).expanduser().resolve()
+    return Path(settings.MEDIA_ROOT) / "videolearning" / ("int" if str(getattr(settings, "ENV_NAME", "EXT") or "EXT").upper() == "INT" else "ext") / "mp3"
 
 
 def _make_media_url(abs_path: Path) -> str:

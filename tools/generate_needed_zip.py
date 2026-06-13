@@ -13,11 +13,8 @@
   例如：needed_code0127_14_35.zip
 
 用法：
-  python tools/package_needed_zip.py --root . --needs webproj/needed_code.txt --out needed_code.zip --spec 專案規範.docx
-  python tools/package_needed_zip.py --root H:\\AI\\Django --needs tools\\needed_code.txt --out tools\\needed_code.zip --spec H:\\AI\\Django\\tools\\專案規範.docx
-
-加打包路由檔（可選）：
-  python tools/package_needed_zip.py --root H:\\AI\\Django --needs tools\\needed_code.txt --out tools\\needed_code.zip --urls TOOLS\\DJANGO_URLS.TXT
+  python tools/package_needed_zip.py --root . --needs tools/needed_code.txt --out tools/needed_code.zip --spec ./tools/專案規範.docx
+  python tools/package_needed_zip.py --root . --needs tools/needed_code.txt --out tools/needed_code.zip --urls TOOLS/DJANGO_URLS.TXT
 
 建議：
   - 將你的 AI 修正提示詞放在 tools/AI_PROMPT.txt（或用 --prompt 指定）

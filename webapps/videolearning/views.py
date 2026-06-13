@@ -536,7 +536,7 @@ def api_video_import_youtube(request: HttpRequest) -> JsonResponse:
             {
                 "import": imported,
                 "db_saved": False,
-                "message": "MP3 轉檔完成，已輸出至 H:\\Mp3，不納入影片清單管理。",
+                "message": "MP3 轉檔完成，已輸出至 MP3 輸出資料夾，不納入影片清單管理。",
             },
             status=201,
         )

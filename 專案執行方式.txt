@@ -132,3 +132,6 @@ mermaid AI畫圖工具
 & 'H:\AI\AI_TOOLS\Scripts\Activate.ps1'
 Set-Location -Path "H:\AI\AI_TOOLS"
 H:\AI\AI_TOOLS\VENV\Scripts\python.exe get_Window.py
+
+#WSL VSCODE
+code .

@@ -20,7 +20,7 @@ NL2SQL ERP_MPC Oracle 最小連線測試
     4. ERP_DB_MPC_USER / ERP_DB_MPC_PASS → 對應欄位
 
 執行方式：
-  cd H:\\AI\\AI_TOOLS
+  cd .
   python -m pytest tests/unit/test_nl2sql_erp_mpc_connection.py -v -s
   # 或直接執行：
   python tests/unit/test_nl2sql_erp_mpc_connection.py

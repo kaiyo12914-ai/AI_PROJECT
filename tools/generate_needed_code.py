@@ -101,8 +101,8 @@ def list_files_with_content(root_dir: Path, needs_paths):
 
 if __name__ == "__main__":
     # 用法：
-    # python tools\generate_needed_code.py H:\AI\Django
-    # python tools\generate_needed_code.py H:\AI\Django tools\needed_code.txt
+    # python tools/generate_needed_code.py .
+    # python tools/generate_needed_code.py . tools/needed_code.txt
     if len(sys.argv) not in (2, 3):
         print(r"使用方法: python tools\generate_needed_code.py <root_dir> [needs_file]")
         sys.exit(1)
