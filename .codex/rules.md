@@ -46,7 +46,7 @@
 ### 2.6 版本同步規範
 1. 每次執行 `git commit` 後，必須立即執行版本同步作業，不得只留於本地提交。
 2. 版本同步應優先使用專案根目錄工具，且同步順序必須為：
-   - 先執行：`& './git-push.ps1' -Remote upstream`
+   - 先執行：`& './git-push.ps1' -Remote upstream`（目標為 `https://github.com/kaiyo12914-ai/AI_PROJECT.git`）
    - 再執行：`& './git-sync.ps1' -Remote upstream`
 
 ---
@@ -125,10 +125,10 @@
 路徑表示規則：請遵循第 2.5 節路徑表示規範，禁止使用絕對路徑，應使用相對於專案根目錄的相對路徑。
 2. 每次執行 `git commit` 後，必須立即執行版本同步作業，不得只停留在本地提交。
 3. 一般同步順序：
-   - 先執行：`& './git-push.ps1' -Remote upstream`
+   - 先執行：`& './git-push.ps1' -Remote upstream`（目標為 `https://github.com/kaiyo12914-ai/AI_PROJECT.git`）
    - 再執行：`& './git-sync.ps1' -Remote upstream`
 4. 若預設 `origin` 因 GitHub 權限或憑證問題無法推送，改用已驗證可寫入遠端 `upstream`：
-   - `& './git-push.ps1' -Remote upstream`
+   - `& './git-push.ps1' -Remote upstream`（目標為 `https://github.com/kaiyo12914-ai/AI_PROJECT.git`）
    - `& './git-sync.ps1' -Remote upstream`
 5. 本機 Git 若出現 SSL 憑證鏈或撤銷檢查問題，可在本 repo local config 設定：
    - `git config --local http.sslBackend schannel`
