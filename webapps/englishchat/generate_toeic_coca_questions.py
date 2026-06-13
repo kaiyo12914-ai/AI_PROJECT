@@ -465,4 +465,4 @@ if __name__ == "__main__":
     raise SystemExit(main())
 
 
-#H:\AI\AI_TOOLS\venv\Scripts\python.exe H:\AI\AI_TOOLS\webapps\englishchat\generate_toeic_coca_questions.py
+# ./venv/Scripts/python.exe ./webapps/englishchat/generate_toeic_coca_questions.py

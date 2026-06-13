@@ -1,8 +1,8 @@
 import os
 import sys
 
-# Ensure project root is in path before anything else
-sys.path.append(r"H:\AI\AI_TOOLS")
+from pathlib import Path
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import django
 from django.conf import settings

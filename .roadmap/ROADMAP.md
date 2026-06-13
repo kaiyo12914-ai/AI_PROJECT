@@ -196,4 +196,4 @@
   2. 已驗證 `connections['projectnotes_db']` 為 PostgreSQL。
   3. 版本：`PostgreSQL 18.3 on x86_64-windows`。
 - 本日移交文件：
-  1. `H:\AI\openclaw-workspace\移交工作說明_20260415.md`（已確認路徑可讀）。
+  1. `../openclaw-workspace/移交工作說明_20260415.md`（已確認路徑可讀）。

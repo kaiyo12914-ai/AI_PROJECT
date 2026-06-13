@@ -1,4 +1,4 @@
-# H:\AI\AI_TOOLS\tools\verify_parse_api.py
+# ./tools/verify_parse_api.py
 import asyncio
 import os
 import json
@@ -67,7 +67,7 @@ async def verify_parse_focus():
                         # 檢查是否有錯誤顯示
                         print(f"⚠️ 解析結果異常。當前內容：{result_value}")
                         # 擷圖存證
-                        await page.screenshot(path=f"H:/AI/DJANGO/tools/parse_fail_{i}.png")
+                        await page.screenshot(path=f"./tools/parse_fail_{i}.png")
                 except Exception as e:
                     print(f"❌ 解析過程發生錯誤: {str(e)}")
 

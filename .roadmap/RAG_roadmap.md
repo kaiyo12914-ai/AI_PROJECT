@@ -1,7 +1,7 @@
 # RAG_roadmap.md
 
 更新日期：2026-04-21
-適用範圍：`H:\AI\AI_TOOLS`（projectnotes 為優先落地場域）
+適用範圍：`./`（projectnotes 為優先落地場域）
 標竿目標：以 NotebookLM 體驗為參考，建立「來源中心、精準檢索、可追溯回答、可再製輸出」的 RAG 工作台。
 
 ---

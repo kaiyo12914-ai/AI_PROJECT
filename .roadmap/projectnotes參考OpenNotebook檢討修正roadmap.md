@@ -238,7 +238,7 @@ Definition of Done：
 - 每 project/source 的 chunk count 與索引健康狀態。
 
 Definition of Done：
-- 測試納入 `H:\AI\AI_TOOLS\tests`。
+- 測試納入 `./tests`。
 - INT 模式不 fallback mock data。
 - EXT 模式不連實體 DB。
 - 上線前有 rollback 策略。

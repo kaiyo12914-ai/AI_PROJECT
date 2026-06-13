@@ -5,11 +5,11 @@
 - 確保 migration、索引、資料一致性都可追蹤。
 
 ## 前置檢查
-1. 進入專案根目錄：`H:\AI\AI_TOOLS`
-2. 確認 Python 環境：`H:\AI\venv3.12\Scripts\python.exe`
+1. 進入專案根目錄：`./`
+2. 確認 Python 環境：`../venv3.12/Scripts/python.exe`
 3. 確認目前 migration 狀態：
 ```powershell
-& H:\AI\venv3.12\Scripts\python.exe manage.py showmigrations projectnotes
+& ../venv3.12/Scripts/python.exe manage.py showmigrations projectnotes
 ```
 
 ## 升級步驟
@@ -19,17 +19,17 @@
 
 2. 執行 migration
 ```powershell
-& H:\AI\venv3.12\Scripts\python.exe manage.py migrate projectnotes
+& ../venv3.12/Scripts/python.exe manage.py migrate projectnotes
 ```
 
 3. 執行 Django 檢查
 ```powershell
-& H:\AI\venv3.12\Scripts\python.exe manage.py check
+& ../venv3.12/Scripts/python.exe manage.py check
 ```
 
 4. 執行索引檢視
 ```powershell
-& H:\AI\venv3.12\Scripts\python.exe manage.py projectnotes_index_check
+& ../venv3.12/Scripts/python.exe manage.py projectnotes_index_check
 ```
 
 ## 升級後驗證（Smoke Test）
@@ -46,7 +46,7 @@
 
 2. 若已套用 migration 且需要回退：
 ```powershell
-& H:\AI\venv3.12\Scripts\python.exe manage.py migrate projectnotes 0001
+& ../venv3.12/Scripts/python.exe manage.py migrate projectnotes 0001
 ```
 
 3. 若資料不一致：

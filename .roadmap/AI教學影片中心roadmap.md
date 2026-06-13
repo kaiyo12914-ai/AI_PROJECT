@@ -1,7 +1,7 @@
 # AI教學影片中心roadmap
 
 狀態：規劃中（待 Sprint 1 開始）
-適用專案：`H:\AI\AI_TOOLS`
+適用專案：`./`
 子系統名稱：`videolearning`（教學影片中心）
 
 ## 1. 目標與範圍
@@ -30,7 +30,7 @@
 - ENV：遵守 `ENV=EXT/INT`，內網 INT 模式限制 provider（OLLAMA/LM_STUDIO）
 - Static：不得新增 inline script/style，資源放 `webapps/videolearning/static/videolearning/`
 - 編碼：UTF-8 without BOM
-- 測試：新增功能需同步補 `H:\AI\AI_TOOLS\tests` 下 pytest（正常/邊界/錯誤）
+- 測試：新增功能需同步補 `./tests` 下 pytest（正常/邊界/錯誤）
 
 ## 3. 建議目錄
 

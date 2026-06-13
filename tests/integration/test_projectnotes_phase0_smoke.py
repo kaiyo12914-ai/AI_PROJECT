@@ -18,7 +18,7 @@ def _allow_acl(monkeypatch):
 
 
 def test_portal_template_contains_projectnotes_entry():
-    text = Path(r"h:\AI\AI_TOOLS\webapps\portal\templates\portal\index.html").read_text(encoding="utf-8")
+    text = (Path(__file__).resolve().parents[2] / "webapps/portal/templates/portal/index.html").read_text(encoding="utf-8")
     assert '{% allow "projectnotes" as can_projectnotes %}' in text
     assert "{% url 'projectnotes:page' as projectnotes_href %}" in text
 

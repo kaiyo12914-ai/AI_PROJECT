@@ -148,5 +148,5 @@ class Command(BaseCommand):
 
 
 # 全量補建（所有未建 embedding 的訊息）
-#H:\AI\AI_TOOLS\venv\Scripts\python.exe H:\AI\AI_TOOLS\manage.py chatbotui_rebuild_message_embeddings
+# ./venv/Scripts/python.exe manage.py chatbotui_rebuild_message_embeddings
 

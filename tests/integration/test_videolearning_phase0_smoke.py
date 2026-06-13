@@ -15,7 +15,7 @@ def _allow_acl(monkeypatch):
 
 
 def test_portal_template_contains_videolearning_entry():
-    text = Path(r"h:\AI\AI_TOOLS\webapps\portal\templates\portal\index.html").read_text(encoding="utf-8")
+    text = (Path(__file__).resolve().parents[2] / "webapps/portal/templates/portal/index.html").read_text(encoding="utf-8")
     assert '{% allow "videolearning" as can_videolearning %}' in text
     assert "{% url 'videolearning:page' as videolearning_href %}" in text
 

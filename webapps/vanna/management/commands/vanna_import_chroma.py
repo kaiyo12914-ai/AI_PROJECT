@@ -119,7 +119,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument(
             "--path",
-            default=r"H:\AI\AI_TOOLS\chroma 1.sqlite3",
+            default=str(Path(__file__).resolve().parents[4] / "chroma 1.sqlite3"),
             help="Path to legacy Chroma sqlite3 file.",
         )
         parser.add_argument("--data-source", default="legacy_vanna_chroma")
@@ -327,4 +327,4 @@ class Command(BaseCommand):
         )
 
 
-# H:\AI\AI_TOOLS\venv\Scripts\python.exe manage.py vanna_import_chroma --path "H:\AI\AI_TOOLS\chroma 1.sqlite3" --clear
+# ./venv/Scripts/python.exe manage.py vanna_import_chroma --path "./chroma 1.sqlite3" --clear

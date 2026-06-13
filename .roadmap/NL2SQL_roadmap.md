@@ -22,7 +22,7 @@ AI_TOOLS Django 負責：
 
 ## 2. 目前整合狀態
 
-- Vanna 2.0 原始碼已由 `D:\AI\vanna` 複製至 `H:\AI\AI_TOOLS\webapps\vanna\vendor\vanna2`。
+- Vanna 2.0 原始碼已由 `D:\AI\vanna` 複製至 `./webapps/vanna/vendor/vanna2`。
 - 已排除 `.git`、`venv`、`__pycache__` 等不應納入專案的內容。
 - Django app 位置為 `webapps/vanna`。
 - Portal 的 `NL2SQL 自然語言查詢 DB` 卡片導向 `/nl2sql/`。

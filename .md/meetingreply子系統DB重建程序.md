@@ -42,7 +42,7 @@ pg_restore --clean --if-exists --no-owner --no-privileges -h 192.168.0.137 -p 54
 若目標端已有 `meeting_records`，但沒有 `meetingreply_record_embedding`，可只建立 `meetingreply` 子系統自己的本地表：
 
 ```powershell
-H:\AI\AI_TOOLS\venv\Scripts\python.exe manage.py migrate meetingreply
+./\venv\Scripts\python.exe manage.py migrate meetingreply
 ```
 
 若已啟用專案虛擬環境，也可執行：
@@ -58,7 +58,7 @@ python manage.py migrate meetingreply
 `meetingreply_record_embedding` 可由既有 `meeting_records` 重新計算產生：
 
 ```powershell
-H:\AI\AI_TOOLS\venv\Scripts\python.exe manage.py rebuild_meetingreply_embeddings --delete-missing
+./\venv\Scripts\python.exe manage.py rebuild_meetingreply_embeddings --delete-missing
 ```
 
 ### 5.2 小批次驗證
@@ -66,7 +66,7 @@ H:\AI\AI_TOOLS\venv\Scripts\python.exe manage.py rebuild_meetingreply_embeddings
 若要先驗證最近 N 筆，可執行：
 
 ```powershell
-H:\AI\AI_TOOLS\venv\Scripts\python.exe manage.py rebuild_meetingreply_embeddings --limit 100
+./\venv\Scripts\python.exe manage.py rebuild_meetingreply_embeddings --limit 100
 ```
 
 說明：
@@ -87,7 +87,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 ### 6.2 環境設定
 
-- `H:\AI\AI_TOOLS\.env` 需指向目標 PostgreSQL。
+- `./\.env` 需指向目標 PostgreSQL。
 - `MEETINGREPLY_ENABLE_EMBEDDING=1`
 - `GLOBAL_EMBEDDING_PROVIDER=OLLAMA`
 - `GLOBAL_EMBEDDING_MODEL=snowflake-arctic-embed2`
@@ -98,8 +98,8 @@ CREATE EXTENSION IF NOT EXISTS vector;
 確認 Django 設定與 migration：
 
 ```powershell
-H:\AI\AI_TOOLS\venv\Scripts\python.exe manage.py check
-H:\AI\AI_TOOLS\venv\Scripts\python.exe manage.py showmigrations meetingreply
+./\venv\Scripts\python.exe manage.py check
+./\venv\Scripts\python.exe manage.py showmigrations meetingreply
 ```
 
 確認資料表存在：

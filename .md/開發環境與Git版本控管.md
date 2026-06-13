@@ -7,7 +7,7 @@ Git 中樞（雲端）
 └── GitHub Repo（origin）
 
 A 電腦 Windows
-└── H:\AI\AI_TOOLS
+└── ./
     └── venv 或 .venv-win（不進 Git）
 
 B 電腦 WSL Ubuntu
@@ -27,7 +27,7 @@ B 電腦 WSL Ubuntu
 ### 2.1 新專案初始化
 
 ```powershell
-cd H:\AI\AI_TOOLS
+cd ./
 git init
 git branch -M main
 git remote add origin https://github.com/yuanlinwen-cell/Django.git
@@ -40,7 +40,7 @@ git push -u origin main
 ### 2.2 已有 Git 專案改用 GitHub
 
 ```powershell
-cd H:\AI\AI_TOOLS
+cd ./
 git remote -v
 git remote set-url origin https://github.com/yuanlinwen-cell/Django.git
 git push -u origin main
@@ -51,7 +51,7 @@ git push -u origin main
 ### 3.1 沿用既有 venv
 
 ```powershell
-cd H:\AI\AI_TOOLS
+cd ./
 .\venv\Scripts\Activate.ps1
 python manage.py runserver 127.0.0.1:8000
 ```
@@ -59,7 +59,7 @@ python manage.py runserver 127.0.0.1:8000
 ### 3.2 建議命名（較清楚）
 
 ```powershell
-cd H:\AI\AI_TOOLS
+cd ./
 py -3 -m venv .venv-win
 .\.venv-win\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -142,7 +142,7 @@ git push -u origin agent/hermes-task
 ## 7. A 電腦接收 Hermes 修改
 
 ```powershell
-cd H:\AI\AI_TOOLS
+cd ./
 git fetch origin
 git checkout agent/hermes-task
 ```
@@ -201,7 +201,7 @@ ALLOWED_HOSTS=localhost,127.0.0.1
 ```
 
 實際環境變數檔路徑：
-- A：`H:\AI\AI_TOOLS\.env`
+- A：`./\.env`
 - B：`/mnt/d/AI/AI_TOOLS/.env`
 
 ## 10. 版本同步腳本使用說明（A/B 共用）
@@ -223,7 +223,7 @@ bash git-push.sh "feat: your message"
 ### 10.2 Windows（`.ps1`）
 
 ```powershell
-cd H:\AI\AI_TOOLS
+cd ./
 .\git-sync.ps1 -Branch main
 .\git-push.ps1 -Message "feat: your message"
 ```

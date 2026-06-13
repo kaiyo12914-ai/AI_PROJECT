@@ -41,19 +41,19 @@
 
 ## 3.2 Python 離線套件（在專案 Python 3.12 環境）
 
-在可上網機器執行（範例輸出到 `H:\AI\WHL`）：
+在可上網機器執行（範例輸出到 `../WHL`）：
 
 ```powershell
-python -m pip download pgvector psycopg2-binary sqlalchemy -d H:\AI\WHL
+python -m pip download pgvector psycopg2-binary sqlalchemy -d ../WHL
 ```
 
 如需更完整相依套件，可另外執行：
 
 ```powershell
-python -m pip download -r requirements.txt -d H:\AI\WHL
+python -m pip download -r requirements.txt -d ../WHL
 ```
 
-將 `H:\AI\WHL` 整包複製到離線機。
+將 `../WHL` 整包複製到離線機。
 
 ## 4. 離線安裝與設定（目標內網機）
 
@@ -66,7 +66,7 @@ python -m pip download -r requirements.txt -d H:\AI\WHL
 ## 4.2 安裝 Python 套件（離線）
 
 ```powershell
-python -m pip install --no-index --find-links=H:\AI\WHL pgvector psycopg2-binary sqlalchemy
+python -m pip install --no-index --find-links=../WHL pgvector psycopg2-binary sqlalchemy
 ```
 
 ## 4.3 建立 DB 與角色（若全新環境）
@@ -437,7 +437,7 @@ pg_dump -h 192.168.0.137 -p 5432 -U projectnotes_user -d projectnotes ^
 可放到內網主機：
 
 ```text
-H:\AI\AI_TOOLS\import\
+./\import\
 ```
 
 ### 9.6 內網匯入：匯入純 SQL 資料檔

@@ -103,9 +103,9 @@
   - [ ] 關鍵使用流程（建立 -> 查詢 -> 更新 -> 稽核）
 
 測試檔路徑：
-- `H:\AI\AI_TOOLS\tests\unit\`
-- `H:\AI\AI_TOOLS\tests\integration\`
-- `H:\AI\AI_TOOLS\tests\e2e\`
+- `./tests/unit/`
+- `./tests/integration/`
+- `./tests/e2e/`
 
 ---
 
