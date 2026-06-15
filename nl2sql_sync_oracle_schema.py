@@ -66,8 +66,8 @@ WHERE object_type IN ({object_types})
 ORDER BY owner, object_name, object_type
 """
 
-GET_DDL_SQL = """
-SELECT DBMS_METADATA.GET_DDL(:object_type, :object_name, :owner)
+GET_DDL_SQL_TEMPLATE = """
+SELECT DBMS_METADATA.GET_DDL('{object_type}', :object_name, :owner)
 FROM dual
 """
 
@@ -274,9 +274,10 @@ def _get_oracle_object_rows(oracle_conn, owner: str, prefixes: list[str], object
 def _extract_oracle_schema(oracle_conn, owner: str, object_name: str, object_type: str) -> dict[str, Any]:
     params = {"owner": owner, "object_name": object_name}
     ddl_object_type = _oracle_ddl_type(object_type)
+    ddl_sql = GET_DDL_SQL_TEMPLATE.format(object_type=ddl_object_type)
     with oracle_conn.cursor() as cur:
         cur.execute(ORACLE_TRANSFORM_PLSQL)
-        cur.execute(GET_DDL_SQL, {"owner": owner, "object_name": object_name, "object_type": ddl_object_type})
+        cur.execute(ddl_sql, params)
         ddl_row = cur.fetchone()
         ddl_text = _normalize_text(ddl_row[0] if ddl_row else "")
 
