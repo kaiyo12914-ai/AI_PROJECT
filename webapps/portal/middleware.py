@@ -175,6 +175,18 @@ def _resolve_login_user_org(emp_id: str, emp_name: str) -> str:
     return ""
 
 
+def _compose_login_user_display_name(org_code: str, user_name: str) -> str:
+    org = (org_code or "").strip()
+    name = (user_name or "").strip()
+    if org and name:
+        return f"{org} {name}"
+    if name:
+        return name
+    if org:
+        return org
+    return ""
+
+
 def _lookup_emp_display_from_oracle(emp_id: str, *, refresh: bool = False) -> str:
     emp_id = (emp_id or "").strip()
     if not emp_id:
@@ -496,6 +508,10 @@ def _get_whoami_debug_info(
         "login_user_name": (getattr(request, "login_user_name", "") or ""),
         "login_user_org": (getattr(request, "login_user_org", "") or ""),
         "login_user_org_label": (getattr(request, "login_user_org_label", "") or ""),
+        "login_user_display_name": _compose_login_user_display_name(
+            getattr(request, "login_user_org", "") or "",
+            getattr(request, "login_user_name", "") or "",
+        ),
         "login_user_factory_plant": (getattr(request, "login_user_factory_plant", "") or ""),
         "aaa_decoded": (getattr(request, "aaa_decoded", "") or ""),
         "REMOTE_USER": request.META.get("REMOTE_USER", ""),
@@ -529,10 +545,13 @@ class PortalUsageLogMiddleware:
             if not program_code: return response
 
             user_id = resolve_effective_user_id(request)
-            user_name = (getattr(request, "login_user_name", "") or "").strip()
-            if user_id and (not user_name) and _env_bool("EMP_NAME_LOOKUP", default=True):
+            login_user_name = (getattr(request, "login_user_name", "") or "").strip()
+            login_user_org = (getattr(request, "login_user_org", "") or "").strip()
+            user_name = _compose_login_user_display_name(login_user_org, login_user_name)
+            if user_id and (not login_user_name) and _env_bool("EMP_NAME_LOOKUP", default=True):
                 name2 = _cache_get_emp_name(user_id)
-                if name2: user_name = name2
+                if name2:
+                    user_name = _compose_login_user_display_name(login_user_org, name2)
 
             # 相同使用者同一小時內使用相同功能時不予紀錄使用紀錄
             if user_id:

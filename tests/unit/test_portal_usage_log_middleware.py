@@ -35,6 +35,7 @@ class TestPortalUsageLogMiddlewareDeduplication(TestCase):
         # 1. First request by user123 to /test-feature/ -> should be logged
         request1 = self.factory.get("/test-feature/")
         request1.session = {}
+        request1.login_user_org = "MPC"
         request1.login_user_name = "User One"
         
         response1 = self.middleware(request1)
@@ -44,11 +45,14 @@ class TestPortalUsageLogMiddlewareDeduplication(TestCase):
         self.assertEqual(len(new_logs), 1)
         first_log = new_logs[0]
         self.assertEqual(first_log.user_id, "user123")
+        self.assertEqual(first_log.user_name, "MPC User One")
         self.assertEqual(first_log.program_code, "TEST_FEATURE")
+        self.assertIn('"login_user_display_name": "MPC User One"', first_log.whoami_json)
 
         # 2. Second request by user123 to /test-feature/ within one hour -> should NOT be logged (deduplicated)
         request2 = self.factory.get("/test-feature/")
         request2.session = {}
+        request2.login_user_org = "MPC"
         request2.login_user_name = "User One"
         
         response2 = self.middleware(request2)
@@ -63,6 +67,7 @@ class TestPortalUsageLogMiddlewareDeduplication(TestCase):
         # 1. First request by user123 -> logged
         request1 = self.factory.get("/test-feature/")
         request1.session = {}
+        request1.login_user_org = "MPC"
         request1.login_user_name = "User One"
         self.middleware(request1)
         self.assertEqual(len(self._track_new_logs()), 1)
@@ -71,6 +76,7 @@ class TestPortalUsageLogMiddlewareDeduplication(TestCase):
         mock_resolve_user.return_value = "user456"
         request2 = self.factory.get("/test-feature/")
         request2.session = {}
+        request2.login_user_org = "MPC"
         request2.login_user_name = "User Two"
         self.middleware(request2)
         self.assertEqual(len(self._track_new_logs()), 2)
@@ -83,6 +89,7 @@ class TestPortalUsageLogMiddlewareDeduplication(TestCase):
         # 1. First request to /test-feature/ -> logged
         request1 = self.factory.get("/test-feature/")
         request1.session = {}
+        request1.login_user_org = "MPC"
         request1.login_user_name = "User One"
         self.middleware(request1)
         self.assertEqual(len(self._track_new_logs()), 1)
@@ -90,6 +97,7 @@ class TestPortalUsageLogMiddlewareDeduplication(TestCase):
         # 2. Second request to /another-feature/ -> should be logged
         request2 = self.factory.get("/another-feature/")
         request2.session = {}
+        request2.login_user_org = "MPC"
         request2.login_user_name = "User One"
         self.middleware(request2)
         self.assertEqual(len(self._track_new_logs()), 2)
@@ -102,6 +110,7 @@ class TestPortalUsageLogMiddlewareDeduplication(TestCase):
         # 1. First request -> logged
         request1 = self.factory.get("/test-feature/")
         request1.session = {}
+        request1.login_user_org = "MPC"
         request1.login_user_name = "User One"
         self.middleware(request1)
         self.assertEqual(len(self._track_new_logs()), 1)
@@ -114,6 +123,7 @@ class TestPortalUsageLogMiddlewareDeduplication(TestCase):
         # 2. Second request after 1 hour -> should be logged
         request2 = self.factory.get("/test-feature/")
         request2.session = {}
+        request2.login_user_org = "MPC"
         request2.login_user_name = "User One"
         self.middleware(request2)
         self.assertEqual(len(self._track_new_logs()), 2)
