@@ -15,7 +15,7 @@
 .\venv\Scripts\python.exe .\manage.py nl2sql_sync_oracle_schema --oracle-profile ERP_MPC --table-prefixes CT_,DT_,FT_
 ```
 
-只抓 `VIEW` 與 `MVIEW`：
+抓 `VIEW` / `MVIEW`：
 
 ```powershell
 .\venv\Scripts\python.exe .\manage.py nl2sql_sync_oracle_schema --oracle-profile ERP_MPC --object-types view,mview
