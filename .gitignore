@@ -166,3 +166,4 @@ scratch/reports
 webapps/vanna/vendor/vanna2/papers/img/
 *.png
 .env_DB_factory
+git_rm.method.md
