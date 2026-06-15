@@ -233,7 +233,10 @@ def _is_int_env() -> bool:
 
 
 def allowed_model_types() -> set[str]:
-    if _is_int_env():
+    env = safe_text(os.getenv("ENV")).upper()
+    if env == "EXT":
+        return {"OLLAMA"}
+    if env == "INT":
         return {"OLLAMA", "LM_STUDIO"}
     return {"GOOGLE", "OPENAI", "OLLAMA", "LM_STUDIO"}
 

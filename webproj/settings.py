@@ -258,7 +258,10 @@ OLLAMA_BASE_URL = env_str("OLLAMA_BASE_URL", "")
 OLLAMA_MODEL = env_str("OLLAMA_MODEL", "")
 
 if not OLLAMA_BASE_URL:
-    OLLAMA_BASE_URL = env_str("MODEL_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
+    if ENV_NAME == "EXT":
+        OLLAMA_BASE_URL = env_str("MODEL_BASE_URL", "http://192.168.0.137:11434")
+    else:
+        OLLAMA_BASE_URL = env_str("MODEL_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
 if not OLLAMA_MODEL:
     OLLAMA_MODEL = env_str("MODEL_NAME", "magistral-small")
 

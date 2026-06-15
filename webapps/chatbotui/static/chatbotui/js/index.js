@@ -388,6 +388,12 @@
     return t === "OLLAMA" || t === "LM_STUDIO" || t === "GOOGLE" || t === "OPENAI";
   }
 
+  function hasModelTypeOption(modelType) {
+    const t = String(modelType || "").toUpperCase();
+    if (!elements.modelTypeSelect) return false;
+    return Array.from(elements.modelTypeSelect.options || []).some((opt) => String(opt.value || "").toUpperCase() === t);
+  }
+
   function fillModelNameSelect(models, selectedValue) {
     if (!elements.modelNameSelect) return;
     const list = Array.isArray(models) ? models.filter(Boolean) : [];
@@ -1292,7 +1298,9 @@
     await loadPromptHistory(state.activeId);
     await loadConversationAttachments(state.activeId);
     await loadOllamaModels();
-    await loadLmStudioModels();
+    if (hasModelTypeOption("LM_STUDIO")) {
+      await loadLmStudioModels();
+    }
     render();
   }
 

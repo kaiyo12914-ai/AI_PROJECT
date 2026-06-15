@@ -35,7 +35,10 @@ def _is_int_env() -> bool:
 
 
 def _allowed_model_types() -> list[str]:
-    if _is_int_env():
+    env = safe_text(os.getenv("ENV")).upper()
+    if env == "EXT":
+        return ["OLLAMA"]
+    if env == "INT":
         return ["OLLAMA", "LM_STUDIO"]
     return ["OLLAMA", "GOOGLE", "OPENAI", "LM_STUDIO"]
 
@@ -656,6 +659,9 @@ def api_ollama_tags(request):
 def api_lm_studio_models(request):
     if request.method != "GET":
         return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    if safe_text(os.getenv("ENV")).upper() == "EXT":
+        return JsonResponse({"ok": True, "models": []})
 
     fallback_model = safe_text(os.getenv("LM_STUDIO_MODEL")) or "ministral-3-14b-instruct-2512"
     try:

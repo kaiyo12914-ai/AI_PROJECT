@@ -138,10 +138,17 @@ def _resolve_provider_fallback(primary: str) -> str:
             return explicit
         if explicit in {"GOOGLE", "OPENAI"}:
             logger.warning("[LLM] Ignore external fallback=%s under ENV=INT", explicit)
+    elif (os.getenv("ENV") or "").strip().upper() == "EXT":
+        if explicit in {"OLLAMA"}:
+            return explicit
+        if explicit in {"GOOGLE", "OPENAI", "LM_STUDIO"}:
+            logger.warning("[LLM] Ignore fallback=%s under ENV=EXT", explicit)
     else:
         if explicit in {"GOOGLE", "OPENAI", "OLLAMA", "LM_STUDIO"}:
             return explicit
-    # Prefer internal providers by default.
+    # Prefer internal providers by default, but EXT keeps OLLAMA only.
+    if (os.getenv("ENV") or "").strip().upper() == "EXT":
+        return "OLLAMA"
     if os.getenv("LM_STUDIO_BASE_URL"):
         return "LM_STUDIO"
     if os.getenv("OLLAMA_BASE_URL"):
@@ -191,6 +198,9 @@ def _looks_non_chat_openai_model(model: str) -> bool:
 
 def _normalize_provider_for_env(provider: str) -> str:
     p = (provider or "").strip().upper()
+    if (os.getenv("ENV") or "").strip().upper() == "EXT" and p == "LM_STUDIO":
+        logger.warning("[LLM] ENV=EXT remap provider %s -> OLLAMA", p)
+        return "OLLAMA"
     if not _is_int_env():
         return p
     if p in {"GOOGLE", "OPENAI"}:
@@ -287,7 +297,10 @@ def log_llm_config():
 
 def _make_ollama(temperature: float | None, timeout: int | None, model_name: str | None = None):
     model = model_name or os.getenv("OLLAMA_MODEL", "mistral_small_3_1_2503:latest")
-    base_url = os.getenv("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
+    if _is_int_env():
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://192.168.0.137:11434")
+    else:
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://mpcai.mpc.mil.tw:11434")
 
     t = _resolve_temperature("OLLAMA_TEMPERATURE", temperature)
     to = _resolve_timeout("OLLAMA_TIMEOUT", timeout)

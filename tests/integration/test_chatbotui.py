@@ -53,6 +53,37 @@ def test_chatbotui_page_renders(monkeypatch):
     assert "chatbotui/index.html" in response.content.decode("utf-8")
 
 
+def test_chatbotui_ext_only_uses_ollama(monkeypatch):
+    monkeypatch.setenv("ENV", "EXT")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://192.168.0.137:11434")
+    monkeypatch.setattr("webapps.portal.decorators.can_access", lambda user, node: True)
+    monkeypatch.setattr(
+        "webapps.chatbotui.views.render",
+        lambda request, template_name, context: types.SimpleNamespace(
+            status_code=200,
+            content=f"{context['default_model_type']}|{','.join(context['allowed_model_types'])}".encode("utf-8"),
+        ),
+    )
+
+    response = views.index(_request("GET", "/chatbotui/"))
+    text = response.content.decode("utf-8")
+    assert text == "OLLAMA|OLLAMA"
+
+    called = {"hit": False}
+
+    def fail_if_called(*args, **kwargs):
+        called["hit"] = True
+        raise AssertionError("requests.get should not be called under ENV=EXT")
+
+    monkeypatch.setattr("webapps.chatbotui.views.requests.get", fail_if_called)
+    response = views.api_lm_studio_models(_request("GET", "/chatbotui/lmstudio/models/"))
+    payload = json.loads(response.content.decode("utf-8"))
+    assert response.status_code == 200
+    assert payload["ok"] is True
+    assert payload["models"] == []
+    assert called["hit"] is False
+
+
 def test_conversation_list_returns_rows(monkeypatch):
     monkeypatch.setattr("webapps.portal.decorators.can_access", lambda user, node: True)
     monkeypatch.setattr(
