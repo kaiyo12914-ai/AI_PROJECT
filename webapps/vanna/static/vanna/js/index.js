@@ -361,6 +361,8 @@ function selectedDataSourceCode() {
   return selectEl ? selectEl.value : "legacy_vanna_chroma";
 }
 
+const TRAINING_DATASET_CODE = "__nl2sql_training_catalog__";
+
 function openTrainingDatasetManager() {
   const chatMessages = document.getElementById("chatMessages");
   const row = document.createElement("div");
@@ -375,7 +377,7 @@ function openTrainingDatasetManager() {
 }
 
 function loadTrainingDataset(bubbleEl, allItems = false) {
-  const code = encodeURIComponent(selectedDataSourceCode());
+  const code = encodeURIComponent(TRAINING_DATASET_CODE);
   const allQuery = allItems ? "&all=true" : "";
   bubbleEl.dataset.allItems = allItems ? "true" : "false";
   fetch(apiurl(`/nl2sql/api/vanna/training-dataset/?code=${code}${allQuery}`), {
@@ -398,6 +400,18 @@ function loadTrainingDataset(bubbleEl, allItems = false) {
     bubbleEl.innerHTML = `<div style="color:#ef4444;">載入失敗: ${escapeHtml(err.message)}</div>`;
     addLog(`訓練資料集載入失敗: ${err.message}`, "error");
   });
+}
+
+function findTrainingItemById(result, type, id) {
+  if (!result) return null;
+  const collections = {
+    ddl: result.schema_objects || [],
+    documentation: result.documentation_items || [],
+    sql: result.training_examples || [],
+    failed: result.failed_queries || []
+  };
+  const items = collections[type] || [];
+  return items.find(item => item.id === id) || null;
 }
 
 function renderTrainingDatasetManager(bubbleEl, result, allItems = false) {
@@ -705,7 +719,7 @@ function submitTrainingData(btn) {
       "X-CSRFToken": getCookie("csrftoken")
     },
     body: JSON.stringify({
-      code: selectedDataSourceCode(),
+      code: formEl.dataset.dataSourceCode || bubbleEl.trainingDatasetResult?.primary_data_source_code || TRAINING_DATASET_CODE,
       ...payload
     })
   })
@@ -761,12 +775,13 @@ function editTrainingItem(btn, type, id) {
   }
 
   if (type === "ddl") {
-    const item = result.schema_objects.find(x => x.id === id);
+    const item = findTrainingItemById(result, type, id);
     if (item) {
       formEl.querySelector("#trainingDdlInput").value = item.ddl || "";
+      formEl.dataset.dataSourceCode = item.data_source_code || result.primary_data_source_code || "";
     }
   } else if (type === "documentation") {
-    const item = result.documentation_items.find(x => x.id === id);
+    const item = findTrainingItemById(result, type, id);
     if (item) {
       const lines = (item.documentation || "").split("\n");
       let title = "";
@@ -777,15 +792,17 @@ function editTrainingItem(btn, type, id) {
       }
       formEl.querySelector("#trainingDocTitleInput").value = title;
       formEl.querySelector("#trainingDocInput").value = documentation;
+      formEl.dataset.dataSourceCode = item.data_source_code || result.primary_data_source_code || "";
     }
   } else if (type === "sql") {
-    const item = result.training_examples.find(x => x.id === id);
+    const item = findTrainingItemById(result, type, id);
     if (item) {
       formEl.querySelector("#trainingQuestionInput").value = item.question || "";
       formEl.querySelector("#trainingSqlInput").value = item.sql || "";
+      formEl.dataset.dataSourceCode = item.data_source_code || result.primary_data_source_code || "";
     }
   } else if (type === "failed") {
-    const item = result.failed_queries.find(x => x.id === id);
+    const item = findTrainingItemById(result, type, id);
     if (item) {
       formEl.querySelector("#failedQuestionInput").value = item.question || "";
       formEl.querySelector("#failedSqlInput").value = item.failed_sql || "";
@@ -793,6 +810,7 @@ function editTrainingItem(btn, type, id) {
       formEl.querySelector("#failedAnalysisInput").value = item.analysis || "";
       formEl.querySelector("#failedActionInput").value = item.action_taken || "";
       formEl.querySelector("#failedStatusSelect").value = item.status || "pending";
+      formEl.dataset.dataSourceCode = item.data_source_code || result.primary_data_source_code || "";
     }
   }
 
@@ -802,6 +820,7 @@ function editTrainingItem(btn, type, id) {
 function resetTrainingForm(formEl) {
   delete formEl.dataset.editingId;
   delete formEl.dataset.editingType;
+  delete formEl.dataset.dataSourceCode;
   
   const submitBtn = formEl.querySelector(".btn-update-action, button.btn-primary");
   if (submitBtn) {
@@ -844,7 +863,8 @@ function deleteTrainingItem(btn, type, id) {
       "X-CSRFToken": getCookie("csrftoken")
     },
     body: JSON.stringify({
-      code: selectedDataSourceCode(),
+      code: bubbleEl.trainingDatasetResult?.primary_data_source_code || TRAINING_DATASET_CODE,
+      data_source_code: (findTrainingItemById(bubbleEl.trainingDatasetResult, type, id) || {}).data_source_code || "",
       training_type: type,
       id: id
     })

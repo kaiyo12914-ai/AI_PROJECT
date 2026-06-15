@@ -144,6 +144,55 @@ def _resolve_data_source(data: dict[str, Any]) -> DataSource:
     )
 
 
+TRAINING_DATASET_AGGREGATE_CODE = "__nl2sql_training_catalog__"
+TRAINING_DATASET_SOURCE_CODES = ("nl2sql_oracle_schema", "legacy_vanna_chroma")
+TRAINING_DATASET_PRIMARY_CODE = "nl2sql_oracle_schema"
+
+
+def _training_dataset_sources(data: dict[str, Any]) -> tuple[list[DataSource], DataSource, bool]:
+    def _get_first(k: str) -> Any:
+        val = data.get(k)
+        if isinstance(val, (list, tuple)) and val:
+            return val[0]
+        return val
+
+    requested_code = str(_get_first("code") or _get_first("data_source") or "").strip()
+    if requested_code in ("", TRAINING_DATASET_AGGREGATE_CODE):
+        sources = list(DataSource.objects.filter(code__in=TRAINING_DATASET_SOURCE_CODES).order_by("code"))
+        if not sources:
+            raise ValueError("No training dataset data sources found.")
+        primary = next((ds for ds in sources if ds.code == TRAINING_DATASET_PRIMARY_CODE), sources[0])
+        return sources, primary, True
+
+    source = _resolve_data_source(data)
+    return [source], source, False
+
+
+def _training_dataset_target_source(
+    data: dict[str, Any],
+    sources: list[DataSource],
+    primary_source: DataSource,
+) -> DataSource:
+    def _get_first(k: str) -> Any:
+        val = data.get(k)
+        if isinstance(val, (list, tuple)) and val:
+            return val[0]
+        return val
+
+    item_source_code = str(_get_first("data_source_code") or _get_first("source_data_source_code") or "").strip()
+    if item_source_code:
+        for source in sources:
+            if source.code == item_source_code:
+                return source
+        return DataSource.objects.get(code=item_source_code)
+
+    requested_code = str(_get_first("code") or _get_first("data_source") or "").strip()
+    if requested_code in ("", TRAINING_DATASET_AGGREGATE_CODE):
+        return primary_source
+
+    return _resolve_data_source(data)
+
+
 def _parse_ddl_object(ddl_text: str, default_schema: str) -> tuple[str, str, str]:
     patterns = [
         (r"(?is)\bCREATE\s+MATERIALIZED\s+VIEW\s+([\"A-Za-z0-9_.$@]+)", "materialized_view"),
@@ -502,28 +551,29 @@ def training_sync_api(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status=500)
 
 
-def _training_dataset_payload(data_source: DataSource, all_items: bool = False) -> dict[str, Any]:
-    schema_qs = SchemaObject.objects.filter(data_source=data_source)
-    examples_qs = TrainingExample.objects.filter(data_source=data_source)
-    sync_qs = VannaTrainingSync.objects.filter(data_source=data_source)
+def _training_dataset_payload(data_sources: list[DataSource], primary_source: DataSource, all_items: bool = False) -> dict[str, Any]:
+    source_codes = [source.code for source in data_sources]
+    schema_qs = SchemaObject.objects.filter(data_source__in=data_sources).select_related("data_source")
+    examples_qs = TrainingExample.objects.filter(data_source__in=data_sources).select_related("data_source")
+    sync_qs = VannaTrainingSync.objects.filter(data_source__in=data_sources).select_related("data_source")
     doc_qs = SchemaEmbedding.objects.filter(
-        schema_object__data_source=data_source,
+        schema_object__data_source__in=data_sources,
         chunk_type="documentation",
-    ).select_related("schema_object")
+    ).select_related("schema_object", "schema_object__data_source")
     ddl_embedding_qs = SchemaEmbedding.objects.filter(
-        schema_object__data_source=data_source,
+        schema_object__data_source__in=data_sources,
         chunk_type="ddl",
-    ).select_related("schema_object")
+    ).select_related("schema_object", "schema_object__data_source")
     ddl_embedding_map = {
         item.schema_object_id: item.chunk_text
         for item in ddl_embedding_qs.order_by("created_at")
     }
 
-    schema_list_qs = schema_qs.order_by("schema_name", "object_name")
+    schema_list_qs = schema_qs.order_by("data_source__code", "schema_name", "object_name")
     examples_list_qs = examples_qs.order_by("-updated_at")
     sync_list_qs = sync_qs.order_by("-updated_at")
     doc_list_qs = doc_qs.order_by("-created_at")
-    failed_qs = FailedQueryRecord.objects.filter(data_source_code=data_source.code)
+    failed_qs = FailedQueryRecord.objects.filter(data_source_code__in=source_codes)
     failed_list_qs = failed_qs.order_by("-created_at")
 
     if not all_items:
@@ -536,6 +586,8 @@ def _training_dataset_payload(data_source: DataSource, all_items: bool = False) 
     schema_items = [
         {
             "id": obj.id,
+            "data_source_code": obj.data_source.code,
+            "data_source_name": obj.data_source.name,
             "schema": obj.schema_name,
             "name": obj.object_name,
             "type": obj.object_type,
@@ -550,6 +602,7 @@ def _training_dataset_payload(data_source: DataSource, all_items: bool = False) 
     example_items = [
         {
             "id": ex.id,
+            "data_source_code": ex.data_source.code,
             "question": ex.question,
             "sql": ex.sql_text,
             "dialect": ex.dialect,
@@ -562,6 +615,7 @@ def _training_dataset_payload(data_source: DataSource, all_items: bool = False) 
     sync_items = [
         {
             "id": item.id,
+            "data_source_code": item.data_source.code,
             "type": item.sync_type,
             "status": item.sync_status,
             "training_id": item.vanna_training_id,
@@ -573,6 +627,7 @@ def _training_dataset_payload(data_source: DataSource, all_items: bool = False) 
     documentation_items = [
         {
             "id": item.id,
+            "data_source_code": item.schema_object.data_source.code,
             "schema": item.schema_object.schema_name,
             "name": item.schema_object.object_name,
             "documentation": item.chunk_text,
@@ -583,6 +638,7 @@ def _training_dataset_payload(data_source: DataSource, all_items: bool = False) 
     failed_items = [
         {
             "id": item.id,
+            "data_source_code": item.data_source_code,
             "query_log_id": item.query_log_id,
             "question": item.question,
             "failed_sql": item.failed_sql,
@@ -595,14 +651,26 @@ def _training_dataset_payload(data_source: DataSource, all_items: bool = False) 
         }
         for item in failed_list_qs
     ]
+    display_sources = [primary_source] + [source for source in data_sources if source.code != primary_source.code]
     return {
         "data_source": {
-            "code": data_source.code,
-            "name": data_source.name,
-            "db_type": data_source.db_type,
-            "db_profile": data_source.db_profile,
-            "schema": data_source.default_schema,
+            "code": TRAINING_DATASET_AGGREGATE_CODE if len(data_sources) > 1 else primary_source.code,
+            "name": " + ".join(source.name for source in display_sources),
+            "db_type": primary_source.db_type,
+            "db_profile": " + ".join(dict.fromkeys(source.db_profile for source in display_sources if source.db_profile)),
+            "schema": "ALL" if len(data_sources) > 1 else primary_source.default_schema,
         },
+        "primary_data_source_code": primary_source.code,
+        "data_sources": [
+            {
+                "code": source.code,
+                "name": source.name,
+                "db_type": source.db_type,
+                "db_profile": source.db_profile,
+                "schema": source.default_schema,
+            }
+            for source in data_sources
+        ],
         "summary": {
             "schema_objects": schema_qs.count(),
             "enabled_schema_objects": schema_qs.filter(is_enabled=True).count(),
@@ -632,13 +700,13 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
     body = _json_body(request) if request.method in ("POST", "PUT", "DELETE") else {}
     params = request.GET if request.method == "GET" else body
     try:
-        data_source = _resolve_data_source(dict(params))
+        data_sources, primary_source, _aggregate_mode = _training_dataset_sources(dict(params))
     except Exception as exc:
         return JsonResponse({"ok": False, "error": f"Failed to resolve data source: {exc}"}, status=400)
 
     if request.method == "GET":
         all_items = str(request.GET.get("all") or "").lower() == "true"
-        return JsonResponse({"ok": True, "result": _training_dataset_payload(data_source, all_items=all_items)}, json_dumps_params={"default": str})
+        return JsonResponse({"ok": True, "result": _training_dataset_payload(data_sources, primary_source, all_items=all_items)}, json_dumps_params={"default": str})
 
     if request.method == "DELETE":
         training_type = str(body.get("training_type") or body.get("type") or "").strip().lower()
@@ -650,8 +718,9 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
 
         if training_type == "ddl":
             try:
-                obj = SchemaObject.objects.get(id=item_id, data_source=data_source)
-                VannaTrainingSync.objects.filter(data_source=data_source, sync_type="ddl", source_object_id=obj.id).delete()
+                item_source = _training_dataset_target_source(body, data_sources, primary_source)
+                obj = SchemaObject.objects.get(id=item_id, data_source=item_source)
+                VannaTrainingSync.objects.filter(data_source=item_source, sync_type="ddl", source_object_id=obj.id).delete()
                 obj.delete()
                 return JsonResponse({"ok": True})
             except SchemaObject.DoesNotExist:
@@ -659,10 +728,11 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
 
         elif training_type == "documentation":
             try:
-                emb = SchemaEmbedding.objects.get(id=item_id, chunk_type="documentation", schema_object__data_source=data_source)
+                item_source = _training_dataset_target_source(body, data_sources, primary_source)
+                emb = SchemaEmbedding.objects.get(id=item_id, chunk_type="documentation", schema_object__data_source=item_source)
                 parent_obj = emb.schema_object
                 content_hash = emb.content_hash
-                VannaTrainingSync.objects.filter(data_source=data_source, sync_type="documentation", content_hash=content_hash).delete()
+                VannaTrainingSync.objects.filter(data_source=item_source, sync_type="documentation", content_hash=content_hash).delete()
                 emb.delete()
                 if parent_obj.object_name.startswith("VANNA_DOCUMENTATION_") and not parent_obj.embeddings.exists():
                     parent_obj.delete()
@@ -672,8 +742,9 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
 
         elif training_type == "sql":
             try:
-                ex = TrainingExample.objects.get(id=item_id, data_source=data_source)
-                VannaTrainingSync.objects.filter(data_source=data_source, sync_type="example", source_object_id=ex.id).delete()
+                item_source = _training_dataset_target_source(body, data_sources, primary_source)
+                ex = TrainingExample.objects.get(id=item_id, data_source=item_source)
+                VannaTrainingSync.objects.filter(data_source=item_source, sync_type="example", source_object_id=ex.id).delete()
                 ex.delete()
                 return JsonResponse({"ok": True})
             except TrainingExample.DoesNotExist:
@@ -681,7 +752,8 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
 
         elif training_type == "failed":
             try:
-                item = FailedQueryRecord.objects.get(id=item_id, data_source_code=data_source.code)
+                item_source = _training_dataset_target_source(body, data_sources, primary_source)
+                item = FailedQueryRecord.objects.get(id=item_id, data_source_code=item_source.code)
                 item.delete()
                 return JsonResponse({"ok": True})
             except FailedQueryRecord.DoesNotExist:
@@ -700,8 +772,9 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
             if not ddl_text:
                 return JsonResponse({"ok": False, "error": "ddl is required"}, status=400)
             try:
-                obj = SchemaObject.objects.get(id=item_id, data_source=data_source)
-                schema_name, object_name, object_type = _parse_ddl_object(ddl_text, data_source.default_schema)
+                item_source = _training_dataset_target_source(body, data_sources, primary_source)
+                obj = SchemaObject.objects.get(id=item_id, data_source=item_source)
+                schema_name, object_name, object_type = _parse_ddl_object(ddl_text, item_source.default_schema)
                 obj.schema_name = schema_name
                 obj.object_name = object_name
                 obj.object_type = object_type
@@ -719,7 +792,7 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
                         "embedding_model": "",
                     }
                 )
-                VannaTrainingSync.objects.filter(data_source=data_source, sync_type="ddl", source_object_id=obj.id).delete()
+                VannaTrainingSync.objects.filter(data_source=item_source, sync_type="ddl", source_object_id=obj.id).delete()
                 return JsonResponse({"ok": True, "result": {"id": obj.id, "schema": obj.schema_name, "name": obj.object_name}})
             except SchemaObject.DoesNotExist:
                 return JsonResponse({"ok": False, "error": f"SchemaObject with id {item_id} not found"}, status=404)
@@ -733,9 +806,10 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
                 return JsonResponse({"ok": False, "error": "documentation is required"}, status=400)
             content = f"{title}\n{documentation}".strip() if title else documentation
             try:
-                emb = SchemaEmbedding.objects.get(id=item_id, chunk_type="documentation", schema_object__data_source=data_source)
+                item_source = _training_dataset_target_source(body, data_sources, primary_source)
+                emb = SchemaEmbedding.objects.get(id=item_id, chunk_type="documentation", schema_object__data_source=item_source)
                 parent_obj = emb.schema_object
-                VannaTrainingSync.objects.filter(data_source=data_source, sync_type="documentation", content_hash=emb.content_hash).delete()
+                VannaTrainingSync.objects.filter(data_source=item_source, sync_type="documentation", content_hash=emb.content_hash).delete()
 
                 emb.chunk_text = content
                 emb.content_hash = _content_hash(content)
@@ -762,7 +836,8 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
                 return JsonResponse({"ok": False, "error": f"SQL blocked by SQL Guard: {guard_err}"}, status=403)
 
             try:
-                ex = TrainingExample.objects.get(id=item_id, data_source=data_source)
+                item_source = _training_dataset_target_source(body, data_sources, primary_source)
+                ex = TrainingExample.objects.get(id=item_id, data_source=item_source)
                 ex.question = question
                 ex.sql_text = sql_text
                 if isinstance(body.get("tags"), list):
@@ -772,7 +847,7 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
                 content_hash = _content_hash(f"{question}\n{sql_text}")
                 ExampleEmbedding.objects.update_or_create(
                     training_example=ex,
-                    data_source=data_source,
+                    data_source=item_source,
                     defaults={
                         "question_text": question,
                         "sql_text": sql_text,
@@ -781,7 +856,7 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
                         "embedding_model": "",
                     }
                 )
-                VannaTrainingSync.objects.filter(data_source=data_source, sync_type="example", source_object_id=ex.id).delete()
+                VannaTrainingSync.objects.filter(data_source=item_source, sync_type="example", source_object_id=ex.id).delete()
                 return JsonResponse({"ok": True, "result": {"id": ex.id, "question": ex.question, "sql": ex.sql_text}})
             except TrainingExample.DoesNotExist:
                 return JsonResponse({"ok": False, "error": f"TrainingExample with id {item_id} not found"}, status=404)
@@ -791,7 +866,8 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
             action_taken = str(body.get("action_taken") or "").strip()
             status = str(body.get("status") or "pending").strip()
             try:
-                item = FailedQueryRecord.objects.get(id=item_id, data_source_code=data_source.code)
+                item_source = _training_dataset_target_source(body, data_sources, primary_source)
+                item = FailedQueryRecord.objects.get(id=item_id, data_source_code=item_source.code)
                 item.analysis = analysis
                 item.action_taken = action_taken
                 item.status = status
@@ -823,11 +899,12 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
         if not ddl_text:
             return JsonResponse({"ok": False, "error": "ddl is required"}, status=400)
         try:
-            schema_name, object_name, object_type = _parse_ddl_object(ddl_text, data_source.default_schema)
+            item_source = _training_dataset_target_source(body, data_sources, primary_source)
+            schema_name, object_name, object_type = _parse_ddl_object(ddl_text, item_source.default_schema)
         except ValueError as exc:
             return JsonResponse({"ok": False, "error": str(exc)}, status=400)
         schema_obj, _ = SchemaObject.objects.update_or_create(
-            data_source=data_source,
+            data_source=item_source,
             schema_name=schema_name,
             object_name=object_name,
             defaults={
@@ -866,9 +943,10 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
             return JsonResponse({"ok": False, "error": "documentation is required"}, status=400)
         content = f"{title}\n{documentation}".strip() if title else documentation
         object_name = _documentation_object_name(content)
+        item_source = _training_dataset_target_source(body, data_sources, primary_source)
         doc_obj, _ = SchemaObject.objects.update_or_create(
-            data_source=data_source,
-            schema_name=data_source.default_schema or "LEGACY",
+            data_source=item_source,
+            schema_name=item_source.default_schema or "LEGACY",
             object_name=object_name,
             defaults={
                 "object_type": "view",
@@ -912,11 +990,12 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"ok": False, "error": f"SQL blocked by SQL Guard: {guard_err}"}, status=403)
 
     created_by = _user_id(request)
+    item_source = _training_dataset_target_source(body, data_sources, primary_source)
     example = TrainingExample.objects.create(
-        data_source=data_source,
+        data_source=item_source,
         question=question,
         sql_text=sql_text,
-        dialect="oracle" if data_source.db_type == "oracle" else "postgresql",
+        dialect="oracle" if item_source.db_type == "oracle" else "postgresql",
         review_status="approved",
         created_by=created_by,
         tags_json=body.get("tags") if isinstance(body.get("tags"), list) else [],
