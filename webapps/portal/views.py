@@ -515,7 +515,10 @@ def _fetch_oracle_acl_groups(user_id: str) -> Tuple[List[Dict[str, str]], str]:
     rows: List[Any] = []
     err = ""
     try:
-        rows = db_query_all("oracle", sql, {"login_user": user_id}) or []
+        profile = str(
+            getattr(settings, "ORACLE_ACL_DB_PROFILE", "") or os.getenv("ORACLE_ACL_DB_PROFILE", "") or "ERP_MPC"
+        ).strip()
+        rows = db_query_all("oracle", sql, {"login_user": user_id}, profile=profile) or []
     except Exception as e:
         return [], str(e)
 

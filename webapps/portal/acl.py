@@ -66,6 +66,12 @@ def _is_ext_env() -> bool:
     return env_name == "EXT"
 
 
+def _oracle_acl_db_profile() -> str:
+    return str(
+        getattr(settings, "ORACLE_ACL_DB_PROFILE", "") or os.getenv("ORACLE_ACL_DB_PROFILE", "") or "ERP_MPC"
+    ).strip()
+
+
 def _mock_db_json_path() -> str:
     p = str(getattr(settings, "MOCK_DB_JSON", "") or "").strip()
     if p:
@@ -234,7 +240,7 @@ def _get_user_groups_from_oracle_uncached(user) -> Set[str]:
 
     def _query_groups(col: str) -> Set[str]:
         sql = _oracle_acl_sql(table, col, group_col)
-        rows = db_query_all("oracle", sql, {"login_user": username}) or []
+        rows = db_query_all("oracle", sql, {"login_user": username}, profile=_oracle_acl_db_profile()) or []
         return _rows_to_group_set(rows)
 
     # ✅ soft timeout + negative cache：避免 Oracle 慢/掛導致 request 卡死

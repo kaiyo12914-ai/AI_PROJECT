@@ -103,6 +103,7 @@ class TestLoginUserOrgEnv(TestCase):
                 # Check that the username passed to the SQL bind parameters is stripped
                 bind_params = mock_db_query.call_args[0][2]
                 self.assertEqual(bind_params.get("login_user"), "H121356578")
+                self.assertEqual(mock_db_query.call_args.kwargs.get("profile"), "ERP_MPC")
 
         # 4. Test that whoami API returns acl debug info
         from webapps.portal.views import whoami
@@ -137,6 +138,7 @@ class TestLoginUserOrgEnv(TestCase):
                     mock_db_query.assert_called_once()
                     bind_params = mock_db_query.call_args[0][2]
                     self.assertEqual(bind_params.get("login_user"), "H121356578")
+                    self.assertEqual(mock_db_query.call_args.kwargs.get("profile"), "ERP_MPC")
 
     def test_oracle_acl_falls_back_to_username_column_when_user_id_has_no_groups(self):
         from django.contrib.auth.models import User
@@ -144,7 +146,8 @@ class TestLoginUserOrgEnv(TestCase):
 
         user = User(username="H121356578")
 
-        def fake_query(_profile, sql, params):
+        def fake_query(_profile, sql, params, *, profile=""):
+            self.assertEqual(profile, "ERP_MPC")
             self.assertEqual(params.get("login_user"), "H121356578")
             if "USER_ID" in sql:
                 return []
