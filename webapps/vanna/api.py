@@ -289,7 +289,15 @@ def _schema_search_payload(data_source: DataSource, query: str, limit: int = 20)
             | Q(object_name__icontains=clean_query)
             | Q(description__icontains=clean_query)
             | Q(ddl_text__icontains=clean_query)
+            | Q(embeddings__chunk_type="ddl", embeddings__chunk_text__icontains=clean_query)
         )
+    ddl_embeddings = {
+        emb.schema_object_id: emb.chunk_text
+        for emb in SchemaEmbedding.objects.filter(
+            schema_object__data_source=data_source,
+            chunk_type="ddl",
+        ).select_related("schema_object")
+    }
     items = [
         {
             "id": obj.id,
@@ -299,10 +307,10 @@ def _schema_search_payload(data_source: DataSource, query: str, limit: int = 20)
             "description": obj.description,
             "columns": obj.columns_json or [],
             "column_count": len(obj.columns_json or []),
-            "has_ddl": bool(obj.ddl_text),
+            "has_ddl": bool(obj.ddl_text or ddl_embeddings.get(obj.id, "")),
             "updated_at": obj.updated_at,
         }
-        for obj in schema_qs.order_by("schema_name", "object_name")[:max_items]
+        for obj in schema_qs.distinct().order_by("schema_name", "object_name")[:max_items]
     ]
     return {
         "data_source": data_source.code,
@@ -502,6 +510,14 @@ def _training_dataset_payload(data_source: DataSource, all_items: bool = False) 
         schema_object__data_source=data_source,
         chunk_type="documentation",
     ).select_related("schema_object")
+    ddl_embedding_qs = SchemaEmbedding.objects.filter(
+        schema_object__data_source=data_source,
+        chunk_type="ddl",
+    ).select_related("schema_object")
+    ddl_embedding_map = {
+        item.schema_object_id: item.chunk_text
+        for item in ddl_embedding_qs.order_by("created_at")
+    }
 
     schema_list_qs = schema_qs.order_by("schema_name", "object_name")
     examples_list_qs = examples_qs.order_by("-updated_at")
@@ -526,7 +542,7 @@ def _training_dataset_payload(data_source: DataSource, all_items: bool = False) 
             "enabled": obj.is_enabled,
             "columns": len(obj.columns_json or []),
             "description": obj.description,
-            "ddl": obj.ddl_text,
+            "ddl": obj.ddl_text or ddl_embedding_map.get(obj.id, ""),
             "updated_at": obj.updated_at,
         }
         for obj in schema_list_qs
@@ -595,7 +611,7 @@ def _training_dataset_payload(data_source: DataSource, all_items: bool = False) 
             "vanna_sync_records": sync_qs.count(),
             "synced_records": sync_qs.filter(sync_status="synced").count(),
             "failed_records": sync_qs.filter(sync_status="failed").count(),
-            "ddl_items": schema_qs.exclude(ddl_text="").count(),
+            "ddl_items": ddl_embedding_qs.values("schema_object_id").distinct().count(),
             "documentation_items": doc_qs.count(),
         },
         "schema_objects": schema_items,
