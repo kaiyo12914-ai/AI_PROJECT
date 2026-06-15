@@ -39,8 +39,8 @@ from webapps.vanna.models import DataSource, SchemaEmbedding, SchemaObject  # no
 
 
 DEFAULT_ORACLE_PROFILE = "ERP_MPC"
-DEFAULT_DATA_SOURCE_CODE = "nl2sql_oracle_schema"
-DEFAULT_DATA_SOURCE_NAME = "Oracle NL2SQL Schema"
+DEFAULT_DATA_SOURCE_CODE = "legacy_vanna_chroma"
+DEFAULT_DATA_SOURCE_NAME = "Oracle 預載訓練集"
 DEFAULT_TABLE_PREFIXES = ("CT_", "DT_")
 DEFAULT_OBJECT_TYPES = ("table", "view", "mview")
 DEFAULT_BATCH_SIZE = 32

@@ -71,10 +71,10 @@
   - 預設：`table,view,mview`
 - `--data-source-code`
   - NL2SQL `DataSource.code`
-  - 預設：`nl2sql_oracle_schema`
+  - 預設：`legacy_vanna_chroma`
 - `--data-source-name`
   - NL2SQL `DataSource.name`
-  - 預設：`Oracle NL2SQL Schema`
+  - 預設：`Oracle 預載訓練集`
 - `--limit`
   - 最多處理幾筆 TABLE
 - `--batch-size`
