@@ -5,19 +5,26 @@ from django.core.management.base import BaseCommand, CommandError
 from nl2sql_sync_oracle_schema import build_arg_parser, main
 
 
+_ARG_PARSER = build_arg_parser()
+_ARG_DESTS = {
+    action.dest
+    for action in _ARG_PARSER._actions
+    if action.option_strings and action.dest != "help"
+}
+
+
 class Command(BaseCommand):
     help = "Sync Oracle CT_*/DT_* tables/views/materialized views into nl2sql_schema_object and nl2sql_schema_embedding."
 
     def add_arguments(self, parser):
-        temp_parser = build_arg_parser()
-        for action in temp_parser._actions:
+        for action in _ARG_PARSER._actions:
             if action.option_strings and action.dest != "help":
                 parser._add_action(action)
 
     def handle(self, *args, **options):
         argv: list[str] = []
         for key, value in options.items():
-            if key == "verbosity":
+            if key not in _ARG_DESTS:
                 continue
             if isinstance(value, bool):
                 if value:
