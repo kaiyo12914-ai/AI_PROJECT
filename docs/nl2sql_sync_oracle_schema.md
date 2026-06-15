@@ -7,15 +7,12 @@
 - `nl2sql_schema_object`
 - `nl2sql_schema_embedding`
 
-舊檔 `extract_oracle_ct_schema.py` 目前只是相容包裝，實際執行會轉進這支工具。
-
 ## 執行範例
 
-預設抓 `CT_` 與 `DT_`：
+抓 `CT_` 、`DT_`與 `FT_`：
 
 ```powershell
-.\venv\Scripts\python.exe .\nl2sql_sync_oracle_schema.py --oracle-profile ERP_MPC
-```
+.\venv\Scripts\python.exe .\manage.py nl2sql_sync_oracle_schema --oracle-profile ERP_MPC --table-prefixes CT_,DT_,FT_
 
 標準 Django 指令：
 
