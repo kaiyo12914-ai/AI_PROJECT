@@ -42,6 +42,26 @@ def load_env() -> None:
 load_env()
 
 
+# ============================================================
+# DB config policy
+# - Centralize DB parameters in .env_DB_factory; do not rely on scattered .env entries.
+# - Lookup priority:
+#   1) .env_DB_factory
+#   2) .env
+#   3) in-code defaults
+# - Supported key families:
+#   - Global keys: ORA_*, SQL_SERVER_*, SYBASE_*
+#   - DOC plant profile keys: DOC_DB_{PROFILE}_{KEY}
+#     PROFILE examples: MPC, 202, 205, 209, 401
+#   - NL2SQL / Vanna profile keys:
+#     CIM_DB_{PROFILE}_ORA_{KEY}
+#     ERP_DB_{PROFILE}_{KEY}
+#     DOC_DB_{PROFILE}_{KEY}
+# - ENV mode rules:
+#   - ENV=INT: always use real DB connections; ignore FORCE_MOCK_DB=1
+#   - ENV=EXT: PostgreSQL stays real; SQL Server / Oracle / Sybase use mock JSON
+#   - ENV=DEV/LOCAL/TEST/CI: FORCE_MOCK_DB=1 may enable mock mode
+# ============================================================
 def _env(k: str, d: str = "") -> str:
     md_overrides = _load_db_factory_md_overrides()
     md_val = (md_overrides.get((k or "").strip().upper()) or "").strip()
@@ -55,7 +75,7 @@ def _external_db_disabled(db_type: DBType) -> bool:
     ENV mode hard rules:
     - EXT: PostgreSQL is allowed; SQL Server / Oracle / Sybase must use mock JSON.
     - INT: always use external DB, never use mock JSON.
-    - Others: default to external DB.
+    - DEV/LOCAL/TEST/CI: mock behavior is controlled by FORCE_MOCK_DB and caller-specific logic.
     """
     env_mode = (os.getenv("ENV") or "").strip().upper()
     if env_mode == "EXT":
@@ -808,11 +828,11 @@ def _profile_env_prefixes_and_name(profile: str) -> tuple[tuple[str, ...], str]:
         return (("ERP_DB",), p[4:])
     if p.startswith("DOC_"):
         return (("DOC_DB",), p[4:])
-    
-    # DOC 子系統、自動化測試：優先順序（僅有 "DOC_DB"）
+
+    # DOC caller uses DOC_DB_{PROFILE}_{KEY} directly.
     if _is_doc_caller():
         prefixes = ("DOC_DB",)
-    # Vanna、其餘子系統與測試：預設優先順序為 ERP_DB -> CIM_DB -> DOC_DB
+    # Vanna / NL2SQL lookup order: ERP_DB -> CIM_DB -> DOC_DB
     else:
         prefixes = ("ERP_DB", "CIM_DB", "DOC_DB")
     return (prefixes, p)
@@ -980,6 +1000,7 @@ def _is_db_factory_key_supported(key: str) -> bool:
 def _load_db_factory_md_overrides() -> Dict[str, str]:
     """
     Parse DB-related key/value lines from .env_DB_factory.
+    This file is the first priority source for DB config overrides.
     Supports plain env-style lines anywhere in markdown:
       CIM_DB_MPC_ORA_HOST=10.29.136.198
       ERP_DB_MPC_HOST=10.29.136.198
