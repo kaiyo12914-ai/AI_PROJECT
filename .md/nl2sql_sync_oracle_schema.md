@@ -1,6 +1,6 @@
 # `nl2sql_sync_oracle_schema.py`
 
-用途：從 Oracle 自動擷取 `CT_*`、`DT_*` 這類 TABLE 的 DDL 與 COMMENT，建立 NL2SQL 所需的 schema 資料與向量。
+用途：從 Oracle 自動擷取 `CT_*`、`DT_*` 這類 TABLE / VIEW / MVIEW 的 DDL 與 COMMENT，建立 NL2SQL 所需的 schema 資料與向量。
 
 寫入目標：
 
@@ -13,6 +13,12 @@
 
 ```powershell
 .\venv\Scripts\python.exe .\manage.py nl2sql_sync_oracle_schema --oracle-profile ERP_MPC --table-prefixes CT_,DT_,FT_
+```
+
+只抓 `VIEW` 與 `MVIEW`：
+
+```powershell
+.\venv\Scripts\python.exe .\manage.py nl2sql_sync_oracle_schema --oracle-profile ERP_MPC --object-types view,mview
 ```
 
 標準 Django 指令：
@@ -57,8 +63,12 @@
 - `--oracle-owner`
   - 限定 Oracle owner/schema
 - `--table-prefixes`
-  - 表名前綴，支援逗號、空白、分號分隔
+  - 物件名稱前綴，支援逗號、空白、分號分隔
   - 預設：`CT_,DT_`
+- `--object-types`
+  - Oracle 物件類型
+  - 支援：`table`、`view`、`mview`
+  - 預設：`table,view,mview`
 - `--data-source-code`
   - NL2SQL `DataSource.code`
   - 預設：`nl2sql_oracle_schema`
@@ -78,7 +88,7 @@
 
 ## 寫入內容
 
-每個 Oracle TABLE 會建立或更新一筆 `nl2sql_schema_object`，內容包含：
+每個 Oracle 物件會建立或更新一筆 `nl2sql_schema_object`，內容包含：
 
 - `schema_name`
 - `object_name`

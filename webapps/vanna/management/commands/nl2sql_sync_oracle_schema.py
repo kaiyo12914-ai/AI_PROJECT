@@ -6,7 +6,7 @@ from nl2sql_sync_oracle_schema import build_arg_parser, main
 
 
 class Command(BaseCommand):
-    help = "Sync Oracle CT_*/DT_* tables into nl2sql_schema_object and nl2sql_schema_embedding."
+    help = "Sync Oracle CT_*/DT_* tables/views/materialized views into nl2sql_schema_object and nl2sql_schema_embedding."
 
     def add_arguments(self, parser):
         temp_parser = build_arg_parser()
