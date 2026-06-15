@@ -25,7 +25,17 @@
 
     <div class="loginbar">
       <span>目前使用者</span>
-      <span class="pill">{% if request.login_user_name %}{{ request.login_user_name }}{% else %}尚未登入{% endif %}</span>
+      <span class="pill">
+        {% if request.login_user_org and request.login_user_name %}
+          {{ request.login_user_org }} {{ request.login_user_name }}
+        {% elif request.login_user_name %}
+          {{ request.login_user_name }}
+        {% elif request.login_user_org %}
+          {{ request.login_user_org }}
+        {% else %}
+          尚未登入
+        {% endif %}
+      </span>
     </div>
 
     <div class="menu {% if card_variant == 'b' %}menu--b{% else %}menu--a{% endif %}">
