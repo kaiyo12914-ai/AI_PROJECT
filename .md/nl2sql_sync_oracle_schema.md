@@ -9,10 +9,11 @@
 
 ## 執行範例
 
-抓 `CT_` 、`DT_`與 `FT_`：
+抓 `CT_`、`DT_` 與 `FT_`：
 
 ```powershell
 .\venv\Scripts\python.exe .\manage.py nl2sql_sync_oracle_schema --oracle-profile ERP_MPC --table-prefixes CT_,DT_,FT_
+```
 
 標準 Django 指令：
 
