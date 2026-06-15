@@ -17,6 +17,12 @@
 .\venv\Scripts\python.exe .\nl2sql_sync_oracle_schema.py --oracle-profile ERP_MPC
 ```
 
+標準 Django 指令：
+
+```powershell
+.\venv\Scripts\python.exe .\manage.py nl2sql_sync_oracle_schema --oracle-profile ERP_MPC
+```
+
 只抓 `CT_`：
 
 ```powershell
@@ -39,6 +45,10 @@
 
 ```powershell
 .\venv\Scripts\python.exe .\nl2sql_sync_oracle_schema.py --skip-embeddings
+```
+
+```powershell
+.\venv\Scripts\python.exe .\manage.py nl2sql_sync_oracle_schema --skip-embeddings
 ```
 
 ## 參數
@@ -89,4 +99,3 @@
 
 - 這支工具使用專案內的 Django ORM 寫入 NL2SQL PostgreSQL tables，不需要另外指定 `PG_DSN`。
 - Oracle 連線仍走專案內 `webapps.database.db_factory.db_connect("oracle", profile=...)`。
-
