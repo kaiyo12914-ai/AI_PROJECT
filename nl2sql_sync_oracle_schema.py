@@ -85,13 +85,6 @@ WHERE owner = :owner
   AND table_name = :object_name
 """
 
-GET_ROW_ESTIMATE_MVIEW_SQL = """
-SELECT num_rows
-FROM all_mviews
-WHERE owner = :owner
-  AND mview_name = :object_name
-"""
-
 GET_COLUMN_COMMENTS_SQL = """
 SELECT c.column_name, c.data_type, c.nullable, c.column_id, cm.comments
 FROM all_tab_columns c
@@ -288,10 +281,6 @@ def _extract_oracle_schema(oracle_conn, owner: str, object_name: str, object_typ
         row_estimate = None
         if ddl_object_type == "TABLE":
             cur.execute(GET_ROW_ESTIMATE_TABLE_SQL, params)
-            row_estimate_row = cur.fetchone()
-            row_estimate = row_estimate_row[0] if row_estimate_row else None
-        elif ddl_object_type == "MATERIALIZED_VIEW":
-            cur.execute(GET_ROW_ESTIMATE_MVIEW_SQL, params)
             row_estimate_row = cur.fetchone()
             row_estimate = row_estimate_row[0] if row_estimate_row else None
 
