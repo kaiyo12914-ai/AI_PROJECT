@@ -48,8 +48,12 @@
       <div class="loginbar right">
         <span>歡迎：</span>
         <span class="pill">
-          {% if request.login_user_name %}
+          {% if request.login_user_org and request.login_user_name %}
+            {{ request.login_user_org }} {{ request.login_user_name }}
+          {% elif request.login_user_name %}
             {{ request.login_user_name }}
+          {% elif request.login_user_org %}
+            {{ request.login_user_org }}
           {% else %}
             使用者
           {% endif %}
