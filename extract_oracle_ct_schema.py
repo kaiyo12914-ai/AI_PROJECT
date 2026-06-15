@@ -1,9 +1,11 @@
-"""Export Oracle CT_* table DDL and column comments into PostgreSQL."""
+"""Export Oracle table DDL and column comments into PostgreSQL.
+
+Supports table-name prefixes such as CT_ or DT_.
+"""
 
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import os
 import sys
 from pathlib import Path
@@ -35,14 +37,6 @@ BEGIN
   DBMS_METADATA.SET_TRANSFORM_PARAM(DBMS_METADATA.SESSION_TRANSFORM, 'CONSTRAINTS', TRUE);
   DBMS_METADATA.SET_TRANSFORM_PARAM(DBMS_METADATA.SESSION_TRANSFORM, 'REF_CONSTRAINTS', TRUE);
 END;
-"""
-
-FETCH_TABLES_SQL = """
-SELECT owner, table_name
-FROM all_tables
-WHERE table_name LIKE :table_like ESCAPE '\\'
-  AND (:owner IS NULL OR owner = :owner)
-ORDER BY owner, table_name
 """
 
 GET_TABLE_DDL_SQL = """
@@ -151,19 +145,63 @@ def _ensure_target_table(cur, table_name: str) -> None:
     cur.execute(ddl)
 
 
-def _get_oracle_table_rows(oracle_conn, owner: str, table_prefix: str) -> list[dict[str, str]]:
+def _split_table_prefixes(prefix_value: Any, extra_prefixes: list[Any] | None = None) -> list[str]:
+    raw_values: list[str] = []
+    values: list[Any] = [prefix_value]
+    if extra_prefixes:
+        values.extend(extra_prefixes)
+
+    for source in values:
+        if not source:
+            continue
+        if isinstance(source, (list, tuple, set)):
+            items = list(source)
+        else:
+            items = str(source).replace(";", ",").replace(" ", ",").split(",")
+        for item in items:
+            item = _normalize_text(item).upper()
+            if item:
+                raw_values.append(item)
+
+    seen: set[str] = set()
+    prefixes: list[str] = []
+    for item in raw_values:
+        if item not in seen:
+            seen.add(item)
+            prefixes.append(item)
+    return prefixes or [DEFAULT_TABLE_PREFIX]
+
+
+def _get_oracle_table_rows(oracle_conn, owner: str, table_prefixes: list[str]) -> list[dict[str, str]]:
     owner = _normalize_text(owner).upper()
-    prefix = _normalize_text(table_prefix).upper() or DEFAULT_TABLE_PREFIX
-    like_pattern = prefix.replace("_", r"\_") + "%"
-    params = {"table_like": like_pattern}
+    prefixes = _split_table_prefixes(table_prefixes)
+    where_parts: list[str] = []
+    params: dict[str, Any] = {}
+    for idx, prefix in enumerate(prefixes):
+        param_name = f"table_like_{idx}"
+        where_parts.append(f"table_name LIKE :{param_name} ESCAPE '\\'")
+        params[param_name] = prefix.replace("_", r"\_") + "%"
+
     if owner:
         params["owner"] = owner
     else:
         params["owner"] = None
 
+    if where_parts:
+        table_filter_sql = "(" + " OR ".join(where_parts) + ")"
+    else:
+        table_filter_sql = "1 = 1"
+    fetch_sql = f"""
+SELECT owner, table_name
+FROM all_tables
+WHERE {table_filter_sql}
+  AND (:owner IS NULL OR owner = :owner)
+ORDER BY owner, table_name
+"""
+
     with oracle_conn.cursor() as cur:
         cur.execute(ORACLE_TRANSFORM_PLSQL)
-        cur.execute(FETCH_TABLES_SQL, params)
+        cur.execute(fetch_sql, params)
         rows = cur.fetchall() or []
 
     out: list[dict[str, str]] = []
@@ -262,11 +300,16 @@ def _upsert_pg_row(pg_conn, target_table: str, row: dict[str, Any], source_profi
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Export Oracle CT_* table DDL and column comments into PostgreSQL TACLE_SCHEMA.",
+        description="Export Oracle CT_*/DT_* table DDL and column comments into PostgreSQL TACLE_SCHEMA.",
     )
     parser.add_argument("--oracle-profile", default=DEFAULT_ORACLE_PROFILE, help="Oracle db profile used by db_factory.")
     parser.add_argument("--oracle-owner", default="", help="Optional Oracle owner/schema filter.")
-    parser.add_argument("--table-prefix", default=DEFAULT_TABLE_PREFIX, help="Oracle table name prefix filter.")
+    parser.add_argument("--table-prefix", default=DEFAULT_TABLE_PREFIX, help="Primary Oracle table name prefix filter.")
+    parser.add_argument(
+        "--table-prefixes",
+        default="",
+        help="Optional comma/space/semicolon separated Oracle table prefixes, e.g. CT_,DT_.",
+    )
     parser.add_argument("--pg-dsn", default="", help="PostgreSQL DSN. Falls back to env variables.")
     parser.add_argument("--pg-table-name", default=DEFAULT_PG_TABLE_NAME, help="Target PostgreSQL table name.")
     parser.add_argument("--limit", type=int, default=0, help="Optional limit on number of tables to process.")
@@ -280,6 +323,7 @@ def main(argv: list[str] | None = None) -> int:
     source_profile = _normalize_text(args.oracle_profile) or DEFAULT_ORACLE_PROFILE
     target_table = _normalize_text(args.pg_table_name) or DEFAULT_PG_TABLE_NAME
     pg_dsn = _normalize_text(args.pg_dsn) or _parse_dsn_from_env()
+    table_prefixes = _split_table_prefixes(args.table_prefix, [args.table_prefixes])
 
     if not pg_dsn and not args.dry_run:
         raise SystemExit("Missing PostgreSQL DSN. Set --pg-dsn or POSTGRES_DSN/PG_DSN/DATABASE_URL/PGHOST envs.")
@@ -287,7 +331,7 @@ def main(argv: list[str] | None = None) -> int:
     oracle_conn = db_connect("oracle", profile=source_profile)
     pg_conn = None
     try:
-        tables = _get_oracle_table_rows(oracle_conn, oracle_owner, args.table_prefix)
+        tables = _get_oracle_table_rows(oracle_conn, oracle_owner, table_prefixes)
         if args.limit and args.limit > 0:
             tables = tables[: args.limit]
 
