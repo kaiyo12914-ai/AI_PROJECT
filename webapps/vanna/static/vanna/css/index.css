@@ -487,13 +487,13 @@ table.result-table tr:hover {
   display: flex;
   flex-wrap: wrap;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin: 8px 0 12px;
 }
 
 .metric-card {
-  flex: 1 1 calc(16.66% - 8px);
+  flex: 1 1 calc(25% - 8px);
   min-width: 80px;
   padding: 8px 10px;
   border-radius: 10px;

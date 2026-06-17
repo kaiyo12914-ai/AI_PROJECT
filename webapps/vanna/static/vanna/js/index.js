@@ -483,11 +483,9 @@ function renderTrainingDatasetManager(bubbleEl, result, allItems = false) {
     </div>
 
     <div class="metric-grid">
-      <div class="metric-card"><span>Schema</span><strong>${summary.schema_objects || 0}</strong></div>
       <div class="metric-card"><span>DDL</span><strong>${summary.ddl_items || 0}</strong></div>
       <div class="metric-card"><span>Documentation</span><strong>${summary.documentation_items || 0}</strong></div>
       <div class="metric-card"><span>SQL Examples</span><strong>${summary.approved_examples || 0}</strong></div>
-      <div class="metric-card"><span>Vanna Synced</span><strong>${summary.synced_records || 0}</strong></div>
       <div class="metric-card"><span>Failed</span><strong>${summary.failed_records || 0}</strong></div>
     </div>
 
