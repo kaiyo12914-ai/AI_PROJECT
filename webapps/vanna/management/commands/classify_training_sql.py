@@ -209,3 +209,37 @@ class Command(BaseCommand):
             f"Classification completed. (Dry-run={dry_run}) "
             f"Processed: OK={ok_processed}, NOT OK={not_ok_processed}, Skipped={skipped}."
         ))
+
+
+
+# Viewed classify_training_sql.py:1-21
+
+# 以下為在專案根目錄下執行 `classify_training_sql` 的常用範例：
+
+# ### 1. 預覽模式 (Dry-Run)
+# 僅印出即將被分類的紀錄與數量，**不會對資料庫進行任何新增或刪除變更**，適用於執行前的安全檢視：
+# ```powershell
+# .\venv\Scripts\python.exe manage.py classify_training_sql --dry-run
+# ```
+
+# ### 2. 正式移轉並立即計算向量 (Embed)
+# 正式移轉資料，且對於 review_status 為 `'OK'` 的紀錄，**立即計算其 Embedding 向量並寫入向量資料表**：
+# ```powershell
+# .\venv\Scripts\python.exe manage.py classify_training_sql --embed
+# ```
+
+# ### 3. 正式移轉但保留原始紀錄 (Keep Records)
+# 正式移轉資料，但在移移轉成功後，**不刪除**原 `public.nl2sql_training_example1` 待審表中的對應紀錄：
+# ```powershell
+# .\venv\Scripts\python.exe manage.py classify_training_sql --keep-records
+# ```
+
+# ### 4. 一般正式移轉 (延遲批次向量化)
+# 正式移轉資料，移轉完成後刪除原紀錄。轉移過去的訓練資料其向量欄位預設寫為 `None`，後續再搭配原有的批次指令進行向量重建：
+# ```powershell
+# # 執行分類移轉
+# .\venv\Scripts\python.exe manage.py classify_training_sql
+
+# 後續再統一執行批次 embedding 指令（例如對資料來源 legacy_vanna_chroma 重建向量）
+# .\venv\Scripts\python.exe manage.py nl2sql_embed_schema --data-source legacy_vanna_chroma
+# ```

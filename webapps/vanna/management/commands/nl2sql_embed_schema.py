@@ -60,8 +60,9 @@ class Command(BaseCommand):
         se_count = schema_embeddings.count()
         self.stdout.write(self.style.NOTICE(f"Found {se_count} SchemaEmbedding records with empty embeddings."))
 
+        se_success, se_failed = 0, 0
         if se_count > 0:
-            self._process_schema_embeddings(schema_embeddings, embeddings_impl, model_name, batch_size)
+            se_success, se_failed = self._process_schema_embeddings(schema_embeddings, embeddings_impl, model_name, batch_size)
 
         # Process ExampleEmbedding
         example_embeddings = ExampleEmbedding.objects.filter(
@@ -71,15 +72,22 @@ class Command(BaseCommand):
         ee_count = example_embeddings.count()
         self.stdout.write(self.style.NOTICE(f"Found {ee_count} ExampleEmbedding records with empty embeddings."))
 
+        ee_success, ee_failed = 0, 0
         if ee_count > 0:
-            self._process_example_embeddings(example_embeddings, embeddings_impl, model_name, batch_size)
+            ee_success, ee_failed = self._process_example_embeddings(example_embeddings, embeddings_impl, model_name, batch_size)
 
-        self.stdout.write(self.style.SUCCESS("All pending embeddings processed successfully!"))
+        self.stdout.write(self.style.SUCCESS(
+            f"All pending embeddings processed successfully!\n"
+            f"SchemaEmbeddings: Success={se_success}, Failed={se_failed}\n"
+            f"ExampleEmbeddings: Success={ee_success}, Failed={ee_failed}"
+        ))
 
     def _process_schema_embeddings(self, queryset, embeddings_impl, model_name, batch_size):
         items = list(queryset)
         total = len(items)
         self.stdout.write("Embedding SchemaEmbeddings...")
+        success_count = 0
+        failed_count = 0
 
         for i in range(0, total, batch_size):
             batch = items[i:i + batch_size]
@@ -89,6 +97,7 @@ class Command(BaseCommand):
                 vectors = embeddings_impl.embed_documents(texts)
             except Exception as exc:
                 self.stdout.write(self.style.ERROR(f"  Embedding calculation failed: {exc}"))
+                failed_count += len(batch)
                 continue
 
             with transaction.atomic():
@@ -100,16 +109,21 @@ class Command(BaseCommand):
                                 f"!= expected {_expected_dimension()}"
                             )
                         )
+                        failed_count += 1
                         continue
                     item.embedding = vector
                     item.embedding_model = model_name
                     item.embedding_dimension = len(vector)
                     item.save()
+                    success_count += 1
+        return success_count, failed_count
 
     def _process_example_embeddings(self, queryset, embeddings_impl, model_name, batch_size):
         items = list(queryset)
         total = len(items)
         self.stdout.write("Embedding ExampleEmbeddings...")
+        success_count = 0
+        failed_count = 0
 
         for i in range(0, total, batch_size):
             batch = items[i:i + batch_size]
@@ -120,6 +134,7 @@ class Command(BaseCommand):
                 vectors = embeddings_impl.embed_documents(texts)
             except Exception as exc:
                 self.stdout.write(self.style.ERROR(f"  Embedding calculation failed: {exc}"))
+                failed_count += len(batch)
                 continue
 
             with transaction.atomic():
@@ -131,8 +146,11 @@ class Command(BaseCommand):
                                 f"!= expected {_expected_dimension()}"
                             )
                         )
+                        failed_count += 1
                         continue
                     item.embedding = vector
                     item.embedding_model = model_name
                     item.embedding_dimension = len(vector)
                     item.save()
+                    success_count += 1
+        return success_count, failed_count
