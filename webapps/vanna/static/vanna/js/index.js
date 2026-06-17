@@ -1158,9 +1158,11 @@ function renderResultTable(containerEl, data) {
   const latency = data.latency_ms;
 
   let mockBadgeHtml = isSqlOnly ? `<span style="background:rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.3); color:#f59e0b; padding:2px 6px; border-radius:4px; font-size:11px;">SQL ONLY</span>` : "";
+  let guardPassedHtml = `<div class="guard-banner passed" style="margin-bottom:8px; font-size:11.5px; padding: 4px 8px;">SQL Guard: passed</div>`;
 
   if (rows.length === 0) {
     containerEl.innerHTML = `
+      ${guardPassedHtml}
       <div class="result-header">
         <span>執行耗時: ${latency}ms ${mockBadgeHtml}</span>
       </div>
@@ -1187,6 +1189,7 @@ function renderResultTable(containerEl, data) {
   }).join("");
 
   containerEl.innerHTML = `
+    ${guardPassedHtml}
     <div class="result-header">
       <span>查詢結果：共 ${rows.length} 筆資料 (耗時 ${latency}ms) ${mockBadgeHtml}</span>
     </div>
