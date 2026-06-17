@@ -32,7 +32,7 @@ python manage.py migrate vanna_integration
 來源端匯出：
 
 ```powershell
-pg_dump -h 192.168.0.137 -p 5432 -U projectnotes_user -d projectnotes --no-owner --no-privileges -F c -t "nl2sql_*" -f nl2sql_tables.dump
+pg_dump -h 192.168.0.137 -p 5432 -U projectnotes_user -d projectnotes --no-owner --no-privileges -F c -t "nl2sql_training_example1" -f nl2sql_training_example1.dump
 ```
 
 目標端還原：
