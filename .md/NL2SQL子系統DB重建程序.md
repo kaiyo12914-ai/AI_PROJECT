@@ -27,18 +27,21 @@
 python manage.py migrate vanna_integration
 ```
 
-### 1.2 連同既有資料搬移
-
-來源端匯出：
+來源端匯出（同時包含 Documentation 與 SQL Examples 主表與向量表）：
 
 ```powershell
-pg_dump -h 192.168.0.137 -p 5432 -U projectnotes_user -d projectnotes --no-owner --no-privileges -F c -t "nl2sql_training_example1" -f nl2sql_training_example1.dump
+pg_dump -h 192.168.0.137 -p 5432 -U projectnotes_user -d projectnotes --no-owner --no-privileges -F c `
+  -t "nl2sql_training_documentation" `
+  -t "nl2sql_documentation_embedding" `
+  -t "nl2sql_training_example" `
+  -t "nl2sql_example_embedding" `
+  -f vanna_training_data.dump
 ```
 
 目標端還原：
 
 ```powershell
-pg_restore --clean --if-exists --no-owner --no-privileges -h 127.0.0.1 -p 5432 -U projectnotes_user -d projectnotes nl2sql_tables.dump
+pg_restore --clean --if-exists --no-owner --no-privileges -h 127.0.0.1 -p 5432 -U projectnotes_user -d projectnotes vanna_training_data.dump
 ```
 
 若來源或目標主機、資料庫名稱、帳號不同，請依內網實際環境調整 `-h`、`-p`、`-U`、`-d`。
@@ -191,4 +194,8 @@ CREATE TABLE IF NOT EXISTS public.nl2sql_training_example1 (
 # 3. 執行分類，但保留 public.nl2sql_training_example1 中的原紀錄不進行刪除
 ./\venv\Scripts\python.exe manage.py classify_training_sql --keep-records
 ```
+
+
+
+
 
