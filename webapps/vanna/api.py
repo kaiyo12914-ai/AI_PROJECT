@@ -583,12 +583,7 @@ def _training_dataset_payload(data_sources: list[DataSource], primary_source: Da
         doc_list_qs = doc_list_qs[:30]
         failed_list_qs = failed_list_qs[:30]
 
-    print("=== DEBUG PAYLOAD ===")
-    print(f"  data_sources: {[s.code for s in data_sources]}, primary_source: {primary_source.code}, all_items: {all_items}")
-    print(f"  schema_qs count: {schema_qs.count()}, schema_list_qs len: {len(schema_list_qs)}")
-    print(f"  examples_qs count: {examples_qs.count()}, examples_list_qs len: {len(examples_list_qs)}")
-    print(f"  doc_qs count: {doc_qs.count()}, doc_list_qs len: {len(doc_list_qs)}")
-    print(f"  failed_qs count: {failed_qs.count()}, failed_list_qs len: {len(failed_list_qs)}")
+
 
     schema_items = [
         {
