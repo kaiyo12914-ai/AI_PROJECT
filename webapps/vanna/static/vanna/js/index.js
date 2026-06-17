@@ -539,14 +539,18 @@ GROUP BY d.DEPT_NAME;"></textarea>
         <textarea id="failedErrorInput" placeholder="錯誤訊息 (唯讀)" style="min-height: 100px;" readonly></textarea>
         <textarea id="failedAnalysisInput" placeholder="失敗根因剖析，例如：RAG 未正確檢索到特定欄位或資料表" style="min-height: 120px;"></textarea>
         <textarea id="failedActionInput" placeholder="採取的精進措施，例如：新增 DDL 表結構或 documentation 說明" style="min-height: 120px;"></textarea>
-        <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-top:8px; flex-wrap: wrap;">
           <span style="font-size:13px; color:#cbd5e1;">處理狀態：</span>
           <select id="failedStatusSelect" style="width: auto; padding: 4px 8px; font-size:12px; height:28px;">
             <option value="pending">待處理</option>
             <option value="optimized">已完成優化</option>
             <option value="ignored">忽略/不處理</option>
           </select>
+          <button type="button" class="btn btn-secondary mini-btn" onclick="testCurrentSql(this)" style="margin-left: 8px;">執行 QUERY</button>
+          <span class="muted-text" style="margin-left:8px;">最多回傳:</span>
+          <input id="failedSqlMaxRowsInput" type="number" min="1" max="1000" value="10" style="width: 70px; padding: 4px 8px; font-size:12px; height:28px;" aria-label="最多回傳筆數">
         </div>
+        <div class="failed-sql-test-result" style="display:none; margin-top:10px;"></div>
       </div>
 
       <button class="btn btn-primary" onclick="submitTrainingData(this)">新增/更新訓練資料</button>
@@ -850,6 +854,17 @@ function resetTrainingForm(formEl) {
   formEl.querySelector("#failedAnalysisInput").value = "";
   formEl.querySelector("#failedActionInput").value = "";
   formEl.querySelector("#failedStatusSelect").value = "pending";
+
+  const failedTestResult = formEl.querySelector(".failed-sql-test-result");
+  if (failedTestResult) {
+    failedTestResult.style.display = "none";
+    failedTestResult.innerHTML = "";
+  }
+  const currentTestResult = formEl.querySelector(".current-sql-test-result");
+  if (currentTestResult) {
+    currentTestResult.style.display = "none";
+    currentTestResult.innerHTML = "";
+  }
 }
 
 function deleteTrainingItem(btn, type, id) {
@@ -1219,9 +1234,10 @@ function askPreset(presetText) {
 
 function testCurrentSql(btn) {
   const fieldsEl = btn.closest(".training-fields");
-  const sqlEl = fieldsEl.querySelector("#trainingSqlInput");
-  const maxRowsEl = fieldsEl.querySelector("#currentSqlMaxRowsInput");
-  const resultEl = fieldsEl.querySelector(".current-sql-test-result");
+  const isFailed = fieldsEl.dataset.trainingFields === "failed";
+  const sqlEl = isFailed ? fieldsEl.querySelector("#failedSqlInput") : fieldsEl.querySelector("#trainingSqlInput");
+  const maxRowsEl = isFailed ? fieldsEl.querySelector("#failedSqlMaxRowsInput") : fieldsEl.querySelector("#currentSqlMaxRowsInput");
+  const resultEl = isFailed ? fieldsEl.querySelector(".failed-sql-test-result") : fieldsEl.querySelector(".current-sql-test-result");
   const sql = sqlEl.value.trim();
   const maxRows = parseInt(maxRowsEl.value || "10", 10);
 

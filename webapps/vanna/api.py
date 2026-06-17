@@ -875,25 +875,106 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
             try:
                 item_source = _training_dataset_target_source(body, data_sources, primary_source)
                 item = FailedQueryRecord.objects.get(id=item_id, data_source_code=item_source.code)
-                item.analysis = analysis
-                item.action_taken = action_taken
-                item.status = status
-                if "question" in body:
-                    item.question = str(body.get("question") or "").strip()
-                if "sql" in body:
-                    item.failed_sql = str(body.get("sql") or "").strip()
-                item.save()
-                return JsonResponse({
-                    "ok": True,
-                    "result": {
-                        "id": item.id,
-                        "question": item.question,
-                        "failed_sql": item.failed_sql,
-                        "analysis": item.analysis,
-                        "action_taken": item.action_taken,
-                        "status": item.status,
-                    }
-                })
+                
+                question = str(body.get("question") if "question" in body else (item.question or "")).strip()
+                sql_text = str(body.get("sql") if "sql" in body else (item.failed_sql or "")).strip()
+
+                if status == "optimized":
+                    if not question or not sql_text:
+                        return JsonResponse({"ok": False, "error": "Question and SQL are required for optimization conversion"}, status=400)
+                    
+                    from webapps.vanna.sql_guard import validate_sql
+                    is_safe, guard_err = validate_sql(sql_text)
+                    if not is_safe:
+                        return JsonResponse({"ok": False, "error": f"SQL blocked by SQL Guard: {guard_err}"}, status=403)
+
+                    from django.db import transaction
+                    with transaction.atomic():
+                        # 1. Create or update TrainingExample
+                        ex, created = TrainingExample.objects.get_or_create(
+                            data_source=item_source,
+                            question=question,
+                            sql_text=sql_text,
+                            defaults={
+                                "dialect": item_source.db_type,
+                                "review_status": "approved",
+                                "created_by": _user_id(request) or "system",
+                            }
+                        )
+                        if not created:
+                            ex.sql_text = sql_text
+                            ex.dialect = item_source.db_type
+                            ex.review_status = "approved"
+                            ex.save()
+
+                        # 2. Calculate vector embedding immediately
+                        content_hash = _content_hash(f"{question}\n{sql_text}")
+                        vector = None
+                        emb_model = ""
+                        emb_dim = 0
+                        try:
+                            from webapps.llm.embedding_factory import get_shared_embedding_model, get_shared_embedding_model_name
+                            embeddings_impl = get_shared_embedding_model()
+                            model_name = get_shared_embedding_model_name()
+                            if embeddings_impl:
+                                vectors = embeddings_impl.embed_documents([question])
+                                if vectors and len(vectors) > 0:
+                                    vector = vectors[0]
+                                    emb_model = model_name
+                                    emb_dim = len(vector)
+                        except Exception as exc:
+                            print(f"Failed to calculate embedding during failed query optimization: {exc}")
+
+                        # 3. Create or update ExampleEmbedding
+                        ExampleEmbedding.objects.update_or_create(
+                            training_example=ex,
+                            data_source=item_source,
+                            defaults={
+                                "question_text": question,
+                                "sql_text": sql_text,
+                                "content_hash": content_hash,
+                                "embedding": vector,
+                                "embedding_model": emb_model,
+                                "embedding_dimension": emb_dim or 1024,
+                            }
+                        )
+
+                        # 4. Remove sync marker to trigger Vanna sync
+                        VannaTrainingSync.objects.filter(data_source=item_source, sync_type="example", source_object_id=ex.id).delete()
+
+                        # 5. Delete the original FailedQueryRecord
+                        item.delete()
+
+                    return JsonResponse({
+                        "ok": True,
+                        "optimized": True,
+                        "result": {
+                            "id": ex.id,
+                            "question": question,
+                            "sql": sql_text,
+                        }
+                    })
+                
+                else:
+                    item.analysis = analysis
+                    item.action_taken = action_taken
+                    item.status = status
+                    if "question" in body:
+                        item.question = question
+                    if "sql" in body:
+                        item.failed_sql = sql_text
+                    item.save()
+                    return JsonResponse({
+                        "ok": True,
+                        "result": {
+                            "id": item.id,
+                            "question": item.question,
+                            "failed_sql": item.failed_sql,
+                            "analysis": item.analysis,
+                            "action_taken": item.action_taken,
+                            "status": item.status,
+                        }
+                    })
             except FailedQueryRecord.DoesNotExist:
                 return JsonResponse({"ok": False, "error": f"FailedQueryRecord with id {item_id} not found"}, status=404)
 
