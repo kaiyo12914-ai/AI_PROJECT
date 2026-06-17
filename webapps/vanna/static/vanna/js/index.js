@@ -580,8 +580,8 @@ WHERE ROWNUM <= 10;" disabled></textarea>
         <h3>Documentation</h3>
         <div class="table-wrapper training-table-wrap">
           <table class="result-table">
-            <thead><tr><th>Name</th><th>Content</th><th>???</th></tr></thead>
-            <tbody>${documentationRows || `<tr><td colspan="3">??? documentation</td></tr>`}</tbody>
+            <thead><tr><th>Name</th><th>Content</th><th>操作</th></tr></thead>
+            <tbody>${documentationRows || `<tr><td colspan="3">無 documentation</td></tr>`}</tbody>
           </table>
         </div>
       </div>
@@ -589,27 +589,27 @@ WHERE ROWNUM <= 10;" disabled></textarea>
         <h3>SQL approved examples</h3>
         <div class="table-wrapper training-table-wrap">
           <table class="result-table">
-            <thead><tr><th>Question</th><th>Status</th><th>Created by</th><th>???</th></tr></thead>
-            <tbody>${exampleRows || `<tr><td colspan="4">??? approved examples</td></tr>`}</tbody>
+            <thead><tr><th>Question</th><th>Status</th><th>Created by</th><th>操作</th></tr></thead>
+            <tbody>${exampleRows || `<tr><td colspan="4">無 approved examples</td></tr>`}</tbody>
           </table>
         </div>
       </div>
       <div class="training-section training-section-card" id="failedTrainingSection">
-        <h3>Failed queries (??????????)</h3>
+        <h3>Failed queries (失敗語法精進記錄)</h3>
         <div class="table-wrapper training-table-wrap">
           <table class="result-table">
-            <thead><tr><th>Question</th><th>Error Message</th><th>Status</th><th>???</th></tr></thead>
+            <thead><tr><th>Question</th><th>Error Message</th><th>Status</th><th>操作</th></tr></thead>
             <tbody>${(result.failed_queries || []).map(item => `
               <tr>
                 <td>${escapeHtml(item.question)}</td>
                 <td title="${escapeHtml(item.error_message)}">${escapeHtml((item.error_message || "").slice(0, 120))}</td>
                 <td><code>${escapeHtml(item.status)}</code></td>
                 <td>
-                  <button class="btn btn-secondary mini-btn btn-edit-item" onclick="editTrainingItem(this, 'failed', ${item.id})">???</button>
-                  <button class="btn btn-danger mini-btn btn-delete-item" onclick="deleteTrainingItem(this, 'failed', ${item.id})">???</button>
+                  <button class="btn btn-secondary mini-btn btn-edit-item" onclick="editTrainingItem(this, 'failed', ${item.id})">編輯</button>
+                  <button class="btn btn-danger mini-btn btn-delete-item" onclick="deleteTrainingItem(this, 'failed', ${item.id})">刪除</button>
                 </td>
               </tr>
-            `).join("") || `<tr><td colspan="4">?????????</td></tr>`}</tbody>
+            `).join("") || `<tr><td colspan="4">目前無失敗語法精進記錄</td></tr>`}</tbody>
           </table>
         </div>
       </div>
