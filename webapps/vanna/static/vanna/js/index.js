@@ -559,7 +559,7 @@ WHERE ROWNUM <= 10;" disabled></textarea>
       <div class="result-section sql-test-result" style="display:none;"></div>
     </div>
 
-    <div class="training-section-nav" aria-label="??????????">
+    <div class="training-section-nav" aria-label="區段導覽">
       <button type="button" class="section-chip" onclick="document.getElementById('ddlTrainingSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' })">DDL</button>
       <button type="button" class="section-chip" onclick="document.getElementById('documentationTrainingSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' })">Documentation</button>
       <button type="button" class="section-chip" onclick="document.getElementById('sqlTrainingSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' })">SQL Examples</button>
@@ -571,8 +571,8 @@ WHERE ROWNUM <= 10;" disabled></textarea>
         <h3>DDL / Schema metadata</h3>
         <div class="table-wrapper training-table-wrap">
           <table class="result-table">
-            <thead><tr><th>Table/View</th><th>Type</th><th>Columns</th><th>Status</th><th>???</th></tr></thead>
-            <tbody>${schemaRows || `<tr><td colspan="5">??? schema metadata</td></tr>`}</tbody>
+            <thead><tr><th>Table/View</th><th>Type</th><th>Columns</th><th>Status</th><th>操作</th></tr></thead>
+            <tbody>${schemaRows || `<tr><td colspan="5">無 schema metadata</td></tr>`}</tbody>
           </table>
         </div>
       </div>

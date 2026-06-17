@@ -678,7 +678,7 @@ def _training_dataset_payload(data_sources: list[DataSource], primary_source: Da
             "approved_examples": examples_qs.filter(review_status="approved").count(),
             "vanna_sync_records": sync_qs.count(),
             "synced_records": sync_qs.filter(sync_status="synced").count(),
-            "failed_records": sync_qs.filter(sync_status="failed").count(),
+            "failed_records": failed_qs.count(),
             "ddl_items": ddl_embedding_qs.values("schema_object_id").distinct().count(),
             "documentation_items": doc_qs.count(),
         },
