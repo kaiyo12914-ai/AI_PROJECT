@@ -374,3 +374,47 @@ class FailedQueryRecord(models.Model):
 
     def __str__(self) -> str:
         return f"Fail Log {self.query_log_id}: {self.question[:40]}"
+
+
+class TrainingDocumentation(models.Model):
+    data_source = models.ForeignKey(DataSource, on_delete=models.CASCADE, related_name="training_documentations")
+    title = models.CharField(max_length=255, blank=True, default="")
+    documentation = models.TextField()
+    created_by = models.CharField(max_length=128, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "nl2sql_training_documentation"
+        indexes = [
+            models.Index(fields=["data_source"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return self.title[:80] if self.title else self.documentation[:80]
+
+
+class DocumentationEmbedding(models.Model):
+    training_documentation = models.ForeignKey(TrainingDocumentation, on_delete=models.CASCADE, related_name="embeddings")
+    data_source = models.ForeignKey(DataSource, on_delete=models.CASCADE, related_name="documentation_embeddings")
+    title = models.CharField(max_length=255, blank=True, default="")
+    documentation_text = models.TextField()
+    embedding = VectorField(dimensions=_embedding_dimensions(), null=True, blank=True)
+    embedding_model = models.CharField(max_length=160, blank=True, default="")
+    embedding_dimension = models.PositiveIntegerField(default=_embedding_dimensions)
+    content_hash = models.CharField(max_length=128, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "nl2sql_documentation_embedding"
+        indexes = [
+            models.Index(fields=["data_source"]),
+            models.Index(fields=["content_hash"]),
+            HnswIndex(
+                name="nl2sql_doc_vec_idx",
+                fields=["embedding"],
+                opclasses=["vector_cosine_ops"],
+            ),
+        ]
+

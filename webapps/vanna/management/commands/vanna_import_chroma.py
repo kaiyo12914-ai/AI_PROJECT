@@ -17,6 +17,8 @@ from webapps.vanna.models import (
     SchemaObject,
     TrainingExample,
     VannaTrainingSync,
+    TrainingDocumentation,
+    DocumentationEmbedding,
 )
 
 
@@ -150,6 +152,7 @@ class Command(BaseCommand):
             data_source.training_examples.all().delete()
             data_source.vanna_training_syncs.all().delete()
             data_source.example_embeddings.all().delete()
+            TrainingDocumentation.objects.filter(data_source=data_source).delete()
 
         collections = _parse_collection_items(path)
 
@@ -203,33 +206,39 @@ class Command(BaseCommand):
             ddl_created += 1 if created else 0
             ddl_updated += 0 if created else 1
 
-        doc_holder, _ = SchemaObject.objects.update_or_create(
-            data_source=data_source,
-            schema_name="LEGACY",
-            object_name="VANNA_LEGACY_DOCUMENTATION",
-            defaults={
-                "object_type": "view",
-                "description": "Synthetic holder for legacy Vanna documentation chunks.",
-                "columns_json": [],
-                "ddl_text": "",
-                "is_enabled": True,
-            },
-        )
-
         for item in collections["documentation"]:
-            doc = _safe_text(item["metadata"].get("chroma:document"))
-            if not doc:
+            doc_content = _safe_text(item["metadata"].get("chroma:document"))
+            if not doc_content:
                 doc_skipped += 1
                 continue
             topic = _safe_text(item["metadata"].get("Topic"))
-            content = f"{topic}\n{doc}".strip() if topic and topic not in doc[:20] else doc
+            content = f"{topic}\n{doc_content}".strip() if topic and topic not in doc_content[:20] else doc_content
+            
+            # 解析為 title 與 documentation
+            lines = content.split("\n", 1)
+            if len(lines) == 2 and len(lines[0]) < 100:
+                title = lines[0].strip()
+                doc_text = lines[1].strip()
+            else:
+                title = ""
+                doc_text = content.strip()
+
+            doc_obj, created = TrainingDocumentation.objects.update_or_create(
+                data_source=data_source,
+                title=title,
+                documentation=doc_text,
+                defaults={
+                    "created_by": "legacy_vanna_chroma_import",
+                },
+            )
             content_hash = _sha256(content)
-            _, created = SchemaEmbedding.objects.update_or_create(
-                schema_object=doc_holder,
-                chunk_type="documentation",
+            DocumentationEmbedding.objects.update_or_create(
+                training_documentation=doc_obj,
+                data_source=data_source,
                 content_hash=content_hash,
                 defaults={
-                    "chunk_text": content,
+                    "title": title,
+                    "documentation_text": doc_text,
                     "embedding": None,
                     "embedding_model": "legacy_chroma_384_not_imported",
                     "embedding_dimension": 384,
@@ -238,7 +247,7 @@ class Command(BaseCommand):
             VannaTrainingSync.objects.update_or_create(
                 data_source=data_source,
                 sync_type="documentation",
-                source_object_id=doc_holder.id,
+                source_object_id=doc_obj.id,
                 content_hash=content_hash,
                 defaults={
                     "vanna_training_id": item["embedding_id"],

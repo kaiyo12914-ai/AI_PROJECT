@@ -319,7 +319,7 @@ def test_execute_api_records_failed_query_in_db(mock_is_int, mock_connect, mock_
 @patch("webapps.vanna.api.is_vanna_admin")
 def test_training_dataset_api_failed_query_operations(mock_is_admin, mock_can_access, mock_is_auth):
     from webapps.vanna.api import training_dataset_api
-    from webapps.vanna.models import DataSource, QueryLog, FailedQueryRecord
+    from webapps.vanna.models import DataSource, QueryLog, FailedQueryRecord, TrainingExample
     from django.test import RequestFactory
     import json
 
@@ -376,21 +376,29 @@ def test_training_dataset_api_failed_query_operations(mock_is_admin, mock_can_ac
     data_put = json.loads(resp_put.content.decode("utf-8"))
     assert data_put["ok"] is True
     assert data_put["result"]["question"] == "Select all employees (updated)"
-    assert data_put["result"]["status"] == "optimized"
+    assert data_put.get("optimized") is True
 
-    # 再次從 DB 確認修改
-    record.refresh_from_db()
-    assert record.question == "Select all employees (updated)"
-    assert record.failed_sql == "SELECT * FROM emp_fixed"
-    assert record.analysis == "Table name typo"
-    assert record.action_taken == "Renamed table in query"
-    assert record.status == "optimized"
+    # 驗證原本的 FailedQueryRecord 被刪除了
+    assert not FailedQueryRecord.objects.filter(id=record.id).exists()
+
+    # 驗證 TrainingExample 已經成功建立了
+    assert TrainingExample.objects.filter(data_source=ds, question="Select all employees (updated)").exists()
+
+    # 建立一個新的 FailedQueryRecord 用於 DELETE 測試
+    record_to_delete = FailedQueryRecord.objects.create(
+        query_log=qlog,
+        question="Select all employees to delete",
+        failed_sql="SELECT * FROM emp",
+        error_message="ORA-00942: table or view does not exist",
+        data_source_code=ds.code,
+        status="pending"
+    )
 
     # 3. 測試 DELETE 請求
     req_del = rf.delete("/api/vanna/training-dataset/", json.dumps({
         "code": ds.code,
         "training_type": "failed",
-        "id": record.id
+        "id": record_to_delete.id
     }), content_type="application/json")
     resp_del = training_dataset_api(req_del)
     assert resp_del.status_code == 200
@@ -398,7 +406,7 @@ def test_training_dataset_api_failed_query_operations(mock_is_admin, mock_can_ac
     assert data_del["ok"] is True
 
     # 驗證 DB 是否已無該筆 record
-    assert not FailedQueryRecord.objects.filter(id=record.id).exists()
+    assert not FailedQueryRecord.objects.filter(id=record_to_delete.id).exists()
 
     # 清理
     qlog.delete()

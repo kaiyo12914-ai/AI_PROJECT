@@ -7,7 +7,7 @@ from webapps.llm.embedding_factory import (
     get_shared_embedding_model,
     get_shared_embedding_model_name,
 )
-from webapps.vanna.models import DataSource, SchemaEmbedding, ExampleEmbedding
+from webapps.vanna.models import DataSource, SchemaEmbedding, ExampleEmbedding, DocumentationEmbedding
 
 
 def _expected_dimension() -> int:
@@ -76,10 +76,23 @@ class Command(BaseCommand):
         if ee_count > 0:
             ee_success, ee_failed = self._process_example_embeddings(example_embeddings, embeddings_impl, model_name, batch_size)
 
+        # Process DocumentationEmbedding
+        doc_embeddings = DocumentationEmbedding.objects.filter(
+            data_source=ds,
+            embedding__isnull=True
+        )
+        doc_count = doc_embeddings.count()
+        self.stdout.write(self.style.NOTICE(f"Found {doc_count} DocumentationEmbedding records with empty embeddings."))
+
+        doc_success, doc_failed = 0, 0
+        if doc_count > 0:
+            doc_success, doc_failed = self._process_documentation_embeddings(doc_embeddings, embeddings_impl, model_name, batch_size)
+
         self.stdout.write(self.style.SUCCESS(
             f"All pending embeddings processed successfully!\n"
             f"SchemaEmbeddings: Success={se_success}, Failed={se_failed}\n"
-            f"ExampleEmbeddings: Success={ee_success}, Failed={ee_failed}"
+            f"ExampleEmbeddings: Success={ee_success}, Failed={ee_failed}\n"
+            f"DocumentationEmbeddings: Success={doc_success}, Failed={doc_failed}"
         ))
 
     def _process_schema_embeddings(self, queryset, embeddings_impl, model_name, batch_size):
@@ -143,6 +156,45 @@ class Command(BaseCommand):
                         self.stdout.write(
                             self.style.ERROR(
                                 f"  Skip ExampleEmbedding id={item.id}: vector dimension {len(vector)} "
+                                f"!= expected {_expected_dimension()}"
+                            )
+                        )
+                        failed_count += 1
+                        continue
+                    item.embedding = vector
+                    item.embedding_model = model_name
+                    item.embedding_dimension = len(vector)
+                    item.save()
+                    success_count += 1
+        return success_count, failed_count
+
+    def _process_documentation_embeddings(self, queryset, embeddings_impl, model_name, batch_size):
+        items = list(queryset)
+        total = len(items)
+        self.stdout.write("Embedding DocumentationEmbeddings...")
+        success_count = 0
+        failed_count = 0
+
+        for i in range(0, total, batch_size):
+            batch = items[i:i + batch_size]
+            texts = [
+                f"{item.title}\n{item.documentation_text}".strip() if item.title else item.documentation_text
+                for item in batch
+            ]
+            self.stdout.write(f"  Processing DocumentationEmbedding batch {i // batch_size + 1} ({len(batch)} items)...")
+            try:
+                vectors = embeddings_impl.embed_documents(texts)
+            except Exception as exc:
+                self.stdout.write(self.style.ERROR(f"  Embedding calculation failed: {exc}"))
+                failed_count += len(batch)
+                continue
+
+            with transaction.atomic():
+                for item, vector in zip(batch, vectors):
+                    if len(vector) != _expected_dimension():
+                        self.stdout.write(
+                            self.style.ERROR(
+                                f"  Skip DocumentationEmbedding id={item.id}: vector dimension {len(vector)} "
                                 f"!= expected {_expected_dimension()}"
                             )
                         )

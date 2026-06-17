@@ -411,35 +411,56 @@ def sync_training(data_source: DataSource) -> TrainingSyncResult:
     documentation_synced = 0
     examples_synced = 0
 
+    # 1. 同步 DDL
     for obj in SchemaObject.objects.filter(data_source=data_source, is_enabled=True).iterator():
-        for sync_type, content in (
-            ("ddl", obj.ddl_text),
-            ("documentation", obj.description),
-        ):
-            content = _safe_text(content)
-            if not content:
-                skipped += 1
-                continue
-            content_hash = _sha256(content)
-            _, created = VannaTrainingSync.objects.update_or_create(
-                data_source=data_source,
-                sync_type=sync_type,
-                source_object_id=obj.id,
-                content_hash=content_hash,
-                defaults={
-                    "vanna_training_id": f"local:{sync_type}:{obj.id}:{content_hash[:12]}",
-                    "sync_status": "synced",
-                    "error_message": "",
-                },
-            )
-            if created:
-                if sync_type == "ddl":
-                    ddl_synced += 1
-                else:
-                    documentation_synced += 1
-            else:
-                skipped += 1
+        content = _safe_text(obj.ddl_text)
+        if not content:
+            skipped += 1
+            continue
+        content_hash = _sha256(content)
+        _, created = VannaTrainingSync.objects.update_or_create(
+            data_source=data_source,
+            sync_type="ddl",
+            source_object_id=obj.id,
+            content_hash=content_hash,
+            defaults={
+                "vanna_training_id": f"local:ddl:{obj.id}:{content_hash[:12]}",
+                "sync_status": "synced",
+                "error_message": "",
+            },
+        )
+        if created:
+            ddl_synced += 1
+        else:
+            skipped += 1
 
+    # 2. 同步 Documentation
+    from webapps.vanna.models import TrainingDocumentation
+    for doc in TrainingDocumentation.objects.filter(data_source=data_source).iterator():
+        title = _safe_text(doc.title)
+        body = _safe_text(doc.documentation)
+        content = f"{title}\n{body}".strip() if title else body
+        if not content:
+            skipped += 1
+            continue
+        content_hash = _sha256(content)
+        _, created = VannaTrainingSync.objects.update_or_create(
+            data_source=data_source,
+            sync_type="documentation",
+            source_object_id=doc.id,
+            content_hash=content_hash,
+            defaults={
+                "vanna_training_id": f"local:documentation:{doc.id}:{content_hash[:12]}",
+                "sync_status": "synced",
+                "error_message": "",
+            },
+        )
+        if created:
+            documentation_synced += 1
+        else:
+            skipped += 1
+
+    # 3. 同步 Examples
     examples = TrainingExample.objects.filter(data_source=data_source, review_status="approved")
     for ex in examples.iterator():
         content = f"Question:\n{ex.question}\n\nSQL:\n{ex.sql_text}"
@@ -516,9 +537,9 @@ def retrieve_context(data_source: DataSource, question: str, *, top_k: int = 6) 
     schema_chunks = []
     examples = []
 
-    # 1. 檢索最相似的 SchemaObjects
+    # 1. 檢索最相似的 SchemaObjects (DDL與欄位) 和 Documentation (文件)
     if q_vector:
-        # 使用 pgvector 的 CosineDistance 來查詢相似的 DDL 與 Doc 向量
+        # 1.1 使用 pgvector 的 CosineDistance 來查詢相似的 DDL/Schema 向量
         try:
             se_matches = SchemaEmbedding.objects.filter(
                 schema_object__data_source=data_source,
@@ -549,12 +570,63 @@ def retrieve_context(data_source: DataSource, question: str, *, top_k: int = 6) 
         except Exception:
             selected_objects = []
             schema_chunks = []
+
+        # 1.2 使用 pgvector 的 CosineDistance 查詢相似的文件向量 (Documentation)
+        try:
+            from webapps.vanna.models import DocumentationEmbedding
+            doc_matches = DocumentationEmbedding.objects.filter(
+                data_source=data_source,
+                embedding__isnull=False,
+                embedding_dimension=_expected_embedding_dimension(),
+            ).annotate(
+                distance=CosineDistance("embedding", q_vector)
+            ).order_by("distance")[:top_k]
+
+            for de in doc_matches:
+                schema_chunks.append(
+                    {
+                        "id": de.id,
+                        "schema_object_id": de.training_documentation_id,
+                        "schema": "",
+                        "name": de.title or "Documentation",
+                        "chunk_type": "documentation",
+                        "chunk_text": f"{de.title}\n{de.documentation_text}".strip() if de.title else de.documentation_text,
+                        "distance": float(de.distance or 0.0),
+                    }
+                )
+        except Exception:
+            pass
                 
     # Fallback to keyword-based score if no vector matches found
     if not selected_objects:
         objects = list(SchemaObject.objects.filter(data_source=data_source, is_enabled=True))
         ranked = sorted(objects, key=lambda obj: _score_schema(question, obj), reverse=True)
         selected_objects = [obj for obj in ranked[:top_k] if _score_schema(question, obj) > 0] or ranked[: min(top_k, len(ranked))]
+
+        # Fallback 關鍵字文件檢索
+        try:
+            from webapps.vanna.models import TrainingDocumentation
+            doc_tokens = _tokenize(question)
+            temp_docs = []
+            for doc in TrainingDocumentation.objects.filter(data_source=data_source):
+                text = f"{doc.title}\n{doc.documentation}".lower()
+                score = sum(1 for tok in doc_tokens if tok in text)
+                if score > 0:
+                    temp_docs.append((score, doc))
+            for score, doc in sorted(temp_docs, key=lambda item: item[0], reverse=True)[:top_k]:
+                schema_chunks.append(
+                    {
+                        "id": doc.id,
+                        "schema_object_id": doc.id,
+                        "schema": "",
+                        "name": doc.title or "Documentation",
+                        "chunk_type": "documentation",
+                        "chunk_text": f"{doc.title}\n{doc.documentation}".strip() if doc.title else doc.documentation,
+                        "distance": 0.0,
+                    }
+                )
+        except Exception:
+            pass
 
     # 2. 檢索最相似的 Approved SQL Examples
     if q_vector:

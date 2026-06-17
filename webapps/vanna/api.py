@@ -580,10 +580,10 @@ def _training_dataset_payload(data_sources: list[DataSource], primary_source: Da
     schema_qs = SchemaObject.objects.filter(data_source__in=data_sources).select_related("data_source")
     examples_qs = TrainingExample.objects.filter(data_source__in=data_sources).select_related("data_source")
     sync_qs = VannaTrainingSync.objects.filter(data_source__in=data_sources).select_related("data_source")
-    doc_qs = SchemaEmbedding.objects.filter(
-        schema_object__data_source__in=data_sources,
-        chunk_type="documentation",
-    ).select_related("schema_object", "schema_object__data_source")
+    from webapps.vanna.models import TrainingDocumentation
+    doc_qs = TrainingDocumentation.objects.filter(
+        data_source__in=data_sources
+    ).select_related("data_source")
     ddl_embedding_qs = SchemaEmbedding.objects.filter(
         schema_object__data_source__in=data_sources,
         chunk_type="ddl",
@@ -653,10 +653,10 @@ def _training_dataset_payload(data_sources: list[DataSource], primary_source: Da
     documentation_items = [
         {
             "id": item.id,
-            "data_source_code": item.schema_object.data_source.code,
-            "schema": item.schema_object.schema_name,
-            "name": item.schema_object.object_name,
-            "documentation": item.chunk_text,
+            "data_source_code": item.data_source.code,
+            "schema": "",
+            "name": item.title or "Documentation",
+            "documentation": item.documentation,
             "created_at": item.created_at,
         }
         for item in doc_list_qs
@@ -755,16 +755,14 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
         elif training_type == "documentation":
             try:
                 item_source = _training_dataset_target_source(body, data_sources, primary_source)
-                emb = SchemaEmbedding.objects.get(id=item_id, chunk_type="documentation", schema_object__data_source=item_source)
-                parent_obj = emb.schema_object
-                content_hash = emb.content_hash
-                VannaTrainingSync.objects.filter(data_source=item_source, sync_type="documentation", content_hash=content_hash).delete()
-                emb.delete()
-                if parent_obj.object_name.startswith("VANNA_DOCUMENTATION_") and not parent_obj.embeddings.exists():
-                    parent_obj.delete()
+                from webapps.vanna.models import TrainingDocumentation
+                doc = TrainingDocumentation.objects.get(id=item_id, data_source=item_source)
+                hashes = list(doc.embeddings.values_list("content_hash", flat=True))
+                VannaTrainingSync.objects.filter(data_source=item_source, sync_type="documentation", content_hash__in=hashes).delete()
+                doc.delete()
                 return JsonResponse({"ok": True})
-            except SchemaEmbedding.DoesNotExist:
-                return JsonResponse({"ok": False, "error": f"SchemaEmbedding with id {item_id} not found"}, status=404)
+            except TrainingDocumentation.DoesNotExist:
+                return JsonResponse({"ok": False, "error": f"TrainingDocumentation with id {item_id} not found"}, status=404)
 
         elif training_type == "sql":
             try:
@@ -833,22 +831,31 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
             content = f"{title}\n{documentation}".strip() if title else documentation
             try:
                 item_source = _training_dataset_target_source(body, data_sources, primary_source)
-                emb = SchemaEmbedding.objects.get(id=item_id, chunk_type="documentation", schema_object__data_source=item_source)
-                parent_obj = emb.schema_object
-                VannaTrainingSync.objects.filter(data_source=item_source, sync_type="documentation", content_hash=emb.content_hash).delete()
+                from webapps.vanna.models import TrainingDocumentation, DocumentationEmbedding
+                doc = TrainingDocumentation.objects.get(id=item_id, data_source=item_source)
+                old_hashes = list(doc.embeddings.values_list("content_hash", flat=True))
+                VannaTrainingSync.objects.filter(data_source=item_source, sync_type="documentation", content_hash__in=old_hashes).delete()
 
-                emb.chunk_text = content
-                emb.content_hash = _content_hash(content)
-                emb.embedding = None
-                emb.embedding_model = ""
-                emb.save()
+                doc.title = title
+                doc.documentation = documentation
+                doc.save()
 
-                parent_obj.description = content
-                parent_obj.save()
+                new_hash = _content_hash(content)
+                DocumentationEmbedding.objects.update_or_create(
+                    training_documentation=doc,
+                    data_source=item_source,
+                    defaults={
+                        "title": title,
+                        "documentation_text": documentation,
+                        "embedding": None,
+                        "embedding_model": "",
+                        "content_hash": new_hash,
+                    }
+                )
 
-                return JsonResponse({"ok": True, "result": {"id": emb.id, "name": parent_obj.object_name, "documentation": content}})
-            except SchemaEmbedding.DoesNotExist:
-                return JsonResponse({"ok": False, "error": f"SchemaEmbedding with id {item_id} not found"}, status=404)
+                return JsonResponse({"ok": True, "result": {"id": doc.id, "name": title or "Documentation", "documentation": content}})
+            except TrainingDocumentation.DoesNotExist:
+                return JsonResponse({"ok": False, "error": f"TrainingDocumentation with id {item_id} not found"}, status=404)
 
         elif training_type == "sql":
             question = str(body.get("question") or "").strip()
@@ -1049,37 +1056,30 @@ def training_dataset_api(request: HttpRequest) -> JsonResponse:
         if not documentation:
             return JsonResponse({"ok": False, "error": "documentation is required"}, status=400)
         content = f"{title}\n{documentation}".strip() if title else documentation
-        object_name = _documentation_object_name(content)
         item_source = _training_dataset_target_source(body, data_sources, primary_source)
-        doc_obj, _ = SchemaObject.objects.update_or_create(
+        from webapps.vanna.models import TrainingDocumentation, DocumentationEmbedding
+        doc = TrainingDocumentation.objects.create(
             data_source=item_source,
-            schema_name=item_source.default_schema or "LEGACY",
-            object_name=object_name,
-            defaults={
-                "object_type": "view",
-                "description": content,
-                "columns_json": [],
-                "ddl_text": "",
-                "is_enabled": True,
-            },
+            title=title,
+            documentation=documentation,
+            created_by=request.login_user if hasattr(request, "login_user") else "",
         )
-        doc_embedding, _ = SchemaEmbedding.objects.update_or_create(
-            schema_object=doc_obj,
-            chunk_type="documentation",
+        doc_embedding = DocumentationEmbedding.objects.create(
+            training_documentation=doc,
+            data_source=item_source,
+            title=title,
+            documentation_text=documentation,
+            embedding=None,
+            embedding_model="",
             content_hash=_content_hash(content),
-            defaults={
-                "chunk_text": content,
-                "embedding": None,
-                "embedding_model": "",
-            },
         )
         return JsonResponse(
             {
                 "ok": True,
                 "result": {
-                    "id": doc_embedding.id,
+                    "id": doc.id,
                     "training_type": "documentation",
-                    "name": doc_obj.object_name,
+                    "name": title or "Documentation",
                     "documentation": content,
                 },
             }

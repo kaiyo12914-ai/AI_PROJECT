@@ -471,25 +471,20 @@ class VannaApiIntegrationTestCase(SimpleTestCase):
         self.assertEqual(mock_schema_update.call_args.kwargs["object_name"], "CT_EMPLOYEE")
 
     @patch("webapps.vanna.api.is_vanna_admin", return_value=True)
-    @patch("webapps.vanna.api.SchemaEmbedding.objects.update_or_create")
-    @patch("webapps.vanna.api.SchemaObject.objects.update_or_create")
-    @patch("webapps.vanna.api._resolve_data_source")
     def test_training_dataset_api_post_adds_documentation(
         self,
-        mock_resolve_ds,
-        mock_schema_update,
-        mock_embedding_update,
         _mock_is_admin,
     ):
-        mock_ds = MagicMock()
-        mock_ds.default_schema = "LEGACY"
-        mock_resolve_ds.return_value = mock_ds
-        mock_doc_obj = MagicMock()
-        mock_doc_obj.object_name = "VANNA_DOCUMENTATION_ABC"
-        mock_schema_update.return_value = (mock_doc_obj, True)
-        mock_doc_embedding = MagicMock()
-        mock_doc_embedding.id = 92
-        mock_embedding_update.return_value = (mock_doc_embedding, True)
+        from webapps.vanna.models import DataSource, TrainingDocumentation, DocumentationEmbedding
+        ds, _ = DataSource.objects.get_or_create(
+            code="legacy_vanna_chroma",
+            defaults={
+                "name": "Legacy Vanna Chroma",
+                "db_type": "postgresql",
+                "default_schema": "public",
+                "enabled": True,
+            }
+        )
 
         res = self.client.post(
             self.training_dataset_url,
@@ -509,6 +504,10 @@ class VannaApiIntegrationTestCase(SimpleTestCase):
         self.assertTrue(data["ok"])
         self.assertEqual(data["result"]["training_type"], "documentation")
         self.assertIn("在職狀態", data["result"]["documentation"])
+
+        # 驗證新表中有成功寫入記錄
+        self.assertTrue(TrainingDocumentation.objects.filter(data_source=ds, title="在職狀態").exists())
+        self.assertTrue(DocumentationEmbedding.objects.filter(data_source=ds, title="在職狀態").exists())
 
     @patch("webapps.vanna.api.generate_sql")
     @patch("webapps.vanna.api._resolve_data_source")
