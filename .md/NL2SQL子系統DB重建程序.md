@@ -151,3 +151,44 @@ ORDER BY tablename, indexname;
 ```powershell
 ./\venv\Scripts\python.exe manage.py check
 ```
+
+## 7. 規劃新增的訓練集 (nl2sql_training_example1) 與分類工具
+
+`nl2sql_training_example1` 是規劃新增的 Vanna SQL 訓練集待審核表，其結構如下：
+
+```sql
+CREATE TABLE IF NOT EXISTS public.nl2sql_training_example1 (
+    id serial PRIMARY KEY,
+    question text,
+    sql_text text,
+    dialect varchar,
+    review_status varchar,
+    created_by varchar,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    data_source_id bigint
+);
+```
+
+### 7.1 分類與轉移工具
+
+專案提供了 Django management command `classify_training_sql` 用於自動化分類轉移，此工具將根據 `review_status` 欄位內容進行處理：
+
+- **`review_status = 'OK'`**：將紀錄轉入 `nl2sql_training_example` 與 `nl2sql_example_embedding` 中，並預設從 `nl2sql_training_example1` 移除。
+- **`review_status = 'NOT OK'`**：將紀錄轉入 `nl2sql_failed_query_record` 中（同時關聯建立 Placeholder QueryLog），並預設從 `nl2sql_training_example1` 移除。
+
+### 7.2 指令執行方式
+
+於專案根目錄下執行：
+
+```powershell
+# 1. 預覽分類結果（不寫入資料庫，不刪除原紀錄）
+./\venv\Scripts\python.exe manage.py classify_training_sql --dry-run
+
+# 2. 執行分類，並同時立即計算 OK 紀錄的向量 embedding 寫入向量表中
+./\venv\Scripts\python.exe manage.py classify_training_sql --embed
+
+# 3. 執行分類，但保留 public.nl2sql_training_example1 中的原紀錄不進行刪除
+./\venv\Scripts\python.exe manage.py classify_training_sql --keep-records
+```
+
