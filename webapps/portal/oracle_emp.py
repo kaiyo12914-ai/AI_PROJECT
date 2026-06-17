@@ -266,6 +266,9 @@ def _pg_query_one(sqls: tuple[str, ...] | str, params: Dict[str, Any]) -> Any:
         pg_sql = re.sub(r':([a-zA-Z_]\w*)', r'%(\1)s', sql)
         conn = None
         cur = None
+        db_url = os.environ.get("DATABASE_URL")
+        if "DATABASE_URL" in os.environ:
+            del os.environ["DATABASE_URL"]
         try:
             conn = db_connect("postgresql", profile="mpcdb")
             cur = conn.cursor()
@@ -282,6 +285,8 @@ def _pg_query_one(sqls: tuple[str, ...] | str, params: Dict[str, Any]) -> Any:
             last_err = e
             continue
         finally:
+            if db_url is not None:
+                os.environ["DATABASE_URL"] = db_url
             try:
                 if cur is not None:
                     cur.close()
@@ -305,6 +310,9 @@ def _pg_query_all(sqls: tuple[str, ...] | str, params: Dict[str, Any], limit: in
         pg_sql = re.sub(r':([a-zA-Z_]\w*)', r'%(\1)s', sql)
         conn = None
         cur = None
+        db_url = os.environ.get("DATABASE_URL")
+        if "DATABASE_URL" in os.environ:
+            del os.environ["DATABASE_URL"]
         try:
             conn = db_connect("postgresql", profile="mpcdb")
             cur = conn.cursor()
@@ -327,6 +335,8 @@ def _pg_query_all(sqls: tuple[str, ...] | str, params: Dict[str, Any], limit: in
             last_err = e
             continue
         finally:
+            if db_url is not None:
+                os.environ["DATABASE_URL"] = db_url
             try:
                 if cur is not None:
                     cur.close()
