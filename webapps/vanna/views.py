@@ -53,6 +53,7 @@ def page_index(request):
             "vendor_path": str(VENDOR_ROOT),
             "runtime_error": runtime.error,
             "can_manage_vanna": is_vanna_admin(request),
+            "login_user": resolve_effective_user_id(request),
             "login_display_name": _login_display_name(request),
             "login_user_org": get_login_user_org(request),
             "is_named_system_admin": _is_named_system_admin(request),

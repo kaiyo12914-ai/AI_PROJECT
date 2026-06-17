@@ -262,7 +262,7 @@ _FACTORY_SCOPE_MAP: dict[str, set[str]] = {
     "401": {"401"},
 }
 
-_PII_MASK_COLUMNS = {"IDNO", "EMPNO"}
+_PII_MASK_COLUMNS = {"IDNO", "EMPNO", "MPNO"}
 
 
 def _factory_from_question(question: str) -> str:
@@ -309,22 +309,46 @@ def _mask_last_five(value: Any) -> Any:
 
 
 def _mask_ct_employ_pii(sql: str, columns: list[str], rows: list[Any]) -> list[Any]:
-    if not re.search(r"\bCT_EMPLOY\b", str(sql or ""), flags=re.IGNORECASE):
+    if not re.search(r"\bCT_EMPLOY\w*\b", str(sql or ""), flags=re.IGNORECASE):
         return rows
     if not columns or not rows:
         return rows
 
-    mask_indexes = [idx for idx, col in enumerate(columns) if str(col or "").strip().upper() in _PII_MASK_COLUMNS]
-    if not mask_indexes:
+    mask_indices_with_names = []
+    for idx, col in enumerate(columns):
+        col_name = str(col or "").strip().upper()
+        if col_name in _PII_MASK_COLUMNS:
+            mask_indices_with_names.append((idx, col))
+
+    if not mask_indices_with_names:
         return rows
 
     masked_rows: list[Any] = []
     for row in rows:
-        items = list(row) if isinstance(row, (list, tuple)) else [row]
-        for idx in mask_indexes:
-            if idx < len(items):
-                items[idx] = _mask_last_five(items[idx])
-        masked_rows.append(items)
+        if isinstance(row, dict):
+            new_row = dict(row)
+            for idx, col in mask_indices_with_names:
+                if col in new_row:
+                    new_row[col] = _mask_last_five(new_row[col])
+                else:
+                    lower_col = col.lower()
+                    found_key = None
+                    for k in new_row.keys():
+                        if str(k).lower() == lower_col:
+                            found_key = k
+                            break
+                    if found_key is not None:
+                        new_row[found_key] = _mask_last_five(new_row[found_key])
+            masked_rows.append(new_row)
+        elif isinstance(row, (list, tuple)):
+            row_is_tuple = isinstance(row, tuple)
+            items = list(row)
+            for idx, col in mask_indices_with_names:
+                if idx < len(items):
+                    items[idx] = _mask_last_five(items[idx])
+            masked_rows.append(tuple(items) if row_is_tuple else items)
+        else:
+            masked_rows.append(_mask_last_five(row))
     return masked_rows
 
 

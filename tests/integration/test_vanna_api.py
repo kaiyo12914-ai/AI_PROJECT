@@ -390,6 +390,46 @@ class VannaApiIntegrationTestCase(SimpleTestCase):
         self.assertTrue(data["ok"])
         self.assertEqual(data["rows"], [["A1234*****", "B2234*****", "Alice"]])
 
+    @override_settings(ENV_NAME="INT")
+    @patch("webapps.vanna.api.is_vanna_admin", return_value=True)
+    @patch("webapps.database.db_factory.db_connect")
+    @patch("webapps.vanna.api._resolve_data_source")
+    def test_admin_sql_execute_api_masks_ct_employe_mpno(
+        self,
+        mock_resolve_ds,
+        mock_db_connect,
+        _mock_is_admin,
+    ):
+        mock_ds = MagicMock()
+        mock_ds.db_type = "oracle"
+        mock_ds.enabled = True
+        mock_ds.db_profile = ""
+        mock_resolve_ds.return_value = mock_ds
+
+        mock_cur = MagicMock()
+        mock_cur.description = [("MPNO",), ("NAME",)]
+        mock_cur.fetchmany.return_value = [("H112211335", "Alice")]
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+        mock_db_connect.return_value = mock_conn
+
+        res = self.client.post(
+            self.admin_sql_execute_url,
+            data=json.dumps(
+                {
+                    "code": "legacy_vanna_chroma",
+                    "sql": "SELECT MPNO, NAME FROM CT_EMPLOYE",
+                    "max_rows": 10,
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["rows"], [["H1122*****", "Alice"]])
+
     @patch("webapps.vanna.api.is_vanna_admin", return_value=True)
     @patch("webapps.vanna.api.SchemaEmbedding.objects.update_or_create")
     @patch("webapps.vanna.api.SchemaObject.objects.update_or_create")
@@ -786,3 +826,34 @@ class VannaApiIntegrationTestCase(SimpleTestCase):
         data = res.json()
         self.assertTrue(data["ok"])
         self.assertEqual(data["rows"], [["A1234*****", "B2234*****", "Alice"]])
+
+    @override_settings(ENV_NAME="INT")
+    @patch("webapps.database.db_factory.db_connect")
+    @patch("webapps.vanna.models.QueryLog.objects.get")
+    def test_execute_api_masks_ct_employe_mpno(self, mock_qlog_get, mock_db_connect):
+        mock_cur = MagicMock()
+        mock_cur.description = [("MPNO",), ("NAME",)]
+        mock_cur.fetchall.return_value = [("H112211335", "Alice")]
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+        mock_db_connect.return_value = mock_conn
+
+        mock_qlog = MagicMock()
+        mock_qlog.cleaned_sql = "SELECT MPNO, NAME FROM CT_EMPLOYE"
+        mock_qlog.generated_sql = "SELECT MPNO, NAME FROM CT_EMPLOYE"
+        mock_qlog.question = "[人事]MPC 查詢工號"
+        mock_qlog.data_source.db_type = "oracle"
+        mock_qlog.data_source.enabled = True
+        mock_qlog.data_source.db_profile = ""
+        mock_qlog.latency_ms = 0
+        mock_qlog_get.return_value = mock_qlog
+
+        res = self.client.post(
+            self.execute_url,
+            data=json.dumps({"query_log_id": 123}),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["rows"], [["H1122*****", "Alice"]])
