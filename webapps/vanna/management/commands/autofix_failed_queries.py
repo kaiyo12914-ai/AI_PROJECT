@@ -126,11 +126,18 @@ class Command(BaseCommand):
             default=0,
             help="Limit the number of records processed.",
         )
+        parser.add_argument(
+            "--profile",
+            type=str,
+            default="",
+            help="Override and force use of a specific database profile for fetching actual values.",
+        )
 
     def handle(self, *args, **options):
         dry_run = options["dry_run"]
         auto_approve = options["auto_approve"]
         limit = options["limit"]
+        profile_override = options["profile"]
 
         self.stdout.write(self.style.NOTICE("Fetching pending FailedQueryRecord records..."))
         records = FailedQueryRecord.objects.filter(status="pending").order_type = ["id"]
@@ -196,6 +203,11 @@ class Command(BaseCommand):
                 profile = ds.db_profile
             else:
                 profile = "projectnotes" if db_type == "postgresql" else "ERP_205"
+
+            # 若命令列有指定 profile，則強制覆寫
+            if profile_override:
+                profile = profile_override
+
             sql_tables = _extract_tables_from_sql(sql_text)
 
             var_mapping = {}

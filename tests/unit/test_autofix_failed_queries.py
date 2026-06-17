@@ -164,3 +164,20 @@ class AutofixFailedQueriesTestCase(TestCase):
             self.assertEqual(te.question, "[人事] 查詢部門為 01 的在職人員名單")
             self.assertEqual(te.sql_text, "SELECT emp.empno FROM ct_employ emp WHERE emp.deptno like '01'")
             self.assertEqual(te.review_status, "approved")
+
+    @patch("webapps.database.db_factory.db_query_one")
+    @patch("webapps.llm.llm_factory.get_chat_model")
+    def test_command_execution_profile_override(self, mock_get_chat_model, mock_db_query_one):
+        # Mock LLM
+        mock_model = MagicMock()
+        mock_model.invoke.return_value = MagicMock(content="[人事] 查詢部門為 01 的在職人員名單")
+        mock_get_chat_model.return_value = mock_model
+
+        # Mock db_query_one
+        mock_db_query_one.return_value = ("01",)
+
+        # 執行 command，並指定 profile="custom_override_profile"
+        call_command("autofix_failed_queries", profile="custom_override_profile", limit=1)
+
+        # 驗證 db_query_one 呼叫時所傳入的 profile 參數是否為指定的 "custom_override_profile"
+        mock_db_query_one.assert_called_with("postgresql", unittest.mock.ANY, profile="custom_override_profile")
