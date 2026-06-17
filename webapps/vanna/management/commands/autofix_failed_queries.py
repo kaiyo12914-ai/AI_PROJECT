@@ -64,6 +64,7 @@ def _lookup_column_metadata(column_name: str, sql_tables: list[str]) -> tuple[st
     """
     Lookup table_name and data_type for a column using the data_dictionary table.
     """
+    column_name = (column_name or "").strip()
     with connection.cursor() as cursor:
         # 檢查 data_dictionary 表是否存在，避免拋錯
         cursor.execute("""
@@ -76,31 +77,32 @@ def _lookup_column_metadata(column_name: str, sql_tables: list[str]) -> tuple[st
         if not cursor.fetchone()[0]:
             return None
 
-        # 優先比對 SQL 中出現的 table
+        # 優先比對 SQL 中出現 of table
         if sql_tables:
-            placeholders = ",".join(["%s"] * len(sql_tables))
+            sql_tables_cleaned = [t.strip().upper() for t in sql_tables if t.strip()]
+            placeholders = ",".join(["%s"] * len(sql_tables_cleaned))
             query = f"""
                 SELECT table_name, data_type 
                 FROM data_dictionary 
-                WHERE UPPER(column_name) = %s 
-                AND UPPER(table_name) IN ({placeholders})
+                WHERE TRIM(UPPER(column_name)) = %s 
+                AND TRIM(UPPER(table_name)) IN ({placeholders})
                 LIMIT 1
             """
-            cursor.execute(query, [column_name.upper()] + sql_tables)
+            cursor.execute(query, [column_name.upper()] + sql_tables_cleaned)
             row = cursor.fetchone()
             if row:
-                return row[0], row[1]
+                return row[0].strip(), row[1].strip()
         
         # Fallback 模糊搜尋
         cursor.execute("""
             SELECT table_name, data_type 
             FROM data_dictionary 
-            WHERE UPPER(column_name) = %s 
+            WHERE TRIM(UPPER(column_name)) = %s 
             LIMIT 1
         """, [column_name.upper()])
         row = cursor.fetchone()
         if row:
-            return row[0], row[1]
+            return row[0].strip(), row[1].strip()
             
     return None
 
@@ -202,7 +204,31 @@ class Command(BaseCommand):
                 meta = _lookup_column_metadata(col_name, sql_tables)
                 
                 if not meta:
-                    self.stdout.write(self.style.WARNING(f"  Could not find column metadata for variable '{var}' (column '{col_name}'). Skipping record."))
+                    db_dict_exists = False
+                    db_dict_rows = 0
+                    with connection.cursor() as cursor:
+                        cursor.execute("""
+                            SELECT EXISTS (
+                                SELECT FROM information_schema.tables 
+                                WHERE table_schema = 'public' 
+                                AND table_name = 'data_dictionary'
+                            );
+                        """)
+                        db_dict_exists = cursor.fetchone()[0]
+                        if db_dict_exists:
+                            cursor.execute("SELECT COUNT(*) FROM public.data_dictionary;")
+                            db_dict_rows = cursor.fetchone()[0]
+
+                    db_dict_status = f"public.data_dictionary exists (rows: {db_dict_rows})" if db_dict_exists else "public.data_dictionary DOES NOT EXIST!"
+                    
+                    self.stdout.write(self.style.WARNING(
+                        f"  [ERROR-METADATA] Could not find column metadata for variable '{var}' (column '{col_name}'). Skipping record.\n"
+                        f"  Debug Info:\n"
+                        f"    - DB Source: {ds_code} (type: {db_type}, profile: {profile})\n"
+                        f"    - SQL Reference Tables: {sql_tables}\n"
+                        f"    - Searching Field: '{col_name}'\n"
+                        f"    - Data Dictionary Status: {db_dict_status}"
+                    ))
                     mapping_failed = True
                     break
 
@@ -356,3 +382,29 @@ class Command(BaseCommand):
             fixed_count += 1
 
         self.stdout.write(self.style.SUCCESS(f"\nProcessing complete: Fixed={fixed_count}, Skipped={skipped_count}"))
+
+
+
+
+
+
+# ## 💡 內網使用執行指南
+
+# 在內網正式環境（`ENV=INT`，實體 Oracle 連線正常）時，管理員可以使用以下方式來執行此清洗工具：
+
+# 1. **預覽模式 (Dry-Run)**：
+#    先預覽前 10 筆記錄的清洗與替換成果，不寫入資料庫：
+#    ```bash
+#    python manage.py autofix_failed_queries --dry-run --limit 10
+#    ```
+
+# 2. **就地更新模式**：
+#    實際替換變數並讓 LLM 修正問題，更新在 `nl2sql_failed_query_record` 中（狀態仍為 `pending`），方便管理員在 Vanna UI 的「Failed Query」頁籤進行確認：
+#    ```bash
+#    python manage.py autofix_failed_queries --limit 50
+#    ```
+
+# 3. **全自動核准轉移模式**：
+#    自動替換變數與修正問句。若修正後的 SQL 語法能通過 SQL Guard 的安全性審查，則**直接自動轉移**至正式的 `TrainingExample` (SQL approved examples) 中並即時計算 Embedding 向量，同時將原 Failed 記錄從庫中清除，實現一鍵全自動數據淨化：
+#    ```bash
+#    python manage.py autofix_failed_queries --auto-approve --limit 100
