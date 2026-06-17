@@ -199,3 +199,8 @@ CREATE TABLE IF NOT EXISTS public.nl2sql_training_example1 (
 
 
 
+pg_dump -h 192.168.0.137 -p 5432 -U projectnotes_user -d projectnotes --no-owner --no-privileges -F c  -t "nl2sql_training_documentation"  -t "nl2sql_documentation_embedding"  -t "nl2sql_training_example"  -t "nl2sql_example_embedding"  -f vanna_training_data.dump
+
+pg_restore --clean --if-exists --no-owner --no-privileges -h 127.0.0.1 -p 5432 -U projectnotes_user -d projectnotes vanna_training_data.dump
+
+
