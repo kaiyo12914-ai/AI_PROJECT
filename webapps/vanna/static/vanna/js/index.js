@@ -393,6 +393,12 @@ function loadTrainingDataset(bubbleEl, allItems = false) {
       addLog(`訓練資料集載入失敗: ${data.error}`, "error");
       return;
     }
+    console.log("=== FRONTEND RECEIVED PAYLOAD ===");
+    console.log("data.result:", data.result);
+    console.log("schema_objects length:", data.result.schema_objects ? data.result.schema_objects.length : "N/A");
+    console.log("training_examples length:", data.result.training_examples ? data.result.training_examples.length : "N/A");
+    console.log("documentation_items length:", data.result.documentation_items ? data.result.documentation_items.length : "N/A");
+    console.log("failed_queries length:", data.result.failed_queries ? data.result.failed_queries.length : "N/A");
     renderTrainingDatasetManager(bubbleEl, data.result, allItems);
     addLog("Vanna 訓練資料集已載入。", "success");
   })
@@ -568,7 +574,7 @@ WHERE ROWNUM <= 10;" disabled></textarea>
 
     <div class="training-section-grid">
       <div class="training-section training-section-card" id="ddlTrainingSection">
-        <h3>DDL / Schema metadata</h3>
+        <h3>DDL / Schema metadata <span class="badge" style="font-size:12.5px; font-weight:normal; color:#94a3b8; margin-left:8px;">(顯示 ${result.schema_objects?.length || 0} / 共 ${summary.schema_objects || 0} 筆)</span></h3>
         <div class="table-wrapper training-table-wrap">
           <table class="result-table">
             <thead><tr><th>Table/View</th><th>Type</th><th>Columns</th><th>Status</th><th>操作</th></tr></thead>
@@ -577,7 +583,7 @@ WHERE ROWNUM <= 10;" disabled></textarea>
         </div>
       </div>
       <div class="training-section training-section-card" id="documentationTrainingSection">
-        <h3>Documentation</h3>
+        <h3>Documentation <span class="badge" style="font-size:12.5px; font-weight:normal; color:#94a3b8; margin-left:8px;">(顯示 ${result.documentation_items?.length || 0} / 共 ${summary.documentation_items || 0} 筆)</span></h3>
         <div class="table-wrapper training-table-wrap">
           <table class="result-table">
             <thead><tr><th>Name</th><th>Content</th><th>操作</th></tr></thead>
@@ -586,7 +592,7 @@ WHERE ROWNUM <= 10;" disabled></textarea>
         </div>
       </div>
       <div class="training-section training-section-card" id="sqlTrainingSection">
-        <h3>SQL approved examples</h3>
+        <h3>SQL approved examples <span class="badge" style="font-size:12.5px; font-weight:normal; color:#94a3b8; margin-left:8px;">(顯示 ${result.training_examples?.length || 0} / 共 ${summary.approved_examples || 0} 筆)</span></h3>
         <div class="table-wrapper training-table-wrap">
           <table class="result-table">
             <thead><tr><th>Question</th><th>Status</th><th>Created by</th><th>操作</th></tr></thead>
@@ -595,7 +601,7 @@ WHERE ROWNUM <= 10;" disabled></textarea>
         </div>
       </div>
       <div class="training-section training-section-card" id="failedTrainingSection">
-        <h3>Failed queries (失敗語法精進記錄)</h3>
+        <h3>Failed queries (失敗語法精進記錄) <span class="badge" style="font-size:12.5px; font-weight:normal; color:#94a3b8; margin-left:8px;">(顯示 ${result.failed_queries?.length || 0} / 共 ${summary.failed_records || 0} 筆)</span></h3>
         <div class="table-wrapper training-table-wrap">
           <table class="result-table">
             <thead><tr><th>Question</th><th>Error Message</th><th>Status</th><th>操作</th></tr></thead>
