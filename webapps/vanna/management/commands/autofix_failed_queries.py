@@ -192,7 +192,10 @@ class Command(BaseCommand):
             # 取得資料來源對應的 db_profile
             ds = DataSource.objects.filter(code=ds_code).first()
             db_type = ds.db_type if ds else "oracle"
-            profile = ds.db_profile if ds else "MPC"
+            if ds and ds.db_profile:
+                profile = ds.db_profile
+            else:
+                profile = "projectnotes" if db_type == "postgresql" else "ERP_205"
             sql_tables = _extract_tables_from_sql(sql_text)
 
             var_mapping = {}
