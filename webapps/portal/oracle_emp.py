@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any, Dict, TypedDict
@@ -11,7 +12,7 @@ from typing import Any, Dict, TypedDict
 from django.conf import settings
 
 # ✅ DB 連線必須走 DB_FACTORY（專案規範）
-from webapps.database.db_factory import OracleDB
+from webapps.database.db_factory import OracleDB, db_connect
 
 logger = logging.getLogger(__name__)
 
@@ -251,10 +252,93 @@ def _mock_emp_info(emp_id: str) -> Dict[str, str]:
     hit: Dict[str, str] = {}
     for sec in _iter_oracle_emp_sections(data):
         matched = _match_mock_emp_from_section(sec, emp_id)
-        # Use last matched record (newest in records tail).
         if matched and (matched.get("name") or matched.get("plant")):
             hit = matched
     return hit
+
+
+def _pg_query_one(sqls: tuple[str, ...] | str, params: Dict[str, Any]) -> Any:
+    if isinstance(sqls, str):
+        sqls = (sqls,)
+    
+    last_err = None
+    for sql in sqls:
+        pg_sql = re.sub(r':([a-zA-Z_]\w*)', r'%(\1)s', sql)
+        conn = None
+        cur = None
+        try:
+            conn = db_connect("postgresql", profile="mpcdb")
+            cur = conn.cursor()
+            cur.execute(pg_sql, params)
+            if cur.description:
+                columns = [col[0] for col in cur.description]
+                row = cur.fetchone()
+                if row:
+                    return {col.upper(): row[idx] for idx, col in enumerate(columns)}
+            else:
+                row = cur.fetchone()
+                return row
+        except Exception as e:
+            last_err = e
+            continue
+        finally:
+            try:
+                if cur is not None:
+                    cur.close()
+            finally:
+                if conn is not None:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+    if last_err is not None:
+        raise last_err
+    return None
+
+
+def _pg_query_all(sqls: tuple[str, ...] | str, params: Dict[str, Any], limit: int = 0) -> list[Any]:
+    if isinstance(sqls, str):
+        sqls = (sqls,)
+    
+    last_err = None
+    for sql in sqls:
+        pg_sql = re.sub(r':([a-zA-Z_]\w*)', r'%(\1)s', sql)
+        conn = None
+        cur = None
+        try:
+            conn = db_connect("postgresql", profile="mpcdb")
+            cur = conn.cursor()
+            cur.execute(pg_sql, params)
+            
+            if limit and limit > 0:
+                rows = cur.fetchmany(int(limit))
+            else:
+                rows = cur.fetchall()
+                
+            if cur.description:
+                columns = [col[0] for col in cur.description]
+                out = []
+                for r in rows:
+                    out.append({col.upper(): r[idx] for idx, col in enumerate(columns)})
+                return out
+            else:
+                return list(rows)
+        except Exception as e:
+            last_err = e
+            continue
+        finally:
+            try:
+                if cur is not None:
+                    cur.close()
+            finally:
+                if conn is not None:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+    if last_err is not None:
+        raise last_err
+    return []
 
 
 # ============================================================
@@ -421,13 +505,29 @@ def get_emp_name(emp_id: str, *, refresh: bool = False) -> str:
     if not emp_id:
         return ""
 
-    if not _is_oracle_emp_enabled():
-        return str(_mock_emp_info(emp_id).get("name") or "").strip()
-
     if not refresh:
         hit = _cache_get_if_valid(emp_id)
         if hit is not None:
             return hit
+
+    if not _is_oracle_emp_enabled():
+        try:
+            res = _pg_query_one(EMP_NAME_SQLS, {"emp_id": emp_id})
+            name = ""
+            if isinstance(res, dict):
+                name = str(res.get("EMP_NAME") or "").strip()
+            elif res:
+                name = str(res[0] or "").strip()
+            
+            if not name:
+                name = str(_mock_emp_info(emp_id).get("name") or "").strip()
+            _cache_put(emp_id, name, _emp_cache_ttl_sec())
+            return name
+        except Exception as e:
+            logger.warning(f"PostgreSQL get_emp_name failed: {e}")
+            name = str(_mock_emp_info(emp_id).get("name") or "").strip()
+            _cache_put(emp_id, name, _emp_cache_ttl_sec())
+            return name
 
     now = time.time()
     if _ORA_DOWN_UNTIL_TS and now < _ORA_DOWN_UNTIL_TS:
@@ -463,20 +563,47 @@ def get_emp_full_info(emp_id: str, *, refresh: bool = False) -> Dict[str, str]:
     emp_id = (emp_id or "").strip()
     if not emp_id:
         return {}
-    if not _is_oracle_emp_enabled():
-        hit = _mock_emp_info(emp_id)
-        if not hit:
-            return {}
-        return {
-            "EMP_NAME": str(hit.get("name") or "").strip(),
-            "PLANT": str(hit.get("plant") or "").strip(),
-            "DEPT": "",
-            "TITLE": "",
-        }
-
     if not refresh:
         hit = _cache_get_full_if_valid(emp_id)
         if hit: return hit
+
+    if not _is_oracle_emp_enabled():
+        try:
+            info = _pg_query_one(EMP_FULL_INFO_SQL, {"emp_id": emp_id})
+            if info and isinstance(info, dict):
+                res_dict = {
+                    "EMP_NAME": str(info.get("EMP_NAME") or "").strip(),
+                    "PLANT": str(info.get("PLANT") or "").strip(),
+                    "DEPT": str(info.get("DEPT") or "").strip(),
+                    "TITLE": str(info.get("TITLE") or "").strip(),
+                }
+                _cache_put(emp_id, res_dict["EMP_NAME"], _emp_cache_ttl_sec(), full_info=res_dict)
+                return res_dict
+            
+            hit = _mock_emp_info(emp_id)
+            if hit:
+                res_dict = {
+                    "EMP_NAME": str(hit.get("name") or "").strip(),
+                    "PLANT": str(hit.get("plant") or "").strip(),
+                    "DEPT": "",
+                    "TITLE": "",
+                }
+                _cache_put(emp_id, res_dict["EMP_NAME"], _emp_cache_ttl_sec(), full_info=res_dict)
+                return res_dict
+            return {}
+        except Exception as e:
+            logger.warning(f"PostgreSQL get_emp_full_info failed: {e}")
+            hit = _mock_emp_info(emp_id)
+            if not hit:
+                return {}
+            res_dict = {
+                "EMP_NAME": str(hit.get("name") or "").strip(),
+                "PLANT": str(hit.get("plant") or "").strip(),
+                "DEPT": "",
+                "TITLE": "",
+            }
+            _cache_put(emp_id, res_dict["EMP_NAME"], _emp_cache_ttl_sec(), full_info=res_dict)
+            return res_dict
 
     now = time.time()
     if _ORA_DOWN_UNTIL_TS and now < _ORA_DOWN_UNTIL_TS:
@@ -503,13 +630,6 @@ def find_emp_ids_by_name(emp_name: str, *, limit: int = 20) -> list[str]:
     name = (emp_name or "").strip()
     if not name:
         return []
-    if not _is_oracle_emp_enabled():
-        return []
-
-    now = time.time()
-    if _ORA_DOWN_UNTIL_TS and now < _ORA_DOWN_UNTIL_TS:
-        return []
-
     n = max(1, min(int(limit or 20), 200))
 
     def _row_id(v: Any) -> str:
@@ -527,6 +647,32 @@ def find_emp_ids_by_name(emp_name: str, *, limit: int = 20) -> list[str]:
             return str(v[0] or "").strip()
         except Exception:
             return ""
+
+    if not _is_oracle_emp_enabled():
+        try:
+            rows = _pg_query_all(EMP_IDS_BY_NAME_SQLS, {"emp_name": name}, limit=n)
+            if not rows:
+                rows = _pg_query_all(
+                    EMP_IDS_BY_NAME_LIKE_SQLS,
+                    {"emp_name_like": f"%{name}%"},
+                    limit=n,
+                )
+            seen = set()
+            out: list[str] = []
+            for r in rows or []:
+                emp_id = _row_id(r)
+                if not emp_id or emp_id in seen:
+                    continue
+                seen.add(emp_id)
+                out.append(emp_id)
+                if len(out) >= n:
+                    break
+            return out
+        except Exception as e:
+            logger.warning(f"PostgreSQL find_emp_ids_by_name failed: {e}")
+            return []
+
+    now = time.time()
 
     try:
         rows = _oracle_query_all_with_fallback(EMP_IDS_BY_NAME_SQLS, {"emp_name": name}, limit=n)
@@ -585,11 +731,25 @@ def get_factory_plant_by_name(emp_name: str, *, emp_id: str = "") -> str:
     if not name:
         return ""
     if not _is_oracle_emp_enabled():
-        return ""
+        try:
+            row = None
+            if emp_id:
+                row = _pg_query_one(
+                    FACTORY_BY_NAME_ID_SQLS,
+                    {"emp_name": name, "emp_id": emp_id},
+                )
+            if not row:
+                row = _pg_query_one(
+                    FACTORY_BY_NAME_SQLS,
+                    {"emp_name": name},
+                )
+            plant = _row_factory_plant(row) if row else ""
+            return plant
+        except Exception as e:
+            logger.warning(f"PostgreSQL get_factory_plant_by_name failed: {e}")
+            return ""
 
     now = time.time()
-    if _ORA_DOWN_UNTIL_TS and now < _ORA_DOWN_UNTIL_TS:
-        return ""
 
     try:
         row = None
@@ -623,7 +783,15 @@ def get_factory_plant_by_id(emp_id: str) -> str:
     if not uid:
         return ""
     if not _is_oracle_emp_enabled():
-        return str(_mock_emp_info(uid).get("plant") or "").strip()
+        try:
+            row = _pg_query_one(FACTORY_BY_ID_SQLS, {"emp_id": uid})
+            plant = _row_factory_plant(row) if row else ""
+            if not plant:
+                plant = str(_mock_emp_info(uid).get("plant") or "").strip()
+            return plant
+        except Exception as e:
+            logger.warning(f"PostgreSQL get_factory_plant_by_id failed: {e}")
+            return str(_mock_emp_info(uid).get("plant") or "").strip()
 
     now = time.time()
     if _ORA_DOWN_UNTIL_TS and now < _ORA_DOWN_UNTIL_TS:
