@@ -57,6 +57,22 @@ def validate_sql(sql: str) -> tuple[bool, str]:
 
     stmt = parsed[0]
     
+    # 尋找第一個非空非註解的 token，確保以 SELECT 或 WITH 開頭
+    first_keyword = None
+    for token in stmt.tokens:
+        if token.is_whitespace:
+            continue
+        if isinstance(token, sqlparse.sql.Comment) or str(token.value).startswith("--") or str(token.value).startswith("/*"):
+            continue
+        first_keyword = str(token.value).strip().upper()
+        break
+
+    if not first_keyword:
+        return False, "Failed to identify the starting keyword of the SQL statement"
+
+    if first_keyword not in ("SELECT", "WITH"):
+        return False, f"Invalid SQL statement start: '{first_keyword}'. Only SELECT or WITH SELECT are allowed."
+
     # 檢查最上層的 statement type，必須是 SELECT 或 WITH
     stmt_type = stmt.get_type()
     if stmt_type not in ("SELECT", "UNKNOWN"):

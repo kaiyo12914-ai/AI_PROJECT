@@ -90,3 +90,14 @@ class VannaSQLGuardTestCase(unittest.TestCase):
         is_safe, err = validate_sql("SELECT * FROM users; -- DROP TABLE users")
         self.assertFalse(is_safe)
         self.assertIn("forbidden keyword 'DROP'", err)
+
+    def test_incomplete_sql_blocked(self):
+        # 殘缺、非 SELECT/WITH 開頭的 SQL 片段
+        is_safe, err = validate_sql("MITEM = G.MITEM AND MLLREV = G.MLLREV")
+        self.assertFalse(is_safe)
+        self.assertIn("only select or with select are allowed", err.lower())
+
+        # 僅有註解但無 query
+        is_safe, err = validate_sql("-- Just a comment")
+        self.assertFalse(is_safe)
+        self.assertIn("failed to identify", err.lower())
