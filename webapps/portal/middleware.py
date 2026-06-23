@@ -179,6 +179,8 @@ def _compose_login_user_display_name(org_code: str, user_name: str) -> str:
     org = (org_code or "").strip()
     name = (user_name or "").strip()
     if org and name:
+        if name.upper().startswith(f"{org.upper()}-") or name.upper().startswith(f"{org.upper()} "):
+            return name
         return f"{org} {name}"
     if name:
         return name

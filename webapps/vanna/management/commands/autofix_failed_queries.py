@@ -8,6 +8,63 @@ from django.db import connection, transaction
 from webapps.vanna.models import DataSource, FailedQueryRecord, TrainingExample, ExampleEmbedding
 from webapps.vanna.sql_guard import validate_sql
 
+DEFAULT_SPECIAL_VARIABLE_OVERRIDES = {
+    "as_mitem": "5120YET071756",
+    "as_factory_plant": "202",
+}
+
+
+def _normalize_string_value(value: object) -> str:
+    return str(value).strip().strip("'\"")
+
+
+def _format_variable_value_for_question(var_name: str, raw_value: object) -> str:
+    value = _normalize_string_value(raw_value)
+    var_lower = (var_name or "").lower()
+
+    if not value:
+        return value
+
+    if re.search(r"(^|_)year$", var_lower):
+        digits = re.sub(r"\D", "", value)
+        return f"{digits or value}年"
+
+    if re.search(r"(^|_)month$", var_lower):
+        digits = re.sub(r"\D", "", value)
+        if digits:
+            return f"{int(digits)}月"
+        return f"{value}月"
+
+    return value
+
+
+def _get_special_variable_override(var_name: str, data_source: DataSource | None) -> str | None:
+    var_lower = (var_name or "").lower()
+    config_overrides = {}
+    if data_source and isinstance(data_source.config_json, dict):
+        config_overrides = data_source.config_json.get("autofix_special_variables") or {}
+        if not isinstance(config_overrides, dict):
+            config_overrides = {}
+
+    for source in (config_overrides, DEFAULT_SPECIAL_VARIABLE_OVERRIDES):
+        for key, value in source.items():
+            if (key or "").strip().lower() == var_lower and value not in (None, ""):
+                return _normalize_string_value(value)
+
+    if re.search(r"(^|_)year$", var_lower):
+        return "114"
+
+    if re.search(r"(^|_)month$", var_lower):
+        return "05"
+
+    return None
+
+
+def _write_sql_context(command: BaseCommand, label: str, sql: str) -> None:
+    if sql:
+        command.stdout.write(command.style.WARNING(f"  {label}: {sql}"))
+
+
 def _detect_column_for_variable(sql: str, var_name: str) -> str:
     """
     Detect the column associated with a variable name in SQL.
@@ -188,9 +245,10 @@ class Command(BaseCommand):
             self.stdout.write(self.style.NOTICE(f"\nProcessing Record ID={rec_id}: {question[:60]}"))
 
             # 1. 搜尋所有冒號變數
-            variables = list(set(re.findall(r":([a-zA-Z_]\w*)", sql_text)))
+            variables = list(dict.fromkeys(re.findall(r":([a-zA-Z_]\w*)", sql_text)))
             if not variables:
                 self.stdout.write(self.style.WARNING(f"  No variables detected in SQL. Skipping."))
+                _write_sql_context(self, "Failed SQL", sql_text)
                 skipped_count += 1
                 continue
 
@@ -217,6 +275,20 @@ class Command(BaseCommand):
             for var in variables:
                 col_name = _detect_column_for_variable(sql_text, var)
                 meta = _lookup_column_metadata(col_name, sql_tables)
+                override_val = _get_special_variable_override(var, ds)
+
+                if override_val is not None:
+                    data_type = meta[1] if meta else "VARCHAR"
+                    dt_upper = data_type.upper()
+                    is_str = any(x in dt_upper for x in ["CHAR", "TEXT", "VARCHAR", "DATE", "TIME", "TIMESTAMP"])
+                    formatted_val = f"'{override_val}'" if is_str else str(override_val)
+                    var_mapping[var] = (override_val, formatted_val)
+                    self.stdout.write(
+                        self.style.NOTICE(
+                            f"  Variable '{var}' -> Using special override value: {override_val}"
+                        )
+                    )
+                    continue
                 
                 if not meta:
                     db_dict_exists = False
@@ -244,6 +316,7 @@ class Command(BaseCommand):
                         f"    - Searching Field: '{col_name}'\n"
                         f"    - Data Dictionary Status: {db_dict_status}"
                     ))
+                    _write_sql_context(self, "Failed SQL", sql_text)
                     mapping_failed = True
                     break
 
@@ -272,6 +345,7 @@ class Command(BaseCommand):
                             actual_val = row_val
                 except Exception as exc:
                     self.stdout.write(self.style.WARNING(f"  Database query failed for column '{col_name}': {exc}"))
+                    _write_sql_context(self, "Value Lookup SQL", query_sql)
 
                 if actual_val is None:
                     env_mode = (os.getenv("ENV") or "").strip().upper()
@@ -292,6 +366,8 @@ class Command(BaseCommand):
                         self.stdout.write(self.style.WARNING(f"  [Fallback-EXT] Mocking actual value for column '{col_name}' -> '{actual_val}'"))
                     else:
                         self.stdout.write(self.style.WARNING(f"  Could not fetch actual value from table '{table_name}' for variable '{var}'. Skipping record."))
+                        _write_sql_context(self, "Value Lookup SQL", query_sql)
+                        _write_sql_context(self, "Failed SQL", sql_text)
                         mapping_failed = True
                         break
 
@@ -315,7 +391,10 @@ class Command(BaseCommand):
             mapping_str_list = []
             for var, (raw_val, formatted_val) in var_mapping.items():
                 fixed_sql = re.sub(rf":{var}\b", formatted_val, fixed_sql, flags=re.IGNORECASE)
-                mapping_str_list.append(f":{var} = {raw_val} ({formatted_val})")
+                question_display_val = _format_variable_value_for_question(var, raw_val)
+                mapping_str_list.append(
+                    f":{var} = {raw_val} ({formatted_val}), question_value={question_display_val}"
+                )
 
             variable_mapping_str = ", ".join(mapping_str_list)
             self.stdout.write(self.style.SUCCESS(f"  Successfully fixed SQL: {fixed_sql}"))
@@ -339,6 +418,8 @@ class Command(BaseCommand):
             try:
                 res = chat_model.invoke(prompt)
                 fixed_question = res.content.strip().replace('"', '').replace("'", "")
+                if not fixed_question:
+                    fixed_question = question
                 self.stdout.write(self.style.SUCCESS(f"  Original question: {question}"))
                 self.stdout.write(self.style.SUCCESS(f"  Fixed question:    {fixed_question}"))
             except Exception as exc:
@@ -349,6 +430,7 @@ class Command(BaseCommand):
             is_safe, error_msg = validate_sql(fixed_sql)
             if not is_safe:
                 self.stdout.write(self.style.WARNING(f"  Warning: Fixed SQL failed SQL Guard validation: {error_msg}"))
+                _write_sql_context(self, "Fixed SQL", fixed_sql)
             
             if dry_run:
                 self.stdout.write(self.style.SUCCESS("  [Dry-Run] Check complete. No changes written."))
@@ -385,6 +467,7 @@ class Command(BaseCommand):
                     self.stdout.write(self.style.SUCCESS(f"  Record ID={rec_id} successfully converted to approved TrainingExample."))
                 except Exception as exc:
                     self.stdout.write(self.style.ERROR(f"  Failed to transfer record to training set: {exc}"))
+                    _write_sql_context(self, "Fixed SQL", fixed_sql)
                     skipped_count += 1
                     continue
             else:

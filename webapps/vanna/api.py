@@ -147,6 +147,8 @@ def _resolve_data_source(data: dict[str, Any]) -> DataSource:
 TRAINING_DATASET_AGGREGATE_CODE = "__nl2sql_training_catalog__"
 TRAINING_DATASET_SOURCE_CODES = ("nl2sql_oracle_schema", "legacy_vanna_chroma")
 TRAINING_DATASET_PRIMARY_CODE = "nl2sql_oracle_schema"
+ADMIN_SQL_ALLOWED_PROFILES = ("ERP_MPC", "ERP_202", "ERP_205", "ERP_209", "ERP_401")
+ADMIN_SQL_DEFAULT_PROFILE = "ERP_MPC"
 
 
 def _training_dataset_sources(data: dict[str, Any]) -> tuple[list[DataSource], DataSource, bool]:
@@ -191,6 +193,15 @@ def _training_dataset_target_source(
         return primary_source
 
     return _resolve_data_source(data)
+
+
+def _admin_sql_profile(data: dict[str, Any]) -> str:
+    raw_profile = str(data.get("profile") or data.get("db_profile") or ADMIN_SQL_DEFAULT_PROFILE).strip().upper()
+    if raw_profile not in ADMIN_SQL_ALLOWED_PROFILES:
+        raise ValueError(
+            f"Unsupported profile '{raw_profile}'. Allowed profiles: {', '.join(ADMIN_SQL_ALLOWED_PROFILES)}"
+        )
+    return raw_profile
 
 
 def _parse_ddl_object(ddl_text: str, default_schema: str) -> tuple[str, str, str]:
@@ -1137,6 +1148,11 @@ def admin_sql_execute_api(request: HttpRequest) -> JsonResponse:
     except Exception as exc:
         return JsonResponse({"ok": False, "error": f"Failed to resolve data source: {exc}"}, status=400)
 
+    try:
+        execution_profile = _admin_sql_profile(body)
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
     if data_source.db_type == "oracle":
         sql = sql.rstrip(";").strip()
 
@@ -1172,6 +1188,7 @@ def admin_sql_execute_api(request: HttpRequest) -> JsonResponse:
                 "policy": policy,
                 "message": policy["message"],
                 "max_rows": max_rows,
+                "profile": execution_profile,
             }
         )
 
@@ -1184,7 +1201,7 @@ def admin_sql_execute_api(request: HttpRequest) -> JsonResponse:
         if data_source.db_type == "oracle":
             from webapps.database.db_factory import db_connect
 
-            conn = db_connect("oracle", profile=data_source.db_profile)
+            conn = db_connect("oracle", profile=execution_profile)
             try:
                 with conn.cursor() as cur:
                     cur.execute(sql)
@@ -1202,7 +1219,7 @@ def admin_sql_execute_api(request: HttpRequest) -> JsonResponse:
     if error_msg:
         payload = {"ok": False, "error": error_msg, "policy": policy}
         if "Oracle config incomplete" in error_msg:
-            payload["oracle_config"] = _oracle_config_diagnostics(data_source.db_profile)
+            payload["oracle_config"] = _oracle_config_diagnostics(execution_profile)
         return JsonResponse(payload, status=500)
 
     rows = _mask_ct_employ_pii(sql, columns, rows)
@@ -1217,6 +1234,7 @@ def admin_sql_execute_api(request: HttpRequest) -> JsonResponse:
             "latency_ms": latency_ms,
             "policy": policy,
             "max_rows": max_rows,
+            "profile": execution_profile,
         }
     )
 
@@ -1468,3 +1486,67 @@ def rag_debug_api(request: HttpRequest) -> JsonResponse:
         "example_matches": ee_results,
         "prompt": prompt,
     })
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+@require_node("nl2sql", api=True)
+def preset_search_api(request: HttpRequest) -> JsonResponse:
+    body = _json_body(request) if request.method == "POST" else {}
+    params = request.GET if request.method == "GET" else body
+
+    keyword = str(params.get("keyword") or "").strip()
+    ds_code = str(params.get("code") or "legacy_vanna_chroma").strip()
+
+    try:
+        data_source = DataSource.objects.get(code=ds_code)
+    except DataSource.DoesNotExist:
+        data_source = DataSource.objects.filter(enabled=True).first()
+        if not data_source:
+            return JsonResponse({"ok": False, "error": "No data source available"}, status=404)
+
+    results = []
+
+    if keyword:
+        from webapps.llm.embedding_factory import expected_embedding_dimension, get_shared_embedding_model
+        from pgvector.django import CosineDistance
+
+        q_vector = None
+        try:
+            emb_model = get_shared_embedding_model()
+            if emb_model:
+                q_vector = emb_model.embed_query(keyword)
+        except Exception as exc:
+            print(f"Failed to calculate preset query embedding: {exc}")
+
+        expected_dim = expected_embedding_dimension()
+
+        if q_vector and len(q_vector) == expected_dim:
+            ee_matches = ExampleEmbedding.objects.filter(
+                data_source=data_source,
+                training_example__review_status="approved",
+                embedding__isnull=False,
+                embedding_dimension=expected_dim,
+            ).annotate(
+                distance=CosineDistance("embedding", q_vector)
+            ).order_by("distance")[:10]
+
+            for ee in ee_matches:
+                results.append(ee.training_example.question)
+
+        # Fallback: SQL LIKE 模糊搜尋
+        if not results:
+            terms = keyword.split()
+            qs = TrainingExample.objects.filter(data_source=data_source, review_status="approved")
+            for term in terms:
+                if term:
+                    qs = qs.filter(question__icontains=term)
+            results = list(qs.values_list("question", flat=True)[:10])
+
+    if not results:
+        # 如果 keyword 為空，撈取資料庫中最新 10 筆
+        if not keyword:
+            qs = TrainingExample.objects.filter(data_source=data_source, review_status="approved").order_by("-updated_at")
+            results = list(qs.values_list("question", flat=True)[:10])
+
+    return JsonResponse({"ok": True, "questions": results})

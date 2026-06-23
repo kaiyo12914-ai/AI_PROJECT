@@ -11,7 +11,7 @@
   <!-- Stylesheets -->
   <link rel="stylesheet" href="{% custom_static 'vanna/css/index.css' %}?v=20260617e">
   <!-- Defer JS Entry -->
-  <script defer src="{% custom_static 'vanna/js/index.js' %}?v=20260617e"></script>
+  <script defer src="{% custom_static 'vanna/js/index.js' %}?v=20260618c"></script>
 </head>
 <body data-base-url="{{ request.script_name }}" data-login-user="{{ login_user|default:'' }}" data-login-user-org="{{ login_user_org|default:'' }}">
   <div class="vanna-shell">
@@ -61,6 +61,10 @@
         <p style="margin: -4px 0 14px; color: #94a3b8; font-size: 12.5px; line-height: 1.5;">
           格式：[業務別]單位別 查詢內容
         </p>
+        <div class="preset-search-row" style="display: flex; gap: 8px; margin-bottom: 12px;">
+          <input type="text" id="presetKeywordInput" placeholder="輸入關鍵字篩選範例..." style="flex: 1; padding: 8px 12px; font-size: 13px; border-radius: 8px; background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255, 255, 255, 0.12); color: #f1f5f9; outline: none; transition: border-color 0.3s;" aria-label="搜尋範例關鍵字">
+          <button type="button" class="btn btn-secondary mini-btn" id="btnSearchPresets" onclick="searchPresets()" style="width: auto; padding: 0 12px; height: 36px; border-radius: 8px; font-size: 13px; flex-shrink: 0; margin: 0;">搜尋</button>
+        </div>
         <div id="presetQuestionList" style="display: flex; flex-direction: column; gap: 8px;"></div>
       </section>
 

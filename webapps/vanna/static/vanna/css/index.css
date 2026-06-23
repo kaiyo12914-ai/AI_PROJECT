@@ -502,6 +502,23 @@ table.result-table tr:hover {
   text-align: center;
 }
 
+.metric-card-button {
+  cursor: pointer;
+  appearance: none;
+  font: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.metric-card-button:hover,
+.metric-card-button.active {
+  border-color: rgba(56, 189, 248, 0.55);
+  background: rgba(14, 116, 144, 0.24);
+}
+
+.metric-card-button:hover {
+  transform: translateY(-1px);
+}
+
 .metric-card span {
   display: block;
   color: #94a3b8;
@@ -628,6 +645,12 @@ textarea:focus {
   background: rgba(30, 41, 59, 0.9);
 }
 
+.section-chip.active {
+  border-color: rgba(56, 189, 248, 0.65);
+  background: rgba(14, 116, 144, 0.26);
+  color: #e0f2fe;
+}
+
 .training-section-grid {
   display: flex;
   flex-wrap: wrap;
@@ -635,6 +658,10 @@ textarea:focus {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin-top: 10px;
+}
+
+.training-section-grid.single-category {
+  grid-template-columns: 1fr;
 }
 
 .training-section-card {
@@ -647,8 +674,20 @@ textarea:focus {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.training-section-grid.single-category .training-section-card {
+  min-width: 0;
+}
+
+.training-section-card.hidden {
+  display: none;
+}
+
 .training-section-card .training-table-wrap {
   max-height: 240px;
+}
+
+.training-section-grid.single-category .training-section-card .training-table-wrap {
+  max-height: 520px;
 }
 
 

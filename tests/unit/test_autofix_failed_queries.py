@@ -9,6 +9,8 @@ from webapps.vanna.models import DataSource, FailedQueryRecord, TrainingExample,
 from webapps.vanna.management.commands.autofix_failed_queries import (
     _detect_column_for_variable,
     _extract_tables_from_sql,
+    _format_variable_value_for_question,
+    _get_special_variable_override,
     _lookup_column_metadata
 )
 
@@ -99,6 +101,42 @@ class AutofixFailedQueriesTestCase(TestCase):
             self.assertEqual(meta[0], "CT_EMPLOY")
             self.assertEqual(meta[1], "VARCHAR2")
 
+    def test_special_variable_helpers(self):
+        self.assertEqual(_format_variable_value_for_question("as_year", "114"), "114年")
+        self.assertEqual(_format_variable_value_for_question("report_month", "05"), "5月")
+        self.assertEqual(_format_variable_value_for_question("as_mitem", "5120YET071756"), "5120YET071756")
+        self.assertEqual(_format_variable_value_for_question("as_factory_plant", "202"), "202")
+        self.assertEqual(_get_special_variable_override("as_year", self.ds), "114")
+        self.assertEqual(_get_special_variable_override("report_month", self.ds), "05")
+        self.assertEqual(_get_special_variable_override("as_mitem", self.ds), "5120YET071756")
+        self.assertEqual(_get_special_variable_override("as_factory_plant", self.ds), "202")
+
+    @patch("webapps.database.db_factory.db_query_one")
+    @patch("webapps.llm.llm_factory.get_chat_model")
+    def test_command_special_overrides_apply_to_failed_sql(self, mock_get_chat_model, mock_db_query_one):
+        self.record.question = "[採購] 查詢指定年度指定月份指定料號於指定廠別的採購資料"
+        self.record.failed_sql = (
+            "SELECT * FROM ct_employ "
+            "WHERE year = :as_year "
+            "AND month = :as_month "
+            "AND mitem = :as_mitem "
+            "AND factory_plant = :as_factory_plant"
+        )
+        self.record.save(update_fields=["question", "failed_sql"])
+
+        mock_model = MagicMock()
+        mock_model.invoke.return_value = MagicMock(content="[採購] 查詢114年5月5120YET071756於202的採購資料")
+        mock_get_chat_model.return_value = mock_model
+
+        call_command("autofix_failed_queries", limit=1)
+
+        mock_db_query_one.assert_not_called()
+        r = FailedQueryRecord.objects.get(id=self.record.id)
+        self.assertEqual(
+            r.failed_sql,
+            "SELECT * FROM ct_employ WHERE year = '114' AND month = '05' AND mitem = '5120YET071756' AND factory_plant = '202'"
+        )
+
     @patch("webapps.database.db_factory.db_query_one")
     @patch("webapps.llm.llm_factory.get_chat_model")
     def test_command_dry_run(self, mock_get_chat_model, mock_db_query_one):
@@ -181,3 +219,49 @@ class AutofixFailedQueriesTestCase(TestCase):
 
         # 驗證 db_query_one 呼叫時所傳入的 profile 參數是否為指定的 "custom_override_profile"
         mock_db_query_one.assert_called_with("postgresql", unittest.mock.ANY, profile="custom_override_profile")
+
+    @patch("webapps.database.db_factory.db_query_one")
+    @patch("webapps.llm.llm_factory.get_chat_model")
+    def test_command_prompt_contains_special_question_values(self, mock_get_chat_model, mock_db_query_one):
+        self.record.question = "[人事] 查詢指定年度指定月份指定料號於指定廠別的人員資料"
+        self.record.failed_sql = (
+            "SELECT emp.empno FROM ct_employ emp "
+            "WHERE emp.factory_plant = :as_factory_plant "
+            "AND emp.mitem = :as_mitem "
+            "AND emp.year = :as_year "
+            "AND emp.month = :as_month"
+        )
+        self.record.save(update_fields=["question", "failed_sql"])
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO public.data_dictionary (table_name, column_name, data_type) VALUES (%s, %s, %s)",
+                ["CT_EMPLOY", "FACTORY_PLANT", "VARCHAR2"]
+            )
+            cursor.execute(
+                "INSERT INTO public.data_dictionary (table_name, column_name, data_type) VALUES (%s, %s, %s)",
+                ["CT_EMPLOY", "MITEM", "VARCHAR2"]
+            )
+            cursor.execute(
+                "INSERT INTO public.data_dictionary (table_name, column_name, data_type) VALUES (%s, %s, %s)",
+                ["CT_EMPLOY", "YEAR", "VARCHAR2"]
+            )
+            cursor.execute(
+                "INSERT INTO public.data_dictionary (table_name, column_name, data_type) VALUES (%s, %s, %s)",
+                ["CT_EMPLOY", "MONTH", "VARCHAR2"]
+            )
+
+        mock_model = MagicMock()
+        mock_model.invoke.return_value = MagicMock(content="[人事] 查詢114年5月5120YET071756於202的人員資料")
+        mock_get_chat_model.return_value = mock_model
+
+        mock_db_query_one.side_effect = AssertionError("special overrides should bypass db_query_one")
+
+        call_command("autofix_failed_queries", limit=1)
+
+        prompt = mock_model.invoke.call_args.args[0]
+        self.assertIn("question_value=114年", prompt)
+        self.assertIn("question_value=5月", prompt)
+        self.assertIn("question_value=5120YET071756", prompt)
+        self.assertIn("question_value=202", prompt)
+        self.assertIn("【修改後的可執行 SQL】：SELECT emp.empno FROM ct_employ emp WHERE emp.factory_plant = '202' AND emp.mitem = '5120YET071756' AND emp.year = '114' AND emp.month = '05'", prompt)

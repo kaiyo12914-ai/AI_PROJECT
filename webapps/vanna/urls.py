@@ -17,6 +17,7 @@ urlpatterns = [
     path("api/vanna/training-dataset/", api.training_dataset_api, name="api_training_dataset"),
     path("api/vanna/admin-sql-execute/", api.admin_sql_execute_api, name="api_admin_sql_execute"),
     path("api/vanna/rag-debug/", api.rag_debug_api, name="api_rag_debug"),
+    path("api/vanna/preset-search/", api.preset_search_api, name="api_preset_search"),
     path("api/generate/", api.generate_api, name="api_generate"),
     path("api/execute/", api.execute_api, name="api_execute"),
     path("api/query-logs/", api.query_logs_api, name="api_query_logs"),

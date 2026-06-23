@@ -110,6 +110,64 @@ function normalizeQuestionForCurrentOrg(question) {
   return replaceQuestionUnit(question, getCurrentLoginOrg());
 }
 
+const SQL_TEST_PROFILE_OPTIONS = ["ERP_MPC", "ERP_202", "ERP_205", "ERP_209", "ERP_401"];
+const SQL_TEST_DEFAULT_PROFILE = "ERP_MPC";
+
+function buildSqlProfileOptions(selectedProfile = SQL_TEST_DEFAULT_PROFILE) {
+  const normalizedSelected = String(selectedProfile || SQL_TEST_DEFAULT_PROFILE).trim().toUpperCase();
+  return SQL_TEST_PROFILE_OPTIONS.map(profile => {
+    const selectedAttr = profile === normalizedSelected ? " selected" : "";
+    return `<option value="${profile}"${selectedAttr}>${profile}</option>`;
+  }).join("");
+}
+
+function selectedSqlProfile(selectEl) {
+  const value = String(selectEl && selectEl.value ? selectEl.value : SQL_TEST_DEFAULT_PROFILE).trim().toUpperCase();
+  return SQL_TEST_PROFILE_OPTIONS.includes(value) ? value : SQL_TEST_DEFAULT_PROFILE;
+}
+
+function sqlTestSignature(sql, profile, maxRows) {
+  return JSON.stringify({
+    sql: String(sql || "").trim(),
+    profile: selectedSqlProfile({ value: profile }),
+    maxRows: Number.isFinite(maxRows) ? maxRows : 10
+  });
+}
+
+function markSqlTestPending(fieldsEl) {
+  if (!fieldsEl) return;
+  fieldsEl.dataset.sqlTestPassed = "false";
+  fieldsEl.dataset.sqlTestSignature = "";
+}
+
+function markSqlTestPassed(fieldsEl, sql, profile, maxRows) {
+  if (!fieldsEl) return;
+  fieldsEl.dataset.sqlTestPassed = "true";
+  fieldsEl.dataset.sqlTestSignature = sqlTestSignature(sql, profile, maxRows);
+}
+
+function hasCurrentSqlTestPassed(formEl, trainingType) {
+  if (!["sql", "failed"].includes(trainingType)) {
+    return true;
+  }
+  const fieldsEl = formEl.querySelector(`.training-fields[data-training-fields="${trainingType}"]`);
+  if (!fieldsEl || fieldsEl.dataset.sqlTestPassed !== "true") {
+    return false;
+  }
+
+  const isFailed = trainingType === "failed";
+  const sqlEl = isFailed ? fieldsEl.querySelector("#failedSqlInput") : fieldsEl.querySelector("#trainingSqlInput");
+  const profileEl = isFailed ? fieldsEl.querySelector("#failedSqlProfileSelect") : fieldsEl.querySelector("#currentSqlProfileSelect");
+  const maxRowsEl = isFailed ? fieldsEl.querySelector("#failedSqlMaxRowsInput") : fieldsEl.querySelector("#currentSqlMaxRowsInput");
+  const maxRows = parseInt(maxRowsEl.value || "10", 10);
+  const currentSignature = sqlTestSignature(
+    sqlEl.value,
+    selectedSqlProfile(profileEl),
+    Number.isFinite(maxRows) ? maxRows : 10
+  );
+  return fieldsEl.dataset.sqlTestSignature === currentSignature;
+}
+
 const BASE_PRESET_QUESTIONS = [
   "[人事]MPC 查詢目前在職人員數量",
   "[人事]202廠 列出前10筆員工姓名、工號與所屬單位",
@@ -373,13 +431,14 @@ function openTrainingDatasetManager() {
   row.appendChild(bubble);
   chatMessages.appendChild(row);
   chatMessages.scrollTop = chatMessages.scrollHeight;
-  loadTrainingDataset(bubble);
+  loadTrainingDataset(bubble, true, "failed");
 }
 
-function loadTrainingDataset(bubbleEl, allItems = false) {
+function loadTrainingDataset(bubbleEl, allItems = false, focusCategory = "") {
   const code = encodeURIComponent(TRAINING_DATASET_CODE);
   const allQuery = allItems ? "&all=true" : "";
   bubbleEl.dataset.allItems = allItems ? "true" : "false";
+  bubbleEl.dataset.focusCategory = focusCategory || "";
   fetch(apiurl(`/nl2sql/api/vanna/training-dataset/?code=${code}${allQuery}`), {
     method: "GET",
     headers: {
@@ -400,6 +459,12 @@ function loadTrainingDataset(bubbleEl, allItems = false) {
     console.log("documentation_items length:", data.result.documentation_items ? data.result.documentation_items.length : "N/A");
     console.log("failed_queries length:", data.result.failed_queries ? data.result.failed_queries.length : "N/A");
     renderTrainingDatasetManager(bubbleEl, data.result, allItems);
+    if (focusCategory) {
+      const targetEl = bubbleEl.querySelector(`[data-training-category-target="${focusCategory}"]`);
+      if (targetEl) {
+        showTrainingCategory(targetEl, focusCategory);
+      }
+    }
     addLog("Vanna 訓練資料集已載入。", "success");
   })
   .catch(err => {
@@ -418,6 +483,47 @@ function findTrainingItemById(result, type, id) {
   };
   const items = collections[type] || [];
   return items.find(item => item.id === id) || null;
+}
+
+function showTrainingCategory(buttonEl, category) {
+  const bubbleEl = buttonEl.closest(".msg-bubble");
+  if (!bubbleEl) return;
+
+  const normalizedCategory = String(category || "all").trim().toLowerCase();
+  if (normalizedCategory !== "all" && bubbleEl.dataset.allItems !== "true") {
+    loadTrainingDataset(bubbleEl, true, normalizedCategory);
+    return;
+  }
+
+  const gridEl = bubbleEl.querySelector(".training-section-grid");
+  if (gridEl) {
+    gridEl.classList.toggle("single-category", normalizedCategory !== "all");
+  }
+
+  const sections = bubbleEl.querySelectorAll(".training-section-card[data-training-category]");
+  sections.forEach(section => {
+    const matches = normalizedCategory === "all" || section.dataset.trainingCategory === normalizedCategory;
+    section.classList.toggle("hidden", !matches);
+  });
+
+  bubbleEl.querySelectorAll("[data-training-category-target]").forEach(el => {
+    el.classList.toggle("active", el.dataset.trainingCategoryTarget === normalizedCategory);
+  });
+
+  const formEl = bubbleEl.querySelector(".training-form.training-data-form");
+  if (formEl && normalizedCategory !== "all") {
+    const tabEl = formEl.querySelector(`.training-type-tab[data-training-type="${normalizedCategory}"]`);
+    if (tabEl) {
+      selectTrainingType(tabEl);
+    }
+  }
+
+  const targetSection = normalizedCategory === "all"
+    ? gridEl
+    : bubbleEl.querySelector(`.training-section-card[data-training-category="${normalizedCategory}"]`);
+  if (targetSection) {
+    targetSection.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 function renderTrainingDatasetManager(bubbleEl, result, allItems = false) {
@@ -482,11 +588,11 @@ function renderTrainingDatasetManager(bubbleEl, result, allItems = false) {
       <div class="rag-debug-result" style="display:none;"></div>
     </div>
 
-    <div class="metric-grid">
-      <div class="metric-card"><span>DDL</span><strong>${summary.ddl_items || 0}</strong></div>
-      <div class="metric-card"><span>Documentation</span><strong>${summary.documentation_items || 0}</strong></div>
-      <div class="metric-card"><span>SQL Examples</span><strong>${summary.approved_examples || 0}</strong></div>
-      <div class="metric-card"><span>Failed</span><strong>${summary.failed_records || 0}</strong></div>
+    <div class="metric-grid" aria-label="訓練資料分類快速篩選">
+      <button type="button" class="metric-card metric-card-button" data-training-category-target="ddl" onclick="showTrainingCategory(this, 'ddl')"><span>DDL</span><strong>${summary.ddl_items || 0}</strong></button>
+      <button type="button" class="metric-card metric-card-button" data-training-category-target="documentation" onclick="showTrainingCategory(this, 'documentation')"><span>Documentation</span><strong>${summary.documentation_items || 0}</strong></button>
+      <button type="button" class="metric-card metric-card-button" data-training-category-target="sql" onclick="showTrainingCategory(this, 'sql')"><span>SQL Examples</span><strong>${summary.approved_examples || 0}</strong></button>
+      <button type="button" class="metric-card metric-card-button" data-training-category-target="failed" onclick="showTrainingCategory(this, 'failed')"><span>Failed</span><strong>${summary.failed_records || 0}</strong></button>
     </div>
 
     <div class="training-form training-data-form">
@@ -525,6 +631,10 @@ WHERE e.STATUS = 'ACTIVE'
 GROUP BY d.DEPT_NAME;"></textarea>
         <div class="current-sql-test-row" style="display:flex; align-items:center; gap:8px; margin-top:8px;">
           <button type="button" class="btn btn-secondary mini-btn" onclick="testCurrentSql(this)">測試此 SQL 語法</button>
+          <span class="muted-text" style="margin-left:8px;">指定 Profile:</span>
+          <select id="currentSqlProfileSelect" style="width: auto; padding: 4px 8px; font-size:12px; height:28px;" aria-label="SQL 測試 Profile">
+            ${buildSqlProfileOptions()}
+          </select>
           <span class="muted-text" style="margin-left:8px;">最多回傳:</span>
           <input id="currentSqlMaxRowsInput" type="number" min="1" max="1000" value="10" style="width: 70px; padding: 4px 8px; font-size:12px; height:28px;" aria-label="最多回傳筆數">
         </div>
@@ -544,6 +654,10 @@ GROUP BY d.DEPT_NAME;"></textarea>
             <option value="optimized">已完成優化</option>
             <option value="ignored">忽略/不處理</option>
           </select>
+          <span class="muted-text" style="margin-left:8px;">指定 Profile:</span>
+          <select id="failedSqlProfileSelect" style="width: auto; padding: 4px 8px; font-size:12px; height:28px;" aria-label="Failed SQL 測試 Profile">
+            ${buildSqlProfileOptions()}
+          </select>
           <button type="button" class="btn btn-secondary mini-btn" onclick="testCurrentSql(this)" style="margin-left: 8px;">執行 QUERY</button>
           <span class="muted-text" style="margin-left:8px;">最多回傳:</span>
           <input id="failedSqlMaxRowsInput" type="number" min="1" max="1000" value="10" style="width: 70px; padding: 4px 8px; font-size:12px; height:28px;" aria-label="最多回傳筆數">
@@ -561,6 +675,9 @@ GROUP BY d.DEPT_NAME;"></textarea>
 FROM CT_EMPLOYEE
 WHERE ROWNUM <= 10;" disabled></textarea>
       <div class="sql-test-actions">
+        <select id="adminSqlProfileSelect" aria-label="管理員 SQL 測試 Profile" disabled>
+          ${buildSqlProfileOptions()}
+        </select>
         <input id="adminSqlMaxRowsInput" type="number" min="1" max="1000" value="100" aria-label="最多回傳筆數" disabled>
         <button class="btn btn-primary" onclick="executeAdminSqlTest(this)" disabled>執行 SQL 測試</button>
       </div>
@@ -568,14 +685,15 @@ WHERE ROWNUM <= 10;" disabled></textarea>
     </div>
 
     <div class="training-section-nav" aria-label="區段導覽">
-      <button type="button" class="section-chip" onclick="document.getElementById('ddlTrainingSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' })">DDL</button>
-      <button type="button" class="section-chip" onclick="document.getElementById('documentationTrainingSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' })">Documentation</button>
-      <button type="button" class="section-chip" onclick="document.getElementById('sqlTrainingSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' })">SQL Examples</button>
-      <button type="button" class="section-chip" onclick="document.getElementById('failedTrainingSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' })">Failed Queries</button>
+      <button type="button" class="section-chip active" data-training-category-target="all" onclick="showTrainingCategory(this, 'all')">全部</button>
+      <button type="button" class="section-chip" data-training-category-target="ddl" onclick="showTrainingCategory(this, 'ddl')">DDL</button>
+      <button type="button" class="section-chip" data-training-category-target="documentation" onclick="showTrainingCategory(this, 'documentation')">Documentation</button>
+      <button type="button" class="section-chip" data-training-category-target="sql" onclick="showTrainingCategory(this, 'sql')">SQL Examples</button>
+      <button type="button" class="section-chip" data-training-category-target="failed" onclick="showTrainingCategory(this, 'failed')">Failed Queries</button>
     </div>
 
     <div class="training-section-grid">
-      <div class="training-section training-section-card" id="ddlTrainingSection">
+      <div class="training-section training-section-card" id="ddlTrainingSection" data-training-category="ddl">
         <h3>DDL / Schema metadata <span class="badge" style="font-size:12.5px; font-weight:normal; color:#94a3b8; margin-left:8px;">(顯示 ${result.schema_objects?.length || 0} / 共 ${summary.schema_objects || 0} 筆)</span></h3>
         <div class="table-wrapper training-table-wrap">
           <table class="result-table">
@@ -584,7 +702,7 @@ WHERE ROWNUM <= 10;" disabled></textarea>
           </table>
         </div>
       </div>
-      <div class="training-section training-section-card" id="documentationTrainingSection">
+      <div class="training-section training-section-card" id="documentationTrainingSection" data-training-category="documentation">
         <h3>Documentation <span class="badge" style="font-size:12.5px; font-weight:normal; color:#94a3b8; margin-left:8px;">(顯示 ${result.documentation_items?.length || 0} / 共 ${summary.documentation_items || 0} 筆)</span></h3>
         <div class="table-wrapper training-table-wrap">
           <table class="result-table">
@@ -593,7 +711,7 @@ WHERE ROWNUM <= 10;" disabled></textarea>
           </table>
         </div>
       </div>
-      <div class="training-section training-section-card" id="sqlTrainingSection">
+      <div class="training-section training-section-card" id="sqlTrainingSection" data-training-category="sql">
         <h3>SQL approved examples <span class="badge" style="font-size:12.5px; font-weight:normal; color:#94a3b8; margin-left:8px;">(顯示 ${result.training_examples?.length || 0} / 共 ${summary.approved_examples || 0} 筆)</span></h3>
         <div class="table-wrapper training-table-wrap">
           <table class="result-table">
@@ -602,7 +720,7 @@ WHERE ROWNUM <= 10;" disabled></textarea>
           </table>
         </div>
       </div>
-      <div class="training-section training-section-card" id="failedTrainingSection">
+      <div class="training-section training-section-card" id="failedTrainingSection" data-training-category="failed">
         <h3>Failed queries (失敗語法精進記錄) <span class="badge" style="font-size:12.5px; font-weight:normal; color:#94a3b8; margin-left:8px;">(顯示 ${result.failed_queries?.length || 0} / 共 ${summary.failed_records || 0} 筆)</span></h3>
         <div class="table-wrapper training-table-wrap">
           <table class="result-table">
@@ -623,6 +741,13 @@ WHERE ROWNUM <= 10;" disabled></textarea>
       </div>
     </div>
   `;
+
+  const metricGridEl = bubbleEl.querySelector(".metric-grid");
+  const sectionNavEl = bubbleEl.querySelector(".training-section-nav");
+  const sectionGridEl = bubbleEl.querySelector(".training-section-grid");
+  if (metricGridEl && sectionNavEl && sectionGridEl) {
+    metricGridEl.after(sectionNavEl, sectionGridEl);
+  }
 }
 
 function selectTrainingType(tabEl) {
@@ -639,16 +764,19 @@ function selectTrainingType(tabEl) {
   const testForm = bubbleEl ? bubbleEl.querySelector(".sql-test-form") : null;
   if (testForm) {
     const textarea = testForm.querySelector("#adminSqlInput");
+    const profileSelect = testForm.querySelector("#adminSqlProfileSelect");
     const input = testForm.querySelector("#adminSqlMaxRowsInput");
     const btn = testForm.querySelector("button");
     if (trainingType === "sql") {
       testForm.classList.remove("disabled-form");
       if (textarea) textarea.disabled = false;
+      if (profileSelect) profileSelect.disabled = false;
       if (input) input.disabled = false;
       if (btn) btn.disabled = false;
     } else {
       testForm.classList.add("disabled-form");
       if (textarea) textarea.disabled = true;
+      if (profileSelect) profileSelect.disabled = true;
       if (input) input.disabled = true;
       if (btn) btn.disabled = true;
     }
@@ -683,7 +811,10 @@ function trainingPayload(formEl, trainingType) {
     const sql = formEl.querySelector("#failedSqlInput").value.trim();
     const analysis = formEl.querySelector("#failedAnalysisInput").value.trim();
     const action_taken = formEl.querySelector("#failedActionInput").value.trim();
-    const status = formEl.querySelector("#failedStatusSelect").value;
+    let status = formEl.querySelector("#failedStatusSelect").value;
+    if (status !== "ignored") {
+      status = "optimized";
+    }
     if (!question || !sql) {
       throw new Error("問題與 SQL 欄位不可為空。");
     }
@@ -707,6 +838,12 @@ function submitTrainingData(btn) {
     payload = trainingPayload(formEl, trainingType);
   } catch (err) {
     addLog(err.message, "error");
+    return;
+  }
+
+  if (!hasCurrentSqlTestPassed(formEl, trainingType)) {
+    addLog("更新訓練資料前必須先執行 QUERY 並通過測試；若 SQL、Profile 或最多回傳筆數有異動，請重新測試。", "error");
+    alert("此筆 SQL 尚未通過目前設定的 QUERY 測試，請先執行 QUERY 並確認通過後再更新訓練資料。");
     return;
   }
 
@@ -740,7 +877,7 @@ function submitTrainingData(btn) {
     addLog(`已${isEditing ? "更新" : "新增"} ${trainingType} 訓練資料，請執行 Vanna Sync 使資料生效。`, "success");
     resetTrainingForm(formEl);
     const allItems = bubbleEl.dataset.allItems === "true";
-    loadTrainingDataset(bubbleEl, allItems);
+    loadTrainingDataset(bubbleEl, allItems, trainingType);
   })
   .catch(err => {
     addLog(`${isEditing ? "更新" : "新增"}訓練資料失敗: ${err.message}`, "error");
@@ -852,6 +989,7 @@ function resetTrainingForm(formEl) {
   formEl.querySelector("#failedAnalysisInput").value = "";
   formEl.querySelector("#failedActionInput").value = "";
   formEl.querySelector("#failedStatusSelect").value = "pending";
+  formEl.querySelectorAll(".training-fields").forEach(fieldsEl => markSqlTestPending(fieldsEl));
 
   const failedTestResult = formEl.querySelector(".failed-sql-test-result");
   if (failedTestResult) {
@@ -896,9 +1034,9 @@ function deleteTrainingItem(btn, type, id) {
       btn.innerHTML = originalText;
       return;
     }
-    addLog(`已刪除該筆 ${type} 訓練資料，請執行 Vanna Sync 使資料生效。`, "success");
+    addLog(`已刪除該筆 ${type} 訓練資料，請執行 Vanna Sync 使資料生效.`, "success");
     const allItems = bubbleEl.dataset.allItems === "true";
-    loadTrainingDataset(bubbleEl, allItems);
+    loadTrainingDataset(bubbleEl, allItems, type);
   })
   .catch(err => {
     addLog(`刪除訓練資料失敗: ${err.message}`, "error");
@@ -910,9 +1048,11 @@ function deleteTrainingItem(btn, type, id) {
 function executeAdminSqlTest(btn) {
   const formEl = btn.closest(".sql-test-form");
   const sqlEl = formEl.querySelector("#adminSqlInput");
+  const profileEl = formEl.querySelector("#adminSqlProfileSelect");
   const maxRowsEl = formEl.querySelector("#adminSqlMaxRowsInput");
   const resultEl = formEl.querySelector(".sql-test-result");
   const sql = sqlEl.value.trim();
+  const profile = selectedSqlProfile(profileEl);
   const maxRows = parseInt(maxRowsEl.value || "100", 10);
 
   if (!sql) {
@@ -936,6 +1076,7 @@ function executeAdminSqlTest(btn) {
     },
     body: JSON.stringify({
       code: selectedDataSourceCode(),
+      profile: profile,
       sql: sql,
       max_rows: Number.isFinite(maxRows) ? maxRows : 100
     })
@@ -1237,10 +1378,13 @@ function testCurrentSql(btn) {
   const fieldsEl = btn.closest(".training-fields");
   const isFailed = fieldsEl.dataset.trainingFields === "failed";
   const sqlEl = isFailed ? fieldsEl.querySelector("#failedSqlInput") : fieldsEl.querySelector("#trainingSqlInput");
+  const profileEl = isFailed ? fieldsEl.querySelector("#failedSqlProfileSelect") : fieldsEl.querySelector("#currentSqlProfileSelect");
   const maxRowsEl = isFailed ? fieldsEl.querySelector("#failedSqlMaxRowsInput") : fieldsEl.querySelector("#currentSqlMaxRowsInput");
   const resultEl = isFailed ? fieldsEl.querySelector(".failed-sql-test-result") : fieldsEl.querySelector(".current-sql-test-result");
   const sql = sqlEl.value.trim();
+  const profile = selectedSqlProfile(profileEl);
   const maxRows = parseInt(maxRowsEl.value || "10", 10);
+  markSqlTestPending(fieldsEl);
 
   if (!sql) {
     addLog("請輸入 SQL 後再執行測試。", "error");
@@ -1263,6 +1407,7 @@ function testCurrentSql(btn) {
     },
     body: JSON.stringify({
       code: selectedDataSourceCode(),
+      profile: profile,
       sql: sql,
       max_rows: Number.isFinite(maxRows) ? maxRows : 10
     })
@@ -1275,6 +1420,7 @@ function testCurrentSql(btn) {
       return;
     }
     addLog(`編輯器 SQL 測試成功，取得 ${(data.rows || []).length} 筆資料。`, "success");
+    markSqlTestPassed(fieldsEl, sql, profile, Number.isFinite(maxRows) ? maxRows : 10);
     renderResultTable(resultEl, data);
   })
   .catch(err => {
@@ -1373,6 +1519,49 @@ function debugRagPrompt(btn) {
   });
 }
 
+function searchPresets() {
+  const inputEl = document.getElementById("presetKeywordInput");
+  if (!inputEl) return;
+  const keyword = inputEl.value.trim();
+
+  // 取得目前選定的 data source，或者如果沒有就預設
+  const code = "legacy_vanna_chroma";
+
+  const btn = document.getElementById("btnSearchPresets");
+  let originalText = "";
+  if (btn) {
+    originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = "...";
+  }
+
+  fetch(apiurl(`/nl2sql/api/vanna/preset-search/?code=${encodeURIComponent(code)}&keyword=${encodeURIComponent(keyword)}`), {
+    method: "GET",
+    headers: {
+      "X-CSRFToken": getCookie("csrftoken")
+    }
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.ok && data.questions) {
+      if (keyword === "" && data.questions.length === 0) {
+        renderPresetQuestions(buildDefaultPresetQuestions());
+      } else {
+        renderPresetQuestions(data.questions);
+      }
+    }
+  })
+  .catch(err => {
+    console.error("Failed to search presets:", err);
+  })
+  .finally(() => {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  });
+}
+
 // 9. 綁定按鈕監聽 (等 DOMContentLoaded)
 document.addEventListener("DOMContentLoaded", () => {
   addLog("Vanna 2.0 整合對話工作區已載入。", "success");
@@ -1384,6 +1573,16 @@ document.addEventListener("DOMContentLoaded", () => {
     inputEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         sendQuestion();
+      }
+    });
+  }
+
+  // 監聽範例搜尋框 Enter 送出
+  const keywordEl = document.getElementById("presetKeywordInput");
+  if (keywordEl) {
+    keywordEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        searchPresets();
       }
     });
   }

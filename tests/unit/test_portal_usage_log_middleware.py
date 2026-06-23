@@ -127,3 +127,24 @@ class TestPortalUsageLogMiddlewareDeduplication(TestCase):
         request2.login_user_name = "User One"
         self.middleware(request2)
         self.assertEqual(len(self._track_new_logs()), 2)
+
+    @override_settings(
+        PORTAL_USAGE_CODE_MAP=(("/test-feature/", "TEST_FEATURE"),)
+    )
+    @patch("webapps.portal.middleware.resolve_effective_user_id", return_value="user_non_mpc")
+    def test_non_mpc_org_display_name_no_duplicate(self, mock_resolve_user):
+        request = self.factory.get("/test-feature/")
+        request.session = {}
+        request.login_user_org = "202"
+        request.login_user_name = "202-UserOne"
+        
+        response = self.middleware(request)
+        self.assertEqual(response.status_code, 200)
+        
+        new_logs = self._track_new_logs()
+        # Filter logs for user_non_mpc specifically since setup tearDown might track test_feature
+        user_logs = [log for log in new_logs if log.user_id == "user_non_mpc"]
+        self.assertEqual(len(user_logs), 1)
+        log = user_logs[0]
+        self.assertEqual(log.user_name, "202-UserOne")
+        self.assertIn('"login_user_display_name": "202-UserOne"', log.whoami_json)

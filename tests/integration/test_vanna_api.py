@@ -348,7 +348,75 @@ class VannaApiIntegrationTestCase(SimpleTestCase):
         self.assertTrue(data["ok"])
         self.assertEqual(data["columns"], ["EMPNO", "NAME"])
         self.assertEqual(data["rows"], [["*****", "Alice"]])
+        self.assertEqual(data["profile"], "ERP_MPC")
         mock_cur.fetchmany.assert_called_once_with(10)
+        mock_db_connect.assert_called_once_with("oracle", profile="ERP_MPC")
+
+    @override_settings(ENV_NAME="INT")
+    @patch("webapps.vanna.api.is_vanna_admin", return_value=True)
+    @patch("webapps.database.db_factory.db_connect")
+    @patch("webapps.vanna.api._resolve_data_source")
+    def test_admin_sql_execute_api_oracle_int_uses_requested_profile(
+        self,
+        mock_resolve_ds,
+        mock_db_connect,
+        _mock_is_admin,
+    ):
+        mock_ds = MagicMock()
+        mock_ds.db_type = "oracle"
+        mock_ds.enabled = True
+        mock_ds.db_profile = "ERP_205"
+        mock_resolve_ds.return_value = mock_ds
+
+        mock_cur = MagicMock()
+        mock_cur.description = [("EMPNO",)]
+        mock_cur.fetchmany.return_value = [("001",)]
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+        mock_db_connect.return_value = mock_conn
+
+        res = self.client.post(
+            self.admin_sql_execute_url,
+            data=json.dumps(
+                {
+                    "code": "legacy_vanna_chroma",
+                    "sql": "SELECT EMPNO FROM CT_EMPLOY",
+                    "profile": "ERP_209",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["profile"], "ERP_209")
+        mock_db_connect.assert_called_once_with("oracle", profile="ERP_209")
+
+    @patch("webapps.vanna.api.is_vanna_admin", return_value=True)
+    @patch("webapps.vanna.api._resolve_data_source")
+    def test_admin_sql_execute_api_rejects_invalid_profile(self, mock_resolve_ds, _mock_is_admin):
+        mock_ds = MagicMock()
+        mock_ds.db_type = "oracle"
+        mock_ds.enabled = True
+        mock_resolve_ds.return_value = mock_ds
+
+        res = self.client.post(
+            self.admin_sql_execute_url,
+            data=json.dumps(
+                {
+                    "code": "legacy_vanna_chroma",
+                    "sql": "SELECT EMPNO FROM CT_EMPLOY",
+                    "profile": "BAD_PROFILE",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(res.status_code, 400)
+        data = res.json()
+        self.assertFalse(data["ok"])
+        self.assertIn("Unsupported profile", data["error"])
 
     @override_settings(ENV_NAME="INT")
     @patch("webapps.vanna.api.is_vanna_admin", return_value=True)

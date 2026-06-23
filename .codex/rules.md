@@ -138,3 +138,14 @@
    - `git rev-list --left-right --count HEAD...upstream/main` 應為 `0 0`。
    - `git status --short --branch` 應顯示 `main...upstream/main` 且無未提交檔案。
 7. 若 `origin/main` 仍顯示 ahead，但 `upstream/main` 已同步，需在回報中明確說明：`origin` 不可用或無權限，實際同步目標為 `upstream`。
+
+---
+
+## 12. 路徑規範
+
+1. 程式碼中不得硬編碼專案根路徑，例如 `H:\AI\PB_Source`、`D:\AI\PB_Source`。
+2. 專案根目錄與子目錄一律優先使用相對路徑，或透過共用解析器取得。
+3. `.env` 只保留可切換的根目錄設定，例如 `PB_SOURCE_ROOT=.`, `PB_MPCPBL_ROOT=MPCPBL`。
+4. Python 工具若需專案根目錄，優先使用共用函式，不得各自寫死磁碟機代號。
+5. 文件與範例命令預設使用相對路徑，除非是跨專案或外部環境明確需要絕對路徑。
+6. 若因內外網環境不同需要切換根目錄，只能透過 `.env` 或環境變數覆寫，不得直接修改程式常數。

@@ -607,7 +607,7 @@ def _env_bool(k: str, d: bool = False) -> bool:
 def _oracle_thick_mode_setting() -> str:
     """
     ORA_THICK_MODE:
-    - AUTO (default): thin first, fallback to thick on thin-incompatible DB.
+    - AUTO (default): prefer thick when Oracle Client is configured, otherwise use thin.
     - THICK: force thick mode.
     - THIN: force thin mode (no fallback).
     """
@@ -1264,6 +1264,24 @@ class OracleDB(BaseDB):
         client_lib_dir = (_env("ORA_CLIENT_LIB_DIR", "") or _env("ORACLE_CLIENT_LIB_DIR", "")).strip()
         auto_prefer_thick = _env_bool("ORA_AUTO_PREFER_THICK", bool(client_lib_dir))
 
+        def _raise_thin_mode_hints(err: Exception) -> None:
+            msg = str(err or "")
+            lowered = msg.lower()
+            if "DPY-3015" in msg or "password verifier type 0x939" in lowered:
+                raise RuntimeError(
+                    "Oracle thin connect failed with DPY-3015. "
+                    "The account appears to use an old password verifier (10G). "
+                    "Use thick mode or ask DBA to regenerate the user password verifier. "
+                    f"dsn={dsn}, profile={self.profile or ''}, err={err}"
+                ) from err
+            if "DPY-3010" in msg or thin_hint in lowered:
+                raise RuntimeError(
+                    "Oracle thin connect failed because this database version is not supported in thin mode. "
+                    "Use thick mode with Oracle Client libraries, or upgrade the Oracle server to 12.1+. "
+                    f"dsn={dsn}, profile={self.profile or ''}, err={err}"
+                ) from err
+            raise RuntimeError(f"Oracle thin connect failed. dsn={dsn}, err={err}") from err
+
         if mode == "THICK":
             _ensure_oracle_thick_mode(oracledb)
             try:
@@ -1274,48 +1292,27 @@ class OracleDB(BaseDB):
             try:
                 conn = _do_connect()
             except Exception as e:
-                raise RuntimeError(f"Oracle thin connect failed. dsn={dsn}, err={e}") from e
+                _raise_thin_mode_hints(e)
         else:
             # AUTO:
-            # - default prefer thick when ORA_CLIENT_LIB_DIR is configured.
-            # - avoids DPY-2019 (cannot switch to thick after thin is active).
+            # - If Oracle Client is configured, prefer thick first.
+            # - Otherwise use thin directly.
+            # - Do not switch modes after a process has already initialized thin/thick.
             if auto_prefer_thick:
-                thick_err: Exception | None = None
                 try:
                     _ensure_oracle_thick_mode(oracledb)
                     conn = _do_connect()
                 except Exception as e:
-                    thick_err = e
-                    try:
-                        conn = _do_connect()
-                    except Exception as e2:
-                        msg2 = str(e2 or "")
-                        if ("DPY-3010" in msg2) or (thin_hint in msg2.lower()):
-                            raise RuntimeError(
-                                "Oracle AUTO connect failed: thin mode does not support this DB version, "
-                                "and thick mode was not available. "
-                                "Check ORA_CLIENT_LIB_DIR, set ORA_THICK_MODE=THICK, then restart process."
-                                f" dsn={dsn}, thick_err={thick_err}, thin_err={e2}"
-                            ) from e2
-                        raise RuntimeError(
-                            f"Oracle AUTO connect failed (thick-first then thin). dsn={dsn}, thick_err={thick_err}, thin_err={e2}"
-                        ) from e2
+                    raise RuntimeError(
+                        "Oracle AUTO connect failed while using thick mode. "
+                        "Check ORA_CLIENT_LIB_DIR / ORA_TNS_ADMIN and restart the whole process. "
+                        f"dsn={dsn}, profile={self.profile or ''}, err={e}"
+                    ) from e
             else:
-                # thin-first fallback path (legacy behavior)
                 try:
                     conn = _do_connect()
                 except Exception as e:
-                    msg = str(e or "")
-                    if ("DPY-3010" in msg) or (thin_hint in msg.lower()):
-                        _ensure_oracle_thick_mode(oracledb)
-                        try:
-                            conn = _do_connect()
-                        except Exception as e2:
-                            raise RuntimeError(
-                                f"Oracle AUTO connect failed (thin->thick). dsn={dsn}, thin_err={e}, thick_err={e2}"
-                            ) from e2
-                    else:
-                        raise RuntimeError(f"Oracle connect failed. dsn={dsn}, err={e}") from e
+                    _raise_thin_mode_hints(e)
 
         if int(call_timeout_ms) > 0:
             try:
@@ -1657,5 +1654,4 @@ def db_execute(db_type: DBType, sql: str, params: Params = None, *, profile: str
                 conn.close()
             except Exception:
                 pass
-
 
