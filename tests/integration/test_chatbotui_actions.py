@@ -154,13 +154,13 @@ def test_conversation_model_update_success(monkeypatch):
         },
     )
     response = views.api_conversation_model(
-        _request("POST", "/chatbotui/conversations/c1/model/", {"model_type": "OLLAMA"}),
+        _request("POST", "/chatbotui/conversations/c1/model/", {"model_type": "OPENAI"}),
         "c1",
     )
     payload = json.loads(response.content.decode("utf-8"))
     assert response.status_code == 200
     assert payload["ok"] is True
-    assert payload["conversation"]["model_type"] == "OLLAMA"
+    assert payload["conversation"]["model_type"] == "OPENAI"
 
 
 def test_conversation_config_update_success(monkeypatch):

@@ -91,6 +91,15 @@
 1. 新增應用資料表必須建立於 PostgreSQL。
 2. 資料表變更必須使用 Django migration 管理。
 3. 禁止在功能程式中直接建立 ad-hoc table。
+4. PB Web 化功能的後續實際資料庫驗證，統一以 PostgreSQL profile `202` 為驗收基準；主單、明細、關聯資料與工作日曆等可執行驗證結果，必須回寫該程式唯一的 `docs/<程式代號>_plan.md`。
+5. 若其他 profile 缺少 PB 對應資料表、欄位或資料，除非使用者另行指定，不得以其他 profile 的結果取代 profile `202` 驗證，也不得因此標示功能完成。
+
+### 6.1 Oracle 關聯 fixture 驗證例外（需明確授權）
+1. 預設禁止修改正式資料；但使用者在當次任務明確授權時，驗證測試得修改正式 Oracle 資料，或自行模擬生成可代表正式關聯的 Oracle fixture，以補齊 PB JOIN、ACL、查詢、列印或匯出驗證所需資料。
+2. 例外僅限驗證所需的最小範圍，優先採用唯一、可辨識、可回復的程式代號／日期測試鍵；不得以大量更新、無界刪除或覆蓋既有業務資料代替 fixture。
+3. 寫入前必須確認 schema、PK／UK、NOT NULL、trigger、FK／關聯與必要欄位，保存異動前快照；寫入後必須驗證實際 JOIN 結果，並記錄 trigger 副作用、commit／rollback、清理或保留決策。
+4. 唯一 Plan 與排程必須記錄資料表、鍵值摘要、測試目的、授權依據、驗證結果、未驗證範圍與回復方式；不得記錄密碼、token 或完整連線憑證。
+5. Fixture 只證明資料路徑與功能驗證可執行，不得直接宣稱 PB 資料內容、版面、欄位或完整 parity 已通過；各 Gate 仍須分開判定。
 
 ---
 
@@ -173,12 +182,36 @@
 
 ## 15) PB Web 化 Plan 模板使用規範（Mandatory）
 1. 每一隻 PB 程式在開始進行 Web 化開發前，必須先建立對應的 `<程式代號>_plan.md`，以對齊 PB Source 的行為與欄位結構。
-2. 全系統以以下兩類模板為**主要模板**（必須優先使用與對齊）：
+2. **單一程式僅使用單一 Plan**：每一隻 PB 程式只能使用一份對應的 `docs/<程式代號>_plan.md` 作為唯一開發依據，不得建立或以 `*_delivery_report.md`、`*_alignment_report.md`、`*_implementation_report.md` 或其他同程式獨立文件取代、分散或平行承載 Plan 內容。
+3. 交付結果、驗證證據、PB／Web 差異、修正清單、未完成事項與完成狀態，均必須回寫同一份 `docs/<程式代號>_plan.md`；獨立報告若因歷史或工具流程產生，必須在合併回 Plan 後刪除。
+4. 每次開發前與交付前，必須確認該程式只有一份有效 Plan，且所有實作決策與驗證結論均可由該 Plan 追溯；違反時不得標示該程式完成。
+5. 全系統以以下兩類模板為**主要模板**（必須優先使用與對齊）：
    - **查詢、唯讀與報表型**：使用 [PB_Query_Plan_Template.md](file:///H:/AI/PB_Source/docs/PB_Query_Plan_Template.md)（相對路徑：`../PB_Source/docs/PB_Query_Plan_Template.md`）。
    - **新增、修改、刪除與交易型**：使用 [PB_Maintenance_Plan_Template.md](file:///H:/AI/PB_Source/docs/PB_Maintenance_Plan_Template.md)（相對路徑：`../PB_Source/docs/PB_Maintenance_Plan_Template.md`）。
-3. 針對特定特殊情境，可引用以下四類**標準化輔助模板**進行設計輔助與規格化：
+6. 針對特定特殊情境，可引用以下四類**標準化輔助模板**進行設計輔助與規格化：
    - **共用下拉選單與查找彈窗 (Lookup/DDDW)**：使用 [PB_Lookup_Plan_Template.md](file:///H:/AI/PB_Source/docs/PB_Lookup_Plan_Template.md)（相對路徑：`../PB_Source/docs/PB_Lookup_Plan_Template.md`）。
    - **長時或批次計算背景任務 (Batch Processing)**：使用 [PB_Batch_Processing_Plan_Template.md](file:///H:/AI/PB_Source/docs/PB_Batch_Processing_Plan_Template.md)（相對路徑：`../PB_Source/docs/PB_Batch_Processing_Plan_Template.md`）。
    - **公文套印、PDF產製與實體列印樣式 (Print Layout)**：使用 [PB_Print_Layout_Plan_Template.md](file:///H:/AI/PB_Source/docs/PB_Print_Layout_Plan_Template.md)（相對路徑：`../PB_Source/docs/PB_Print_Layout_Plan_Template.md`）。
    - **外部檔案上傳解析與批次匯入 (File Import)**：使用 [PB_File_Import_Plan_Template.md](file:///H:/AI/PB_Source/docs/PB_File_Import_Plan_Template.md)（相對路徑：`../PB_Source/docs/PB_File_Import_Plan_Template.md`）。
-4. 開發前建立之 Plan 必須符合標準骨架，任何與 PB 原始 Source 行為之差異，皆須明列於 Plan 中的「差異與例外清單」中，不得靜默修正。
+7. 開發前建立之 Plan 必須符合標準骨架，任何與 PB 原始 Source 行為之差異，皆須明列於 Plan 中的「差異與例外清單」中，不得靜默修正。
+
+## 16. PB/Web 欄位與視窗逐項對齊規範（Mandatory）
+1. Web 開發前，唯一 Plan 必須建立 PB UI 對照表，逐項列出主視窗、相關 Modal、DataWindow、欄位名稱、欄位數量、可見性、順序、控制型別、寬度/格式、預設值、DDDW/lookup、必填與唯讀狀態。
+2. PB Modal 不得以一般下拉選單、自由文字欄位或簡化查詢區取代；必須重現 PB 的條件輸入、查詢、結果欄位、多選/全選、確認及取消輸入輸出。
+3. Web 開發完成前，必須以 PB Source 逐欄比對並記錄證據；欄位數量、欄位名稱、順序或可見性任一不一致時，不得標示 Plan 對齊、Web 完成或完整交付。
+4. Plan、Web 與測試必須包含「差異與例外清單」；任何例外都必須有明確理由、替代行為、風險及使用者核准，不得以「視同完成」掩蓋未對齊項目。
+5. 每個節點至少必須完成一次 UI/Modal 截圖或 Edge 實測，以及一項欄位數量自動檢查；測試失敗時排程停留在該節點。
+6. PB 欄位若使用 DDDW、DDLB、值清單或其他受限選項，Plan 必須逐項記錄來源 DataWindow/欄位的代碼值、中文描述、順序、是否可編輯、預設值、是否允許空白及查詢傳值；Web 不得以自由文字輸入替代。
+7. 清單型欄位的驗證必須同時包含：PB Source 證據比對、前端選項自動檢查、Edge 實際開啟清單並核對數量/代碼/中文描述/順序；任一項不一致即不得標示 Plan 對齊或完成。
+8. 清單型欄位的空白、清除、預設值及唯讀/可編輯行為也屬對齊範圍；不得只驗證畫面有下拉箭頭就視為完成。
+
+## 17) Dev Login Prefill（Local Development Only）
+
+僅供本機開發與測試使用，禁止用於正式環境、提交至公開版本庫，或寫入 Plan、測試報告及交付紀錄：
+
+```dotenv
+DEV_LOGIN_PREFILL_ENABLED=1
+DEV_LOGIN_PROFILE=202
+DEV_LOGIN_USER_ID=MPCUSER01
+DEV_LOGIN_PASSWORD=MPC655925
+```

@@ -584,6 +584,7 @@
     setConfigStatus("", false);
     setAttachmentStatus("", false);
     render();
+    scrollConversationToLatest();
   }
 
   function renderConversationList() {
@@ -775,7 +776,23 @@
       elements.messageLog.appendChild(block);
     });
 
-    elements.messageLog.scrollTop = elements.messageLog.scrollHeight;
+    scrollConversationToLatest();
+  }
+
+  function scrollConversationToLatest() {
+    const scrollToLatest = function () {
+      const page = document.scrollingElement || document.documentElement;
+      elements.messageLog.scrollTop = elements.messageLog.scrollHeight;
+      page.scrollTop = page.scrollHeight;
+      window.scrollTo({ top: page.scrollHeight, behavior: "auto" });
+    };
+
+    scrollToLatest();
+    window.requestAnimationFrame(function () {
+      scrollToLatest();
+      window.requestAnimationFrame(scrollToLatest);
+    });
+    window.setTimeout(scrollToLatest, 120);
   }
 
   function renderPromptHistory() {

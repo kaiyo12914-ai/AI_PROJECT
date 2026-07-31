@@ -133,22 +133,8 @@ def _should_try_ollama_fallback(err: Exception) -> bool:
 
 def _resolve_provider_fallback(primary: str) -> str:
     explicit = (os.getenv("MISSING_PROVIDER_FALLBACK") or "").strip().upper()
-    if _is_int_env():
-        if explicit in {"LM_STUDIO", "OLLAMA"}:
-            return explicit
-        if explicit in {"GOOGLE", "OPENAI"}:
-            logger.warning("[LLM] Ignore external fallback=%s under ENV=INT", explicit)
-    elif (os.getenv("ENV") or "").strip().upper() == "EXT":
-        if explicit in {"OLLAMA"}:
-            return explicit
-        if explicit in {"GOOGLE", "OPENAI", "LM_STUDIO"}:
-            logger.warning("[LLM] Ignore fallback=%s under ENV=EXT", explicit)
-    else:
-        if explicit in {"GOOGLE", "OPENAI", "OLLAMA", "LM_STUDIO"}:
-            return explicit
-    # Prefer internal providers by default, but EXT keeps OLLAMA only.
-    if (os.getenv("ENV") or "").strip().upper() == "EXT":
-        return "OLLAMA"
+    if explicit in {"GOOGLE", "OPENAI", "OLLAMA", "LM_STUDIO"}:
+        return explicit
     if os.getenv("LM_STUDIO_BASE_URL"):
         return "LM_STUDIO"
     if os.getenv("OLLAMA_BASE_URL"):
@@ -168,13 +154,6 @@ def _is_openai_quota_error(err: Exception) -> bool:
 
 def _resolve_openai_runtime_fallback() -> str:
     fallback = (os.getenv("OPENAI_RUNTIME_FALLBACK") or "").strip().upper()
-    if _is_int_env():
-        if fallback in {"OPENAI", "GOOGLE"}:
-            logger.warning("[LLM] Ignore OPENAI_RUNTIME_FALLBACK=%s under ENV=INT", fallback)
-            return ""
-        if fallback in {"OLLAMA", "LM_STUDIO"}:
-            return fallback
-        return ""
     if fallback in {"GOOGLE", "OLLAMA", "LM_STUDIO"}:
         return fallback
     return ""
@@ -187,7 +166,6 @@ def _looks_non_chat_openai_model(model: str) -> bool:
     bad_tokens = (
         "instruct",
         "text-",
-        "codex",
         "davinci",
         "babbage",
         "curie",
@@ -197,19 +175,7 @@ def _looks_non_chat_openai_model(model: str) -> bool:
 
 
 def _normalize_provider_for_env(provider: str) -> str:
-    p = (provider or "").strip().upper()
-    if (os.getenv("ENV") or "").strip().upper() == "EXT" and p == "LM_STUDIO":
-        logger.warning("[LLM] ENV=EXT remap provider %s -> OLLAMA", p)
-        return "OLLAMA"
-    if not _is_int_env():
-        return p
-    if p in {"GOOGLE", "OPENAI"}:
-        internal = _resolve_provider_fallback(p)
-        if internal not in {"OLLAMA", "LM_STUDIO"}:
-            internal = "LM_STUDIO" if os.getenv("LM_STUDIO_BASE_URL") else "OLLAMA"
-        logger.warning("[LLM] ENV=INT remap provider %s -> %s", p, internal)
-        return internal
-    return p
+    return (provider or "").strip().upper()
 
 
 _CHAT_STRATEGY_REGISTRY = None
@@ -232,8 +198,8 @@ def _get_chat_strategy_registry():
 
 
 def get_chat_model(temperature: float | None = None, timeout: int | None = None, model_type: str | None = None, model_name: str | None = None):
-    """Create chat LLM instance by MODEL_TYPE with provider fallback support."""
-    provider = _normalize_provider_for_env((model_type or os.getenv("MODEL_TYPE") or "OLLAMA"))
+    """Create the chat LLM selected by the MODEL_TYPE setting."""
+    provider = _normalize_provider_for_env(os.getenv("MODEL_TYPE") or model_type or "OLLAMA")
     strategy = _get_chat_strategy_registry().get(provider)
     if not strategy:
         raise ValueError(f"Unknown MODEL_TYPE={provider}. Use GOOGLE/OLLAMA/OPENAI/LM_STUDIO.")

@@ -232,17 +232,6 @@ CORS_ALLOW_ALL_ORIGINS = True
 MODEL_TYPE = env_str("MODEL_TYPE", "OPENAI").upper()
 MODEL_TIMEOUT = env_int("MODEL_TIMEOUT", 120)
 
-# Enforce provider policy by environment.
-# Keep os.environ in sync because llm_factory reads from environment variables.
-if ENV_NAME == "INT":
-    MODEL_TYPE = "LM_STUDIO"
-    os.environ["MODEL_TYPE"] = MODEL_TYPE
-    if not (os.getenv("LM_STUDIO_MODEL") or "").strip():
-        os.environ["LM_STUDIO_MODEL"] = "gemma-4"
-elif ENV_NAME == "EXT":
-    MODEL_TYPE = "OPENAI"
-    os.environ["MODEL_TYPE"] = MODEL_TYPE
-
 # ============================================================
 # OpenAI
 # ============================================================

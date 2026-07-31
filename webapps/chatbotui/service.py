@@ -233,12 +233,10 @@ def _is_int_env() -> bool:
 
 
 def allowed_model_types() -> set[str]:
-    env = safe_text(os.getenv("ENV")).upper()
-    if env == "EXT":
-        return {"OLLAMA"}
-    if env == "INT":
-        return {"OLLAMA", "LM_STUDIO"}
-    return {"GOOGLE", "OPENAI", "OLLAMA", "LM_STUDIO"}
+    configured = safe_text(os.getenv("MODEL_TYPE")).upper()
+    if configured in {"GOOGLE", "OPENAI", "OLLAMA", "LM_STUDIO"}:
+        return {configured}
+    return {"OLLAMA"}
 
 
 def normalize_model_type(value: Any, default: str = "OLLAMA") -> str:
@@ -248,7 +246,7 @@ def normalize_model_type(value: Any, default: str = "OLLAMA") -> str:
         return requested
     if default in allowed:
         return default
-    return "OLLAMA" if "OLLAMA" in allowed else "LM_STUDIO"
+    return next(iter(allowed))
 
 
 def normalize_model_name(model_type: str, model_name: Any) -> str:

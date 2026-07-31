@@ -35,12 +35,10 @@ def _is_int_env() -> bool:
 
 
 def _allowed_model_types() -> list[str]:
-    env = safe_text(os.getenv("ENV")).upper()
-    if env == "EXT":
-        return ["OLLAMA"]
-    if env == "INT":
-        return ["OLLAMA", "LM_STUDIO"]
-    return ["OLLAMA", "GOOGLE", "OPENAI", "LM_STUDIO"]
+    configured = safe_text(os.getenv("MODEL_TYPE")).upper()
+    if configured in {"GOOGLE", "OPENAI", "OLLAMA", "LM_STUDIO"}:
+        return [configured]
+    return ["OLLAMA"]
 
 
 def _normalize_model_type_for_view(value: Any) -> str:

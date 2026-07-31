@@ -18,3 +18,11 @@ test("chatbotui renders usage meta from response", () => {
 test("chatbotui has reset profile config button", () => {
   assert.match(html, /id="resetProfileConfigBtn"/);
 });
+
+test("chatbotui scrolls to the latest message after changing conversations", () => {
+  assert.match(js, /scrollConversationToLatest\(\);/);
+  assert.match(js, /document\.scrollingElement \|\| document\.documentElement/);
+  assert.match(js, /page\.scrollTop = page\.scrollHeight/);
+  assert.match(js, /window\.setTimeout\(scrollToLatest, 120\)/);
+  assert.match(js, /window\.requestAnimationFrame\(scrollToLatest\)/);
+});
