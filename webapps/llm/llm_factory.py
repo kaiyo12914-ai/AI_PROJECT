@@ -158,6 +158,27 @@ def _resolve_openai_runtime_fallback() -> str:
         return fallback
     return ""
 
+
+def _is_llm_connection_error(err: Exception) -> bool:
+    s = str(err or "").lower()
+    return (
+        "connection error" in s
+        or "connecterror" in s
+        or "getaddrinfo failed" in s
+        or "connection refused" in s
+        or "target machine actively refused" in s
+        or "winerror 10061" in s
+        or "winerror 10060" in s
+        or "timed out" in s
+    )
+
+
+def _resolve_lm_studio_runtime_fallback() -> str:
+    fallback = (os.getenv("LM_STUDIO_RUNTIME_FALLBACK") or os.getenv("MISSING_PROVIDER_FALLBACK") or "").strip().upper()
+    if fallback in {"GOOGLE", "OLLAMA", "OPENAI"}:
+        return fallback
+    return "OLLAMA"
+
 def _looks_non_chat_openai_model(model: str) -> bool:
     m = (model or "").strip().lower()
     if not m:
@@ -458,17 +479,45 @@ def _make_lm_studio(temperature: float | None, timeout: int | None):
         api_key=api_key,
     )
 
+    runtime_fallback = _resolve_lm_studio_runtime_fallback()
+
+    def _invoke_fallback(input, kwargs):
+        if runtime_fallback == "GOOGLE":
+            return _make_google(temperature=t, timeout=to).invoke(input, **kwargs)
+        if runtime_fallback == "OPENAI":
+            return _make_openai(temperature=t, timeout=to).invoke(input, **kwargs)
+        return _make_ollama(temperature=t, timeout=to).invoke(input, **kwargs)
+
+    async def _ainvoke_fallback(input, kwargs):
+        if runtime_fallback == "GOOGLE":
+            return await _make_google(temperature=t, timeout=to).ainvoke(input, **kwargs)
+        if runtime_fallback == "OPENAI":
+            return await _make_openai(temperature=t, timeout=to).ainvoke(input, **kwargs)
+        return await _make_ollama(temperature=t, timeout=to).ainvoke(input, **kwargs)
+
     class LoggedLMStudio:
         def __getattr__(self, name):
             return getattr(llm, name)
 
         def invoke(self, input, **kwargs):
             _log_llm_use("LM_STUDIO", model, temperature=t, timeout=to)
-            return llm.invoke(input, **kwargs)
+            try:
+                return llm.invoke(input, **kwargs)
+            except Exception as e:
+                if runtime_fallback and _is_llm_connection_error(e):
+                    logger.warning("[LLM] LM_STUDIO connection failed (%s); runtime fallback=%s", e, runtime_fallback)
+                    return _invoke_fallback(input, kwargs)
+                raise
 
         async def ainvoke(self, input, **kwargs):
             _log_llm_use("LM_STUDIO", model, temperature=t, timeout=to)
-            return await llm.ainvoke(input, **kwargs)
+            try:
+                return await llm.ainvoke(input, **kwargs)
+            except Exception as e:
+                if runtime_fallback and _is_llm_connection_error(e):
+                    logger.warning("[LLM] LM_STUDIO async connection failed (%s); runtime fallback=%s", e, runtime_fallback)
+                    return await _ainvoke_fallback(input, kwargs)
+                raise
 
         def __repr__(self):
             return f"LMStudioChatModel(model={model})"
