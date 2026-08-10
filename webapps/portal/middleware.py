@@ -160,9 +160,6 @@ def _plant_from_display_name(display_name: str) -> str:
 def _resolve_login_user_org(emp_id: str, emp_name: str) -> str:
     uid = (emp_id or "").strip()
     name = (emp_name or "").strip()
-    code = _plant_from_display_name(name)
-    if code:
-        return code
     if uid:
         try:
             from webapps.portal.oracle_emp import get_factory_plant_by_id
@@ -172,6 +169,9 @@ def _resolve_login_user_org(emp_id: str, emp_name: str) -> str:
                 return code
         except Exception:
             pass
+    code = _plant_from_display_name(name)
+    if code:
+        return code
     return ""
 
 
@@ -334,12 +334,12 @@ class IISRemoteUserBridgeMiddleware:
         env_val = (os.getenv("ENV") or os.getenv("ENX") or "").strip().upper()
         if env_val == "EXT" and emp_id:
             org_code = "MPC"
-            if emp_name:
-                if "-" not in emp_name:
-                    emp_name = f"MPC-{emp_name}"
-                else:
-                    parts = emp_name.split("-", 1)
-                    emp_name = f"MPC-{parts[1]}"
+
+        if org_code and emp_name and "-" in emp_name:
+            prefix, pure_name = emp_name.split("-", 1)
+            if _normalize_org_code(prefix):
+                emp_name = f"{org_code}-{pure_name}"
+
         org_label = _org_label(org_code)        
         request.login_user_name = emp_name or ""
         request.login_user_org = org_code or ""

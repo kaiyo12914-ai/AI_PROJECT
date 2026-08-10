@@ -64,13 +64,13 @@ def oracle_friendly_message(code, msg: str) -> str:
     return f"資料庫連線失敗：{s or '未知錯誤'}"
 
 
-def get_conn():
+def get_conn(profile: str = ""):
     """
-    ✅ 統一由 db_factory 建立連線（符合你的專案規範）
-    - 你 db_factory 內部會讀 .env / ENV_PATH / pyodbc/oracle 等設定
+    ✅ 統一由 db_factory 建立連線（符合專案規範）
+    - db_factory 內部會讀 .env / .env_DB_factory 設定
     """
     try:
-        return db_connect("oracle")
+        return db_connect("oracle", profile=profile or "ERP_MPC")
     except Exception as e:
         # 盡量把 Oracle Error 轉成友善訊息
         if isinstance(e, oracledb.Error):

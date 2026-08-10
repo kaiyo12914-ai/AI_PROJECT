@@ -611,6 +611,28 @@ button {
   font-size: 13px;
 }
 
+.send-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #9fd7ff;
+  font-size: 13px;
+}
+
+.send-progress.hidden {
+  display: none;
+}
+
+.send-progress-spinner {
+  width: 18px;
+  height: 18px;
+  animation: send-progress-spin 0.85s linear infinite;
+}
+
+@keyframes send-progress-spin {
+  to { transform: rotate(360deg); }
+}
+
 .debug-panel {
   margin-bottom: 16px;
   padding: 14px;
@@ -701,6 +723,36 @@ button {
     width: calc(100% - 36px);
     max-height: calc(100vh - 180px);
   }
+}
+
+.attachment-image-preview {
+  display: block;
+  width: min(96px, 100%);
+  max-height: 72px;
+  margin-top: 8px;
+  border-radius: 10px;
+  object-fit: contain;
+}
+
+.message-image-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.message-image-attachments a {
+  display: block;
+}
+
+.message-image-attachments img {
+  display: block;
+  width: min(112px, 100%);
+  max-height: 84px;
+  border-radius: 10px;
+  object-fit: contain;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  cursor: zoom-in;
 }
 
 .message-citations {

@@ -113,7 +113,7 @@
 
       <footer class="composer">
         <div class="attachment-tools">
-          <input id="attachmentInput" type="file" accept=".txt,.md,.csv,.json,.yaml,.yml,.log,.ini,.cfg,.py,.js,.ts,.html,.css,.pdf,.docx" hidden>
+          <input id="attachmentInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp,.txt,.md,.csv,.json,.yaml,.yml,.log,.ini,.cfg,.py,.js,.ts,.html,.css,.pdf,.docx" hidden>
           <button id="attachmentUploadBtn" type="button">附加檔案</button>
           <span id="attachmentStatus" class="attachment-status"></span>
         </div>
@@ -121,6 +121,10 @@
         <textarea id="messageInput" rows="4" placeholder="輸入問題、需求或程式任務..."></textarea>
         <div class="composer-actions">
           <span class="composer-tip">Enter 送出，Shift+Enter 換行</span>
+          <span id="sendProgress" class="send-progress hidden" role="status" aria-live="polite">
+            <svg class="send-progress-spinner" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-dasharray="38 14"></circle></svg>
+            產生回答中
+          </span>
           <button id="sendBtn" type="button">送出</button>
         </div>
       </footer>

@@ -768,6 +768,7 @@ class DBConfig:
     ora_host: str = ""
     ora_port: int = 1521
     ora_service: str = ""
+    ora_sid: str = ""
     ora_user: str = ""
     ora_pass: str = ""
 
@@ -866,6 +867,7 @@ def _env_profile(profile: str, key: str, default: str = "") -> str:
         md_val = (md_overrides.get(prof_key) or "").strip()
         if md_val:
             return md_val
+    for prof_key in _profile_env_keys(profile, key):
         env_val = (os.getenv(prof_key) or "").strip()
         if env_val:
             return env_val
@@ -918,6 +920,7 @@ def load_db_config(db_type: DBType, profile: str = "") -> DBConfig:
             ora_host=_env_profile(profile, "ORA_HOST", ""),
             ora_port=_env_int_profile(profile, "ORA_PORT", 1521),
             ora_service=_env_profile(profile, "ORA_SERVICE_NAME", ""),
+            ora_sid=_env_profile(profile, "ORA_SID", ""),
             ora_user=_env_profile(profile, "ORA_USER", ""),
             ora_pass=_env_profile(profile, "ORA_PASS", ""),
         )
@@ -1238,26 +1241,50 @@ class OracleDB(BaseDB):
                 "Oracle config incomplete. Set ORA_HOST / ORA_SERVICE_NAME / ORA_USER / ORA_PASS."
             )
 
-        dsn = f"{c.ora_host}:{int(c.ora_port)}/{c.ora_service}"
+        dsn_service = f"{c.ora_host}:{int(c.ora_port)}/{c.ora_service}" if c.ora_service else ""
+        dsn_sid = ""
+        if c.ora_sid or c.ora_service:
+            try:
+                dsn_sid = oracledb.makedsn(c.ora_host, int(c.ora_port), sid=c.ora_sid or c.ora_service)
+            except Exception:
+                dsn_sid = ""
+
+        dsn = dsn_service or dsn_sid
 
         connect_timeout = _env_float_profile(self.profile, "ORA_CONNECT_TIMEOUT_SEC", 8.0)  # sec
         call_timeout_ms = _env_int_profile(self.profile, "ORA_CALL_TIMEOUT_MS", 15000)      # ms
         connect_retry_count = _env_int_profile(self.profile, "ORA_CONNECT_RETRY_COUNT", 1)
         connect_retry_delay = _env_int_profile(self.profile, "ORA_CONNECT_RETRY_DELAY", 1)
 
-        def _do_connect():
+        def _is_listener_service_error(err: Exception) -> bool:
+            msg = str(err or "").upper()
+            return ("DPY-6001" in msg or "ORA-12514" in msg or "NOT REGISTERED WITH THE LISTENER" in msg)
+
+        def _do_connect_with_dsn(target_dsn: str):
             try:
                 return oracledb.connect(
                     user=c.ora_user,
                     password=c.ora_pass,
-                    dsn=dsn,
+                    dsn=target_dsn,
                     timeout=connect_timeout,
                     retry_count=max(0, int(connect_retry_count)),
                     retry_delay=max(0, int(connect_retry_delay)),
                 )
             except TypeError:
                 # Older python-oracledb may not support timeout/retry kwargs.
-                return oracledb.connect(user=c.ora_user, password=c.ora_pass, dsn=dsn)
+                return oracledb.connect(user=c.ora_user, password=c.ora_pass, dsn=target_dsn)
+
+        def _do_connect():
+            if c.ora_sid and dsn_sid:
+                return _do_connect_with_dsn(dsn_sid)
+            if not dsn_service and dsn_sid:
+                return _do_connect_with_dsn(dsn_sid)
+            try:
+                return _do_connect_with_dsn(dsn_service)
+            except Exception as e:
+                if _is_listener_service_error(e) and dsn_sid:
+                    return _do_connect_with_dsn(dsn_sid)
+                raise
 
         mode = _oracle_thick_mode_setting()
         thin_hint = "not supported by python-oracledb in thin mode"

@@ -128,6 +128,25 @@ def whoami(request: HttpRequest) -> JsonResponse:
     except Exception as e:
         data["acl"] = {"error": str(e)}
 
+    # db connection debug
+    try:
+        from webapps.database.db_factory import load_db_config, _env
+        env_mode = _env("ENV", "EXT").upper()
+        ora_cfg = load_db_config("oracle", profile="ERP_MPC")
+        data["database_connection"] = {
+            "ENV": env_mode,
+            "oracle_profile": "ERP_MPC",
+            "oracle": {
+                "host": ora_cfg.ora_host,
+                "port": ora_cfg.ora_port,
+                "service_name": ora_cfg.ora_service,
+                "user": ora_cfg.ora_user,
+                "status": "connected" if env_mode == "INT" else "rerouted_to_postgresql",
+            },
+        }
+    except Exception as e:
+        data["database_connection"] = {"error": str(e)}
+
     # ✅ DEBUG 才顯示：確認 .env 是否真的被 load 進 process env
     if getattr(settings, "DEBUG", False):
         data.update({

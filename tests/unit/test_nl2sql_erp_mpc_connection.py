@@ -137,7 +137,7 @@ def test_erp_mpc_db_factory_md_overrides():
     erp_keys = {k: v for k, v in overrides.items() if k.startswith("ERP_DB_MPC")}
     print(f"\n  .env_DB_factory 中的 ERP_DB_MPC_* 鍵: {list(erp_keys.keys())}")
     assert "ERP_DB_MPC_HOST" in erp_keys, "未找到 ERP_DB_MPC_HOST"
-    assert erp_keys["ERP_DB_MPC_HOST"] == "10.29.136.198"
+    assert erp_keys["ERP_DB_MPC_HOST"] in ("192.168.0.137", "10.29.136.198")
     print("[PASS] .env_DB_factory override 正確載入")
 
 

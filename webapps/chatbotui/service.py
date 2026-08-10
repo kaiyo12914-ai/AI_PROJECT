@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import os
 import time
 import uuid
+from pathlib import Path
 from typing import Any, Dict, List
+
+from django.conf import settings
 
 from webapps.llm.llm_factory import get_chat_model
 
@@ -30,8 +34,10 @@ ATTACHMENT_PROMPT_LIMIT = 2
 RETRY_TOTAL_BUDGET_SEC = 70
 RETRY_TIMEOUT_SEC = 25
 ALLOWED_ATTACHMENT_EXTENSIONS = {
-    ".txt", ".md", ".csv", ".json", ".yaml", ".yml", ".log", ".ini", ".cfg", ".py", ".js", ".ts", ".html", ".css", ".pdf", ".docx"
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".txt", ".md", ".csv", ".json", ".yaml", ".yml", ".log", ".ini", ".cfg", ".py", ".js", ".ts", ".html", ".css", ".pdf", ".docx"
 }
+IMAGE_ATTACHMENT_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+IMAGE_PATH_MARKER = "__chatbotui_image_path__:"
 
 
 def safe_text(value: Any) -> str:
@@ -501,12 +507,20 @@ class ChatbotUIService:
 
     def _format_attachment_item(self, item: Dict[str, Any]) -> Dict[str, Any]:
         content_text = normalize_attachment_text(item.get("content_text"))
+        image_url = ""
+        if safe_text(item.get("mime_type")).lower().startswith("image/"):
+            marker_line, _, content_text = content_text.partition("\n")
+            if marker_line.startswith(IMAGE_PATH_MARKER):
+                relative_path = marker_line[len(IMAGE_PATH_MARKER):].replace("\\", "/")
+                image_url = f"{settings.MEDIA_URL.rstrip('/')}/{relative_path.lstrip('/')}"
         return {
             "id": int(item.get("id") or 0),
+            "message_id": int(item.get("message_id") or 0),
             "filename": normalize_filename(item.get("filename")),
             "mime_type": safe_text(item.get("mime_type")),
             "size_bytes": int(item.get("size_bytes") or 0),
             "content_preview": content_text[:240],
+            "image_url": image_url,
             "created_at": safe_text(item.get("created_at")),
         }
 
@@ -551,7 +565,15 @@ class ChatbotUIService:
             raise RuntimeError("file too large")
 
         text = ""
-        if ext == ".pdf":
+        if ext in IMAGE_ATTACHMENT_EXTENSIONS:
+            digest = hashlib.sha256(raw).hexdigest()
+            relative_path = Path("chatbotui") / conversation_id / f"{digest}{ext}"
+            image_path = Path(settings.MEDIA_ROOT) / relative_path
+            image_path.parent.mkdir(parents=True, exist_ok=True)
+            if not image_path.exists():
+                image_path.write_bytes(raw)
+            text = f"{IMAGE_PATH_MARKER}{relative_path.as_posix()}\n[圖片附件：{safe_name}]"
+        elif ext == ".pdf":
             from webapps.pdf.views import _extract_pdf_text_auto
             class FakeUpload:
                 def __init__(self, content):
@@ -1211,6 +1233,7 @@ class ChatbotUIService:
             self.repository.rename_conversation(user_id, conversation_id, infer_title(user_text))
         self.repository.set_model_type(user_id, conversation_id, model_type, model_name)
         user_message_id = self.repository.add_message_and_get_id(conversation_id, "user", user_text, model_type, model_name, 0)
+        self.repository.assign_pending_attachments_to_message(user_id, conversation_id, user_message_id)
         assistant_message_id = self.repository.add_message_and_get_id(conversation_id, "assistant", answer, model_type, model_name, latency_ms)
         self._store_message_embedding(conversation_id, user_message_id, "user", user_text)
         self._store_message_embedding(conversation_id, assistant_message_id, "assistant", answer)

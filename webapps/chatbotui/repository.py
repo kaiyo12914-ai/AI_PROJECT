@@ -60,6 +60,7 @@ class ChatbotUIRepository(BaseRepository):
             id BIGSERIAL PRIMARY KEY,
             conversation_id TEXT NOT NULL REFERENCES chatbotui_conversation(id) ON DELETE CASCADE,
             user_id TEXT NOT NULL,
+            message_id BIGINT NULL,
             filename TEXT NOT NULL,
             mime_type TEXT NOT NULL DEFAULT '',
             size_bytes INTEGER NOT NULL DEFAULT 0,
@@ -121,6 +122,9 @@ class ChatbotUIRepository(BaseRepository):
 
         ALTER TABLE chatbotui_message
             ADD COLUMN IF NOT EXISTS model_name TEXT NOT NULL DEFAULT '';
+
+        ALTER TABLE chatbotui_attachment
+            ADD COLUMN IF NOT EXISTS message_id BIGINT NULL;
         """
         self.execute(sql, profile=self.profile)
 
@@ -626,9 +630,9 @@ class ChatbotUIRepository(BaseRepository):
     ) -> int:
         sql = """
         INSERT INTO chatbotui_attachment (
-            conversation_id, user_id, filename, mime_type, size_bytes, content_text, is_deleted, created_at
+            conversation_id, user_id, message_id, filename, mime_type, size_bytes, content_text, is_deleted, created_at
         ) VALUES (
-            %s, %s, %s, %s, %s, %s, FALSE, NOW()
+            %s, %s, NULL, %s, %s, %s, %s, FALSE, NOW()
         )
         """
         return self.execute(
@@ -639,7 +643,7 @@ class ChatbotUIRepository(BaseRepository):
 
     def list_attachments(self, user_id: str, conversation_id: str, limit: int = 20) -> List[Dict[str, Any]]:
         sql = """
-        SELECT a.id, a.filename, a.mime_type, a.size_bytes, a.content_text, a.created_at
+        SELECT a.id, a.message_id, a.filename, a.mime_type, a.size_bytes, a.content_text, a.created_at
         FROM chatbotui_attachment a
         JOIN chatbotui_conversation c ON a.conversation_id = c.id
         WHERE a.conversation_id = %s
@@ -655,6 +659,7 @@ class ChatbotUIRepository(BaseRepository):
             if isinstance(row, dict):
                 out.append({
                     "id": int(row.get("id") or 0),
+                    "message_id": int(row.get("message_id") or 0),
                     "filename": row.get("filename") or "",
                     "mime_type": row.get("mime_type") or "",
                     "size_bytes": int(row.get("size_bytes") or 0),
@@ -664,15 +669,17 @@ class ChatbotUIRepository(BaseRepository):
             elif isinstance(row, (list, tuple)):
                 out.append({
                     "id": int(row[0] or 0) if len(row) > 0 else 0,
-                    "filename": row[1] if len(row) > 1 and row[1] is not None else "",
-                    "mime_type": row[2] if len(row) > 2 and row[2] is not None else "",
-                    "size_bytes": int(row[3] or 0) if len(row) > 3 else 0,
-                    "content_text": row[4] if len(row) > 4 and row[4] is not None else "",
-                    "created_at": row[5] if len(row) > 5 else None,
+                    "message_id": int(row[1] or 0) if len(row) > 1 else 0,
+                    "filename": row[2] if len(row) > 2 and row[2] is not None else "",
+                    "mime_type": row[3] if len(row) > 3 and row[3] is not None else "",
+                    "size_bytes": int(row[4] or 0) if len(row) > 4 else 0,
+                    "content_text": row[5] if len(row) > 5 and row[5] is not None else "",
+                    "created_at": row[6] if len(row) > 6 else None,
                 })
             else:
                 out.append({
                     "id": int(getattr(row, "id", 0) or 0),
+                    "message_id": int(getattr(row, "message_id", 0) or 0),
                     "filename": getattr(row, "filename", "") or "",
                     "mime_type": getattr(row, "mime_type", "") or "",
                     "size_bytes": int(getattr(row, "size_bytes", 0) or 0),
@@ -680,6 +687,17 @@ class ChatbotUIRepository(BaseRepository):
                     "created_at": getattr(row, "created_at", None),
                 })
         return out
+
+    def assign_pending_attachments_to_message(self, user_id: str, conversation_id: str, message_id: int) -> int:
+        sql = """
+        UPDATE chatbotui_attachment
+        SET message_id = %s
+        WHERE conversation_id = %s
+          AND user_id = %s
+          AND message_id IS NULL
+          AND is_deleted = FALSE
+        """
+        return self.execute(sql, [message_id, conversation_id, user_id], profile=self.profile)
 
     def delete_attachment(self, user_id: str, conversation_id: str, attachment_id: int) -> int:
         sql = """

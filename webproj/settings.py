@@ -36,7 +36,8 @@ def _load_db_factory_md_into_environ(base_dir: Path) -> None:
     def _ok_key(key: str) -> bool:
         k = (key or "").strip().upper()
         return (
-            k.startswith("DOC_DB_")
+            k == "ENV"
+            or k.startswith("DOC_DB_")
             or k.startswith("CIM_DB_")
             or k.startswith("ERP_DB_")
             or k.startswith("ORA_")
@@ -337,7 +338,7 @@ PORTAL_ACL = {
         "中心雲端系統跨廠權限",
         "服務中心人員群組",
     ],
-    "excelproc": ["計資組業管資料管理"],
+    "excelproc": ["計資組業管資料管理","網頁系統管理員"],
     "usage": ["網頁系統管理員"],
     "projectnotes": ["ALL_AUTHENTICATED"],
     "formalize": ["ALL_AUTHENTICATED"],

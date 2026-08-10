@@ -1346,7 +1346,8 @@ def execute_api(request: HttpRequest) -> JsonResponse:
         if data_source.db_type == "oracle":
             from webapps.database.db_factory import db_connect
 
-            conn = db_connect("oracle", profile=data_source.db_profile)
+            profile_to_use = data_source.db_profile or "ERP_MPC"
+            conn = db_connect("oracle", profile=profile_to_use)
             try:
                 with conn.cursor() as cur:
                     cur.execute(sql)

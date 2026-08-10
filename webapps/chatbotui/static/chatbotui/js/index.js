@@ -14,6 +14,7 @@
     messageLog: document.getElementById("messageLog"),
     messageInput: document.getElementById("messageInput"),
     sendBtn: document.getElementById("sendBtn"),
+    sendProgress: document.getElementById("sendProgress"),
     newChatBtn: document.getElementById("newChatBtn"),
     conversationSearchInput: document.getElementById("conversationSearchInput"),
     clearChatBtn: document.getElementById("clearChatBtn"),
@@ -55,6 +56,7 @@
     conversationSearch: "",
     autosaveTimer: null,
     configCollapsed: false,
+    resendTargetMessageId: 0,
   };
 
   function url(path) {
@@ -587,10 +589,22 @@
     scrollConversationToLatest();
   }
 
+  function pastedImageFile(event) {
+    const items = event.clipboardData && event.clipboardData.items ? Array.from(event.clipboardData.items) : [];
+    const imageItem = items.find(function (item) { return String(item.type || "").startsWith("image/"); });
+    if (!imageItem) return null;
+    const blob = imageItem.getAsFile();
+    if (!blob) return null;
+    const extension = ({ "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" })[blob.type] || "png";
+    return new File([blob], `貼上圖片-${Date.now()}.${extension}`, { type: blob.type });
+  }
+
   function renderConversationList() {
     elements.conversationList.innerHTML = "";
     const query = String(state.conversationSearch || "").trim().toLowerCase();
     const rows = state.conversations.filter(function (item) {
+      const hasMessages = Number(item.message_count || 0) > 0 || (Array.isArray(item.messages) && item.messages.length > 0);
+      if (!hasMessages) return false;
       if (!query) return true;
       const title = displayTitle(item.title).toLowerCase();
       const preview = String(item.preview || "").toLowerCase();
@@ -698,6 +712,30 @@
     return wrap;
   }
 
+  function renderMessageImageAttachments(conversation, message) {
+    if (message.role !== "user" || !conversation || !Array.isArray(conversation.attachments)) return null;
+    const images = conversation.attachments.filter(function (item) {
+      return Number(item.message_id || 0) === messageId(message) && String(item.image_url || "");
+    });
+    if (!images.length) return null;
+
+    const wrap = document.createElement("div");
+    wrap.className = "message-image-attachments";
+    images.forEach(function (item) {
+      const link = document.createElement("a");
+      link.href = String(item.image_url);
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.title = "檢視原圖";
+      const image = document.createElement("img");
+      image.src = String(item.image_url);
+      image.alt = String(item.filename || "貼圖");
+      link.appendChild(image);
+      wrap.appendChild(link);
+    });
+    return wrap;
+  }
+
   function renderMessages() {
     const current = activeConversation();
     elements.messageLog.innerHTML = "";
@@ -771,6 +809,8 @@
 
       block.appendChild(header);
       block.appendChild(body);
+      const imageAttachments = renderMessageImageAttachments(current, message);
+      if (imageAttachments) block.appendChild(imageAttachments);
       const citationsNode = renderCitationList(message);
       if (citationsNode) block.appendChild(citationsNode);
       elements.messageLog.appendChild(block);
@@ -848,6 +888,14 @@
       const name = String(item.filename || "attachment");
       const size = Number(item.size_bytes || 0);
       textSpan.textContent = `${name} (${size} bytes)`;
+      const imageUrl = String(item.image_url || "");
+      if (imageUrl) {
+        const preview = document.createElement("img");
+        preview.className = "attachment-image-preview";
+        preview.src = imageUrl;
+        preview.alt = name;
+        tag.appendChild(preview);
+      }
       
       const delBtn = document.createElement("button");
       delBtn.type = "button";
@@ -935,6 +983,9 @@
     }
 
     elements.sendBtn.disabled = state.sending;
+    if (elements.sendProgress) {
+      elements.sendProgress.classList.toggle("hidden", !state.sending);
+    }
     elements.regenBtn.disabled = state.sending;
     elements.messageInput.disabled = state.sending;
 
@@ -950,6 +1001,9 @@
 
     const text = elements.messageInput.value.trim();
     if (!text) return;
+    if (state.resendTargetMessageId > 0) {
+      return resendFromMessage(state.resendTargetMessageId, text);
+    }
 
     state.sending = true;
     current.messages.push({ id: `temp-user-${Date.now()}`, role: "user", content: text, model_type: current.model_type || DEFAULT_MODEL_TYPE, latency_ms: 0 });
@@ -984,6 +1038,7 @@
       current.temperature = normalizeTemperature(data.meta && data.meta.temperature);
       current.timeout_sec = normalizeTimeout(data.meta && data.meta.timeout_sec);
       await loadConversationDetail(current.id);
+      await loadConversationAttachments(current.id);
       applyUsageMetaToLatestAssistant(current, data.meta || {});
       render();
       pushDebug(`[回應成功] 模型=${current.model_type} 延遲毫秒=${data.meta && data.meta.latency_ms ? data.meta.latency_ms : 0}`);
@@ -1038,7 +1093,22 @@
     }
   }
 
-  async function resendFromMessage(messageIdValue) {
+  function beginResendFromMessage(messageIdValue) {
+    const current = activeConversation();
+    const message = current && current.messages.find((m) => messageId(m) === messageIdValue && String(m.role).toLowerCase() === "user");
+    if (!message) {
+      handleUiError(new Error("找不到要編輯的訊息"));
+      return;
+    }
+    state.resendTargetMessageId = messageIdValue;
+    elements.messageInput.value = String(message.content || "");
+    elements.messageInput.placeholder = "修改後按送出，即會取代此輪對話並重新生成回答…";
+    setAttachmentStatus("正在編輯舊訊息；修改後按送出即可重送。", false);
+    elements.messageInput.focus();
+    elements.messageInput.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+
+  async function resendFromMessage(messageIdValue, editedText) {
     const current = activeConversation();
     if (!current || state.sending) return;
     const message = current.messages.find((m) => messageId(m) === messageIdValue && String(m.role).toLowerCase() === "user");
@@ -1046,7 +1116,7 @@
       handleUiError(new Error("找不到要重送的使用者訊息"));
       return;
     }
-    const edited = window.prompt("請先編輯訊息再重送", String(message.content || ""));
+    const edited = editedText === undefined ? window.prompt("請先編輯訊息再重送", String(message.content || "")) : editedText;
     if (edited === null) return;
     const text = String(edited || "").trim();
     if (!text) return;
@@ -1072,6 +1142,9 @@
       current.timeout_sec = normalizeTimeout(data.meta && data.meta.timeout_sec);
       await loadConversationDetail(current.id);
       applyUsageMetaToLatestAssistant(current, data.meta || {});
+      state.resendTargetMessageId = 0;
+      elements.messageInput.placeholder = "輸入問題、需求或程式任務...";
+      setAttachmentStatus("已更新訊息並重新生成回答", false);
       render();
       pushDebug(`[重送成功] 模型=${current.model_type} 延遲毫秒=${data.meta && data.meta.latency_ms ? data.meta.latency_ms : 0}`);
     } catch (error) {
@@ -1244,13 +1317,19 @@
       const id = Number(actionBtn.dataset.messageId || 0);
       const action = String(actionBtn.dataset.action || "");
       if (id > 0 && action === "resend") {
-        resendFromMessage(id).catch(handleUiError);
+        beginResendFromMessage(id);
       } else if (id > 0 && action === "delete-turn") {
         deleteMessageUnit(id, "turn").catch(handleUiError);
       } else if (id > 0 && action === "delete-answer") {
         deleteMessageUnit(id, "answer").catch(handleUiError);
       }
     }
+  });
+  elements.messageInput.addEventListener("paste", function (event) {
+    const image = pastedImageFile(event);
+    if (!image) return;
+    event.preventDefault();
+    uploadAttachment(image).catch(handleUiError);
   });
 
   if (elements.contextMenu) {
@@ -1307,18 +1386,11 @@
     setConfigCollapsed(state.configCollapsed);
 
     await loadConversations();
-    if (state.conversations.length === 0) {
-      await createConversation();
-      return;
-    }
-    await loadConversationDetail(state.activeId);
-    await loadPromptHistory(state.activeId);
-    await loadConversationAttachments(state.activeId);
     await loadOllamaModels();
     if (hasModelTypeOption("LM_STUDIO")) {
       await loadLmStudioModels();
     }
-    render();
+    await createConversation();
   }
 
   bootstrap().catch(handleUiError);
