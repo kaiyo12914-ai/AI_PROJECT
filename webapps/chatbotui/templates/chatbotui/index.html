@@ -146,6 +146,17 @@
     <button type="button" data-action="rename">重新命名</button>
     <button type="button" data-action="delete">刪除</button>
   </div>
-  <div id="appToast" class="app-toast hidden" aria-live="polite"></div>
+  <div id="imageModal" class="image-modal hidden" role="dialog" aria-label="圖片放大檢視">
+    <div class="image-modal-backdrop"></div>
+    <div class="image-modal-content">
+      <div class="image-modal-toolbar">
+        <a id="imageModalExternalLink" href="#" target="_blank" rel="noopener noreferrer" class="image-modal-ext-link" title="新頁面開啟原圖">↗ 新頁面開啟原圖</a>
+        <button id="closeImageModalBtn" type="button" class="image-modal-close" title="關閉 (Esc)">✕ 關閉</button>
+      </div>
+      <div class="image-modal-body">
+        <img id="imageModalImg" src="" alt="放大檢視圖片" />
+      </div>
+    </div>
+  </div>
 </body>
 </html>

@@ -45,6 +45,10 @@
     refreshPromptHistoryBtn: document.getElementById("refreshPromptHistoryBtn"),
     promptHistoryList: document.getElementById("promptHistoryList"),
     toggleDebugBtn: document.getElementById("toggleDebugBtn"),
+    imageModal: document.getElementById("imageModal"),
+    closeImageModalBtn: document.getElementById("closeImageModalBtn"),
+    imageModalImg: document.getElementById("imageModalImg"),
+    imageModalExternalLink: document.getElementById("imageModalExternalLink"),
   };
 
   const state = {
@@ -188,18 +192,50 @@
     return data;
   }
 
-  async function copyText(text, button) {
+  function fallbackCopyText(text) {
     try {
-      await navigator.clipboard.writeText(String(text || ""));
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      textArea.style.top = "-9999px";
+      textArea.style.left = "-9999px";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      const successful = document.execCommand("copy");
+      document.body.removeChild(textArea);
+      return successful;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  async function copyText(text, button) {
+    const textStr = String(text || "");
+    let success = false;
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(textStr);
+        success = true;
+      } catch (e) {
+        success = false;
+      }
+    }
+    if (!success) {
+      success = fallbackCopyText(textStr);
+    }
+    if (success) {
       if (button) {
         const original = button.textContent;
-        button.textContent = "已複製";
+        button.textContent = "已複製 ✓";
         window.setTimeout(function () {
           button.textContent = original;
         }, 1200);
       }
-    } catch (error) {
-      pushDebug(`[複製失敗] ${error.message}`);
+    } else {
+      pushDebug("[複製失敗] Clipboard API 與 execCommand 均被封鎖");
+      window.alert("複製失敗，請手動選取文字。");
     }
   }
 
@@ -525,22 +561,32 @@
   }
 
   async function uploadAttachment(file) {
-    const current = activeConversation();
-    if (!current || !file) return;
+    let current = activeConversation();
+    if (!file) return;
+    if (!current || !current.id) {
+      await createConversation();
+      current = activeConversation();
+    }
+    if (!current || !current.id) return;
     const formData = new FormData();
     formData.append("file", file);
     setAttachmentStatus("上傳中...", false);
-    const data = await apiFetch(`/chatbotui/conversations/${current.id}/attachments/`, {
-      method: "POST",
-      body: formData,
-    });
-    const item = data.attachment || null;
-    if (item) {
-      current.attachments = [item].concat(Array.isArray(current.attachments) ? current.attachments : []);
+    try {
+      const data = await apiFetch(`/chatbotui/conversations/${current.id}/attachments/`, {
+        method: "POST",
+        body: formData,
+      });
+      const item = data.attachment || null;
+      if (item) {
+        current.attachments = [item].concat(Array.isArray(current.attachments) ? current.attachments : []);
+      }
+      await loadConversationAttachments(current.id);
+      setAttachmentStatus("附件已上傳", false);
+      render();
+    } catch (error) {
+      setAttachmentStatus("上傳失敗", true);
+      throw error;
     }
-    await loadConversationAttachments(current.id);
-    setAttachmentStatus("附件已上傳", false);
-    render();
   }
 
   async function removeAttachment(attachmentId) {
@@ -712,6 +758,19 @@
     return wrap;
   }
 
+  function openImageModal(url) {
+    if (!elements.imageModal || !url) return;
+    if (elements.imageModalImg) elements.imageModalImg.src = url;
+    if (elements.imageModalExternalLink) elements.imageModalExternalLink.href = url;
+    elements.imageModal.classList.remove("hidden");
+  }
+
+  function closeImageModal() {
+    if (!elements.imageModal) return;
+    elements.imageModal.classList.add("hidden");
+    if (elements.imageModalImg) elements.imageModalImg.src = "";
+  }
+
   function renderMessageImageAttachments(conversation, message) {
     if (message.role !== "user" || !conversation || !Array.isArray(conversation.attachments)) return null;
     const images = conversation.attachments.filter(function (item) {
@@ -726,7 +785,11 @@
       link.href = String(item.image_url);
       link.target = "_blank";
       link.rel = "noopener noreferrer";
-      link.title = "檢視原圖";
+      link.title = "點擊放大檢視內容";
+      link.addEventListener("click", function (e) {
+        e.preventDefault();
+        openImageModal(String(item.image_url));
+      });
       const image = document.createElement("img");
       image.src = String(item.image_url);
       image.alt = String(item.filename || "貼圖");
@@ -781,12 +844,7 @@
         copyBtn.textContent = "複製回答";
         copyBtn.addEventListener("click", function () {
           const text = String(message.content || "");
-          navigator.clipboard.writeText(text).then(function () {
-            copyBtn.textContent = "已複製 ✓";
-            setTimeout(function () { copyBtn.textContent = "複製回答"; }, 1500);
-          }).catch(function () {
-            window.alert("複製失敗，請手動選取文字。");
-          });
+          copyText(text, copyBtn).catch(handleUiError);
         });
         right.appendChild(copyBtn);
       }
@@ -890,18 +948,31 @@
       textSpan.textContent = `${name} (${size} bytes)`;
       const imageUrl = String(item.image_url || "");
       if (imageUrl) {
+        const link = document.createElement("a");
+        link.href = imageUrl;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.title = "點擊放大檢視內容";
+        link.addEventListener("click", function (e) {
+          e.preventDefault();
+          openImageModal(imageUrl);
+        });
         const preview = document.createElement("img");
         preview.className = "attachment-image-preview";
         preview.src = imageUrl;
         preview.alt = name;
-        tag.appendChild(preview);
+        link.appendChild(preview);
+        tag.appendChild(link);
       }
       
       const delBtn = document.createElement("button");
       delBtn.type = "button";
       delBtn.className = "attachment-del-btn";
       delBtn.textContent = "✖";
-      delBtn.onclick = () => removeAttachment(item.id);
+      delBtn.onclick = (e) => {
+        e.stopPropagation();
+        removeAttachment(item.id);
+      };
       
       tag.appendChild(textSpan);
       tag.appendChild(delBtn);
@@ -1360,6 +1431,22 @@
     elements.clearDebugBtn.addEventListener("click", function () {
       state.debugLines = [];
       elements.debugLog.textContent = "";
+    });
+  }
+
+  if (elements.imageModal) {
+    if (elements.closeImageModalBtn) {
+      elements.closeImageModalBtn.addEventListener("click", closeImageModal);
+    }
+    elements.imageModal.addEventListener("click", function (event) {
+      if (event.target.classList.contains("image-modal-backdrop") || event.target.classList.contains("image-modal")) {
+        closeImageModal();
+      }
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") {
+        closeImageModal();
+      }
     });
   }
   if (elements.toggleDebugBtn) {

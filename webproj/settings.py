@@ -317,6 +317,20 @@ PORTAL_ACL = {
         "ALL_AUTHENTICATED",
          "服務中心人員群組",
     ],
+    "digital-twin-kb": [
+        "ALL_AUTHENTICATED",
+        "DIGITAL_TWIN_KB",
+        "數位孿生知識庫",
+    ],
+    "wrent": [
+        "ALL_AUTHENTICATED",
+        "PUBLIC",
+    ],
+    "nl2sql": [
+        "ALL_AUTHENTICATED",
+        "GRAPH",
+        "服務中心人員群組",
+    ],
     "meetingreply": [
         "ALL_AUTHENTICATED",
         "MEETING",
@@ -558,6 +572,7 @@ PORTAL_USAGE_CODE_MAP = [
     ("/open-notebook/", "OPEN_NOTEBOOK"),
     ("/digital-twin-kb/", "DIGITAL_TWIN_KB"),
     ("/nl2sql/", "NL2SQL"),
+    ("/wrent/", "WRENT"),
 ]
 
 # ============================================================
@@ -599,6 +614,7 @@ INSTALLED_APPS = [
     "webapps.videolearning.apps.VideolearningConfig",
     "webapps.digital_twin_kb.apps.DigitalTwinKbConfig",
     "webapps.vanna.apps.VannaConfig",
+    "webapps.wrent.apps.WrentConfig",
     "pgvector.django",
     "django.contrib.postgres",
 ]

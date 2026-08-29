@@ -1,9 +1,17 @@
 # AI_TOOLS 專案規範（Primary Rules）
 
-最後更新：2026-06-13  
+最後更新：2026-08-19  
 專案根目錄：`./`
 專案使用 Python 根目錄：`.venv/` 或 `venv/`
 ---
+
+## Python 執行環境（Mandatory，PB_Source）
+
+1. `H:\AI\PB_Source\venv` 是本專案精進、Controller、Django、測試與 manifest 驗證的唯一 Python 執行平台。
+2. 必須使用 `H:\AI\PB_Source\venv\Scripts\python.exe`；在 POSIX 環境則使用 `venv/bin/python`。
+3. 不得以系統 `py`、系統 `python` 或其對應的 `sys.executable` 執行上述工作。系統 Python 僅可用於明確不依賴專案套件的診斷，且不得作為交付或 Gate 證據。
+4. 若偵測到系統 Python，應回報 `PROJECT_VENV_REQUIRED`，停止該次執行；不得將此狀態標為 Node BLOCKED、BYPASS 或業務缺陷。
+
 
 ## 1) 啟動必讀（Mandatory Startup Rule）
 1. 每次進入本專案工作前，必讀 `/.codex/rules.md`。
@@ -22,11 +30,12 @@
 3. HTML / JS 不可硬寫 proxy 或 node 前綴。
 4. `PROXY_PREFIX`、`FORCE_SCRIPT_NAME`、`PROXY_PREFIX_WRITE_SCRIPT_NAME` 必須一致管理。
 
-### 2.2 前端結構
+### 2.2 前端結構與字型規範
 1. Template 禁止內嵌大量 `<script>` / `<style>`。
 2. CSS / JS 必須放在 `webapps/<node>/static/<node>/...`。
 3. Script 載入預設使用 `defer`。
 4. 頁面邏輯與樣式分離，避免單檔過度膨脹。
+5. **全域前端使用者可視環境、內容統一採「標楷體」**（`'標楷體', 'DFKai-SB', 'BiauKai', 'KaiTi', 'Times New Roman', serif, sans-serif`）呈現，以保持與 PB 經典系統最高仿真視覺一致性。
 
 ### 2.3 DB / LLM
 1. DB 存取只能走 `webapps/database/db_factory.py`。
@@ -140,7 +149,7 @@
    - 再執行：`& './git-sync.ps1' -Remote upstream`
 4. 若預設 `origin` 因 GitHub 權限或憑證問題無法推送，改用已驗證可寫入遠端 `upstream`：
    - `& './git-push.ps1' -Remote upstream`（目標為 `https://github.com/kaiyo12914-ai/AI_PROJECT.git`）
-   - `& './git-sync.ps1' -Remote upstream`
+   - 再執行：`& './git-sync.ps1' -Remote upstream`
 5. 本機 Git 若出現 SSL 憑證鏈或撤銷檢查問題，可在本 repo local config 設定：
    - `git config --local http.sslBackend schannel`
    - `git config --local http.schannelCheckRevoke false`

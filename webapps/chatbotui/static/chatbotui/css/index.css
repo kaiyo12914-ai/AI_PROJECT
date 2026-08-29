@@ -732,6 +732,13 @@ button {
   margin-top: 8px;
   border-radius: 10px;
   object-fit: contain;
+  cursor: zoom-in;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.attachment-image-preview:hover {
+  opacity: 0.9;
+  transform: scale(1.03);
 }
 
 .message-image-attachments {
@@ -772,6 +779,24 @@ button {
   line-height: 1.5;
 }
 
+
+.message-citations {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-top: 1px dashed rgba(132, 158, 196, 0.35);
+  font-size: 12px;
+  color: #9fb3cb;
+}
+
+.message-citations-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.message-citation-item {
+  line-height: 1.5;
+}
+
 .message-citation-item a {
   color: #8ec8ff;
   text-decoration: none;
@@ -779,4 +804,99 @@ button {
 
 .message-citation-item a:hover {
   text-decoration: underline;
+}
+
+/* 圖片放大 Modal 燈箱 */
+.image-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-modal.hidden {
+  display: none !important;
+}
+
+.image-modal-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(10, 15, 26, 0.85);
+  backdrop-filter: blur(8px);
+}
+
+.image-modal-content {
+  position: relative;
+  z-index: 10000;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: #141e30;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+
+.image-modal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.image-modal-ext-link {
+  color: #8ec8ff;
+  font-size: 13px;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.image-modal-ext-link:hover {
+  color: #bce0ff;
+  text-decoration: underline;
+}
+
+.image-modal-close {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #e6edf3;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.image-modal-close:hover {
+  background: rgba(255, 80, 80, 0.3);
+  color: #ff9999;
+}
+
+.image-modal-body {
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  max-height: calc(90vh - 50px);
+}
+
+.image-modal-body img {
+  max-width: 100%;
+  max-height: calc(90vh - 74px);
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }

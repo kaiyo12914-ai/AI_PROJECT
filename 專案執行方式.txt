@@ -29,8 +29,6 @@ H:\AI\VENV3.12\Scripts\python.exe get_Window.py
 
 & 'H:\AI\AI_TOOLS\venv\Scripts\Activate.ps1'
 Set-Location -Path "H:\AI\AI_TOOLS"
-$env:OPENCLAW_WORKSPACE="H:\AI\openclaw-workspace"
-$env:PROJECT_NAME="AI_TOOLS"
 python.exe manage.py runserver 
 
 Set-Location -Path "H:\AI\Class"

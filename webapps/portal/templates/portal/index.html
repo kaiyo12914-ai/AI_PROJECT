@@ -51,7 +51,6 @@
       {% allow "doc" as can_doc %}
       {% allow "excelproc" as can_excelproc %}
       {% allow "meetingreply" as can_meetingreply %}
-      {% allow "graph" as can_graph %}
       {% allow "pdf" as can_pdf %}
       {% allow "pptx" as can_pptx %}
       {% allow "tts" as can_tts %}
@@ -61,6 +60,7 @@
       {% allow "formalize" as can_formalize %}
       {% allow "videolearning" as can_videolearning %}
       {% allow "digital_twin_kb" as can_digital_twin_kb %}
+      {% allow "wrent" as can_wrent %}
 
       {% if can_translator %}
         {% url 'translator_page' as translator_href %}
@@ -114,11 +114,6 @@
         {% include "portal/_svg_card.html" with href=doc_href title="公文解析" subtitle="來文附件查詢 / 公文內容解析" tone="blue" icon="doc" variant=card_variant %}
       {% endif %}
 
-      {% if can_graph %}
-        {% url 'graph_page' as graph_href %}
-        {% include "portal/_svg_card.html" with href=graph_href title="圖表整理工具" subtitle="統計圖 / 關聯圖轉文字" tone="blue" icon="graph" variant=card_variant %}
-      {% endif %}
-
       {% if can_pdf %}
         {% url 'pdf_page' as pdf_href %}
         {% include "portal/_svg_card.html" with href=pdf_href title="PDF → TXT / DOCX" subtitle="PDF 轉文字 / Word" tone="red" icon="pdf" variant=card_variant %}
@@ -142,6 +137,11 @@
       {% if can_excelproc %}
         {% url 'excelproc:excelproc_page' as excelproc_href %}
         {% include "portal/_svg_card.html" with href=excelproc_href title="Excel 程式工具" subtitle="模板 / 解析 / 下載" tone="gray" icon="excel" variant=card_variant %}
+      {% endif %}
+
+      {% if can_wrent %}
+        {% url 'wrent:index' as wrent_href %}
+        {% include "portal/_svg_card.html" with href=wrent_href title="WRent 租車預約" subtitle="階梯計費 / 排程 / 帳單" tone="green" icon="wrent" variant=card_variant %}
       {% endif %}
 
       {% if can_vanna %}

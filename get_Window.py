@@ -11,12 +11,13 @@ import win32con
 # Config
 # ----------------------------
 MAX_WIDTH = int(os.getenv("SCREEN_MAX_WIDTH", "1600"))
+MONITOR_INDEX = int(os.getenv("SCREEN_MONITOR", "1"))
 
 
 def grab_desktop_1() -> Image.Image:
     """Capture Desktop 1 (primary monitor)."""
     with mss.mss() as sct:
-        mon = sct.monitors[1]   # 👈 桌面 1（主螢幕）
+        mon = sct.monitors[MONITOR_INDEX]
         shot = sct.grab(mon)
         return Image.frombytes("RGB", shot.size, shot.rgb)
 
