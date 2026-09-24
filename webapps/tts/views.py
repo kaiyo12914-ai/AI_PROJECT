@@ -14,12 +14,15 @@ from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
-from opencc import OpenCC
+try:
+    from opencc import OpenCC
+except ImportError:
+    OpenCC = None
 
 from webapps.portal.decorators import require_node
 
 
-_cc = OpenCC("s2t")  # Simplified → Traditional
+_cc = OpenCC("s2t") if OpenCC is not None else None  # Simplified → Traditional
 
 
 # =========================

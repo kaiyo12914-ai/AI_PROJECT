@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional, Tuple, List
 
 from django.conf import settings
 from django.db.models import Count
-from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.http import HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse, Http404
 from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
@@ -158,6 +158,36 @@ def whoami(request: HttpRequest) -> JsonResponse:
         })
 
     return JsonResponse(data, json_dumps_params={"indent": 4, "ensure_ascii": False})
+
+
+# =========================================================
+# Outbound External Redirect
+# - 依專案規範：透過內部路由做跳轉並記錄使用日誌
+# - 檢查權限後以 302 重導至目標外部系統
+# =========================================================
+@require_GET
+def external_redirect(request: HttpRequest, target: str) -> HttpResponse:
+    target_key = (target or "").strip().lower()
+    targets = {
+        "openwebui": {
+            "node": "openwebui",
+            "url": getattr(settings, "OPENWEBUI_PORTAL_URL", "") or "http://mpcai.mpc.mil.tw:8000/auth",
+        },
+        "vanna": {
+            "node": "vanna",
+            "url": getattr(settings, "VANNA_PORTAL_URL", "") or "http://mpcai.mpc.mil.tw:8084",
+        },
+    }
+
+    info = targets.get(target_key)
+    if not info:
+        raise Http404(f"Unknown redirect target: {target}")
+
+    # 動態依對應 node 檢查權限
+    node = info["node"]
+    wrapped_view = require_node(node)(lambda req: HttpResponseRedirect(info["url"]))
+    return wrapped_view(request)
+
 
 # =========================================================
 # helpers

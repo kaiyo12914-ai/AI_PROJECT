@@ -502,6 +502,7 @@ TTS_API_BASE_URL = env_str("TTS_API_BASE_URL", "")
 TTS_API_TIMEOUT = env_int("TTS_API_TIMEOUT", 60)
 OPEN_NOTEBOOK_PORTAL_URL = env_str("OPEN_NOTEBOOK_PORTAL_URL", "http://127.0.0.1:8502")
 OPENWEBUI_PORTAL_URL = env_str("OPENWEBUI_PORTAL_URL", "http://mpcai.mpc.mil.tw:8000/auth")
+VANNA_PORTAL_URL = env_str("VANNA_PORTAL_URL", "http://mpcai.mpc.mil.tw:8084")
 
 # ============================================================
 # Sybase query workstation whitelist
@@ -570,6 +571,8 @@ PORTAL_USAGE_CODE_MAP = [
     ("/open-notebook/", "OPEN_NOTEBOOK"),
     ("/digital-twin-kb/", "DIGITAL_TWIN_KB"),
     ("/nl2sql/", "NL2SQL"),
+    ("/redirect/openwebui/", "OPENWEBUI"),
+    ("/redirect/vanna/", "VANNA"),
 ]
 
 # ============================================================

@@ -10,11 +10,6 @@ from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
 
 from webapps.portal.decorators import require_node, ensure_no_proxy
-from .services import (
-    import_contact_data_bytes,
-    compare_data_bytes,
-    export_mpc_employee_data_bytes,
-)
 
 ALLOWED_EXTS = {".xlsx", ".xls", ".xlsm"}
 MAX_UPLOAD_MB = 20
@@ -82,6 +77,12 @@ def run(request):
     action = (request.POST.get("action") or "").strip().lower()
 
     try:
+        from .services import (
+            import_contact_data_bytes,
+            compare_data_bytes,
+            export_mpc_employee_data_bytes,
+        )
+
         if action in ("compare", "import"):
             f = request.FILES.get("file")
             if not f:

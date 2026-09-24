@@ -63,7 +63,8 @@
       {% allow "openwebui" as can_openwebui %}
 
       {% if can_openwebui %}
-        {% include "portal/_svg_card.html" with href=openwebui_url|default:"http://mpcai.mpc.mil.tw:8000/auth" title="OpenWeb UI" subtitle="對話入口 / 模型互動" tone="cyan" icon="chat" variant=card_variant new_tab=True %}
+        {% url 'portal:external_redirect' 'openwebui' as openwebui_redirect_href %}
+        {% include "portal/_svg_card.html" with href=openwebui_redirect_href title="OpenWeb UI" subtitle="對話入口 / 模型互動" tone="cyan" icon="chat" variant=card_variant new_tab=True %}
       {% endif %}
 
       {% if can_chatbotui %}
@@ -144,7 +145,8 @@
       {% endif %}
 
       {% if can_vanna %}
-        {% include "portal/_svg_card.html" with href="http://mpcai.mpc.mil.tw:8084" title="Vanna" subtitle="SQL 產生 / 問答" tone="cyan" icon="vanna" variant=card_variant new_tab=True %}
+        {% url 'portal:external_redirect' 'vanna' as vanna_redirect_href %}
+        {% include "portal/_svg_card.html" with href=vanna_redirect_href title="Vanna" subtitle="SQL 產生 / 問答" tone="cyan" icon="vanna" variant=card_variant new_tab=True %}
       {% endif %}
     </div>
 

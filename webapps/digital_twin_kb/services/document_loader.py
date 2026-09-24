@@ -1,10 +1,5 @@
 from pathlib import Path
 
-import pandas as pd
-from docx import Document as DocxDocument
-from pypdf import PdfReader
-
-
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".markdown", ".csv", ".xlsx", ".xls"}
 
 
@@ -20,8 +15,10 @@ def load_document_text(path: str | Path) -> tuple[str, list[dict]]:
     if ext in {".txt", ".md", ".markdown"}:
         return file_path.read_text(encoding="utf-8", errors="ignore"), []
     if ext == ".csv":
+        import pandas as pd
         return pd.read_csv(file_path).to_csv(index=False), []
     if ext in {".xlsx", ".xls"}:
+        import pandas as pd
         sheets = pd.read_excel(file_path, sheet_name=None)
         text = "\n\n".join(f"# {name}\n{df.to_csv(index=False)}" for name, df in sheets.items())
         return text, []
@@ -29,6 +26,7 @@ def load_document_text(path: str | Path) -> tuple[str, list[dict]]:
 
 
 def _load_pdf(path: Path) -> tuple[str, list[dict]]:
+    from pypdf import PdfReader
     reader = PdfReader(str(path))
     pages = []
     meta = []
@@ -40,5 +38,6 @@ def _load_pdf(path: Path) -> tuple[str, list[dict]]:
 
 
 def _load_docx(path: Path) -> str:
+    from docx import Document as DocxDocument
     doc = DocxDocument(str(path))
     return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
