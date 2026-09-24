@@ -50,6 +50,7 @@ def index(request: HttpRequest) -> HttpResponse:
         "login_user": getattr(request, "login_user", "") or "",
         "login_user_name": getattr(request, "login_user_name", "") or "",
         "open_notebook_url": getattr(settings, "OPEN_NOTEBOOK_PORTAL_URL", "") or "http://127.0.0.1:8502",
+        "openwebui_url": getattr(settings, "OPENWEBUI_PORTAL_URL", "") or "http://mpcai.mpc.mil.tw:8000/auth",
     }
 
     try:

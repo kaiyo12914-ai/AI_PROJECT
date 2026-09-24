@@ -7,4 +7,6 @@ def test_portal_doc_card_label_is_not_mojibake():
 
     assert 'title="公文解析"' in text
     assert 'subtitle="來文附件查詢 / 公文內容解析"' in text
+    assert 'title="OpenWeb UI"' in text
+    assert 'http://mpcai.mpc.mil.tw:8000/auth' in text
     assert 'title="????"' not in text

@@ -224,3 +224,11 @@ DEV_LOGIN_PROFILE=202
 DEV_LOGIN_USER_ID=MPCUSER01
 DEV_LOGIN_PASSWORD=MPC655925
 ```
+## PB Modal 標準化盒模型強制規則
+
+1. 專案查詢 Modal 以已驗證 PB-native 參考介面及該 Node PB Source／實圖為準；共用配色或高度不代表已完成 Modal 標準化。
+2. label、value、lookup、date、operator 必須共用完整盒模型：背景、`1px solid` 邊框、控件高度、`box-sizing: border-box`、直角、inset shadow 及 focus/hover 行為。
+3. Ant Design 複合控件必須套用到實際外框層：`.ant-input-affix-wrapper`、`.ant-select-selector`、`.ant-picker`。只設定內層 input 或只設定 `border-color` 視為未完成。
+4. 參考介面若使用有框灰底 label，目標介面不得以無框文字替代。readonly／disabled 可改背景與互動狀態，但不得移除標準邊框。
+5. `.pb-standard-modal` 與 Node scoped CSS 不得對同一外框保留互相競爭的色彩、邊框或 shadow 規則；應先收斂到共用 token／class，Node 僅保留 PB Source 決定的欄寬與座標。
+6. Modal parity 驗收必須包含 computed style 與瀏覽器實圖，檢查四邊線寬／顏色、外內層背景、focus/hover、lookup 展開／清除及日期 icon 區；僅有單元測試或 CSS 文字比對不得宣告完成。

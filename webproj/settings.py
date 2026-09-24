@@ -200,7 +200,7 @@ else:
 
 _raw_force_script_name = os.getenv("FORCE_SCRIPT_NAME")
 if _raw_force_script_name is None:
-    FORCE_SCRIPT_NAME = _norm_prefix(PROXY_PREFIX)
+    FORCE_SCRIPT_NAME = ""
 else:
     FORCE_SCRIPT_NAME = _norm_prefix(_raw_force_script_name)
 
@@ -322,10 +322,6 @@ PORTAL_ACL = {
         "DIGITAL_TWIN_KB",
         "數位孿生知識庫",
     ],
-    "wrent": [
-        "ALL_AUTHENTICATED",
-        "PUBLIC",
-    ],
     "nl2sql": [
         "ALL_AUTHENTICATED",
         "GRAPH",
@@ -358,6 +354,7 @@ PORTAL_ACL = {
     "formalize": ["ALL_AUTHENTICATED"],
     "videolearning": ["ALL_AUTHENTICATED"],
     "open_notebook": ["ALL_AUTHENTICATED"],
+    "openwebui": ["ALL_AUTHENTICATED"],
 }
 
 # ============================================================
@@ -504,6 +501,7 @@ MOCK_DB_JSON = env_str("MOCK_DB_JSON", f"{_PROJECT_ROOT_STR}\\SQLTEST_output.jso
 TTS_API_BASE_URL = env_str("TTS_API_BASE_URL", "")
 TTS_API_TIMEOUT = env_int("TTS_API_TIMEOUT", 60)
 OPEN_NOTEBOOK_PORTAL_URL = env_str("OPEN_NOTEBOOK_PORTAL_URL", "http://127.0.0.1:8502")
+OPENWEBUI_PORTAL_URL = env_str("OPENWEBUI_PORTAL_URL", "http://mpcai.mpc.mil.tw:8000/auth")
 
 # ============================================================
 # Sybase query workstation whitelist
@@ -572,7 +570,6 @@ PORTAL_USAGE_CODE_MAP = [
     ("/open-notebook/", "OPEN_NOTEBOOK"),
     ("/digital-twin-kb/", "DIGITAL_TWIN_KB"),
     ("/nl2sql/", "NL2SQL"),
-    ("/wrent/", "WRENT"),
 ]
 
 # ============================================================
@@ -614,7 +611,6 @@ INSTALLED_APPS = [
     "webapps.videolearning.apps.VideolearningConfig",
     "webapps.digital_twin_kb.apps.DigitalTwinKbConfig",
     "webapps.vanna.apps.VannaConfig",
-    "webapps.wrent.apps.WrentConfig",
     "pgvector.django",
     "django.contrib.postgres",
 ]
@@ -728,6 +724,7 @@ USE_TZ = True
 SESSION_COOKIE_SAMESITE = env_str("SESSION_COOKIE_SAMESITE", "Lax")
 CSRF_COOKIE_SAMESITE = env_str("CSRF_COOKIE_SAMESITE", "Lax")
 
+# 由各環境的 PROXY_PREFIX 決定 Cookie 路徑。
 DEFAULT_COOKIE_PATH = PROXY_PREFIX if PROXY_PREFIX else "/"
 SESSION_COOKIE_PATH = env_str("SESSION_COOKIE_PATH", DEFAULT_COOKIE_PATH)
 CSRF_COOKIE_PATH = env_str("CSRF_COOKIE_PATH", DEFAULT_COOKIE_PATH)

@@ -758,10 +758,11 @@
     return wrap;
   }
 
-  function openImageModal(url) {
-    if (!elements.imageModal || !url) return;
-    if (elements.imageModalImg) elements.imageModalImg.src = url;
-    if (elements.imageModalExternalLink) elements.imageModalExternalLink.href = url;
+  function openImageModal(imagePath) {
+    if (!elements.imageModal || !imagePath) return;
+    const imageUrl = url(imagePath);
+    if (elements.imageModalImg) elements.imageModalImg.src = imageUrl;
+    if (elements.imageModalExternalLink) elements.imageModalExternalLink.href = imageUrl;
     elements.imageModal.classList.remove("hidden");
   }
 
@@ -782,7 +783,7 @@
     wrap.className = "message-image-attachments";
     images.forEach(function (item) {
       const link = document.createElement("a");
-      link.href = String(item.image_url);
+      link.href = url(String(item.image_url));
       link.target = "_blank";
       link.rel = "noopener noreferrer";
       link.title = "點擊放大檢視內容";
@@ -791,7 +792,7 @@
         openImageModal(String(item.image_url));
       });
       const image = document.createElement("img");
-      image.src = String(item.image_url);
+      image.src = url(String(item.image_url));
       image.alt = String(item.filename || "貼圖");
       link.appendChild(image);
       wrap.appendChild(link);
@@ -946,7 +947,7 @@
       const name = String(item.filename || "attachment");
       const size = Number(item.size_bytes || 0);
       textSpan.textContent = `${name} (${size} bytes)`;
-      const imageUrl = String(item.image_url || "");
+      const imageUrl = item.image_url ? url(String(item.image_url)) : "";
       if (imageUrl) {
         const link = document.createElement("a");
         link.href = imageUrl;

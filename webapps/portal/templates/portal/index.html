@@ -60,7 +60,16 @@
       {% allow "formalize" as can_formalize %}
       {% allow "videolearning" as can_videolearning %}
       {% allow "digital_twin_kb" as can_digital_twin_kb %}
-      {% allow "wrent" as can_wrent %}
+      {% allow "openwebui" as can_openwebui %}
+
+      {% if can_openwebui %}
+        {% include "portal/_svg_card.html" with href=openwebui_url|default:"http://mpcai.mpc.mil.tw:8000/auth" title="OpenWeb UI" subtitle="對話入口 / 模型互動" tone="cyan" icon="chat" variant=card_variant new_tab=True %}
+      {% endif %}
+
+      {% if can_chatbotui %}
+        {% url 'chatbotui:page' as chatbotui_href %}
+        {% include "portal/_svg_card.html" with href=chatbotui_href title="AI 對話助手" subtitle="類 Open WebUI 對話入口" tone="cyan" icon="chat" variant=card_variant %}
+      {% endif %}
 
       {% if can_translator %}
         {% url 'translator_page' as translator_href %}
@@ -70,11 +79,6 @@
       {% if can_englishchat %}
         {% url 'englishchat:page' as englishchat_href %}
         {% include "portal/_svg_card.html" with href=englishchat_href title="美語學習教室" subtitle="主題對話 / 口語陪練" tone="blue" icon="chat" variant=card_variant %}
-      {% endif %}
-
-      {% if can_chatbotui %}
-        {% url 'chatbotui:page' as chatbotui_href %}
-        {% include "portal/_svg_card.html" with href=chatbotui_href title="AI 對話助手" subtitle="類 Open WebUI 對話入口" tone="cyan" icon="chat" variant=card_variant %}
       {% endif %}
 
       {% if can_formalize %}
@@ -137,11 +141,6 @@
       {% if can_excelproc %}
         {% url 'excelproc:excelproc_page' as excelproc_href %}
         {% include "portal/_svg_card.html" with href=excelproc_href title="Excel 程式工具" subtitle="模板 / 解析 / 下載" tone="gray" icon="excel" variant=card_variant %}
-      {% endif %}
-
-      {% if can_wrent %}
-        {% url 'wrent:index' as wrent_href %}
-        {% include "portal/_svg_card.html" with href=wrent_href title="WRent 租車預約" subtitle="階梯計費 / 排程 / 帳單" tone="green" icon="wrent" variant=card_variant %}
       {% endif %}
 
       {% if can_vanna %}
