@@ -25,9 +25,9 @@ class TestPortalExternalRedirectIntegration(SimpleTestCase):
     def test_client_get_redirect_endpoints(self):
         client = Client()
         resp_openwebui = client.get("/redirect/openwebui/")
-        self.assertEqual(resp_openwebui.status_code, 302)
-        self.assertEqual(resp_openwebui["Location"], "http://mpcai.mpc.mil.tw:8000/auth")
+        self.assertEqual(resp_openwebui.status_code, 200)
+        self.assertIn("http://mpcai.mpc.mil.tw:8000/auth", resp_openwebui.content.decode("utf-8"))
 
         resp_vanna = client.get("/redirect/vanna/")
-        self.assertEqual(resp_vanna.status_code, 302)
-        self.assertEqual(resp_vanna["Location"], "http://mpcai.mpc.mil.tw:8084")
+        self.assertEqual(resp_vanna.status_code, 200)
+        self.assertIn("http://mpcai.mpc.mil.tw:8084", resp_vanna.content.decode("utf-8"))

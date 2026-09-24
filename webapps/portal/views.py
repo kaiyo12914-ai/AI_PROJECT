@@ -163,7 +163,7 @@ def whoami(request: HttpRequest) -> JsonResponse:
 # =========================================================
 # Outbound External Redirect
 # - 依專案規範：透過內部路由做跳轉並記錄使用日誌
-# - 檢查權限後以 302 重導至目標外部系統
+# - 檢查權限後以 HTML meta refresh / location.replace 即時跳轉，徹底免疫 IIS ARR 302 Location 改寫導致 Port 遺失問題
 # =========================================================
 @require_GET
 def external_redirect(request: HttpRequest, target: str) -> HttpResponse:
@@ -183,10 +183,29 @@ def external_redirect(request: HttpRequest, target: str) -> HttpResponse:
     if not info:
         raise Http404(f"Unknown redirect target: {target}")
 
+    target_url = info["url"]
+
+    def _render_redirect(req: HttpRequest) -> HttpResponse:
+        html = f"""<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="refresh" content="0;url={target_url}">
+    <title>正在前往系統...</title>
+    <script>window.location.replace("{target_url}");</script>
+</head>
+<body style="font-family: '標楷體', 'DFKai-SB', serif; text-align: center; padding-top: 80px; background-color: #f7f9fc;">
+    <p style="font-size: 18px; color: #333;">正在前往系統，請稍候...</p>
+    <p style="font-size: 14px; color: #666;"><a href="{target_url}" style="color: #0066cc;">若未自動跳轉，請點擊此處手動前往</a></p>
+</body>
+</html>"""
+        return HttpResponse(html, content_type="text/html; charset=utf-8")
+
     # 動態依對應 node 檢查權限
     node = info["node"]
-    wrapped_view = require_node(node)(lambda req: HttpResponseRedirect(info["url"]))
+    wrapped_view = require_node(node)(_render_redirect)
     return wrapped_view(request)
+
 
 
 # =========================================================

@@ -18,8 +18,9 @@ class TestExternalRedirect(SimpleTestCase):
         request = self.rf.get("/redirect/openwebui/")
         request.user = None
         response = external_redirect(request, target="openwebui")
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, "http://mpcai.mpc.mil.tw:8000/auth")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("http://mpcai.mpc.mil.tw:8000/auth", response.content.decode("utf-8"))
+        self.assertIn("window.location.replace", response.content.decode("utf-8"))
 
     @override_settings(
         PORTAL_ACL_ENABLED=False,
@@ -30,8 +31,9 @@ class TestExternalRedirect(SimpleTestCase):
         request = self.rf.get("/redirect/vanna/")
         request.user = None
         response = external_redirect(request, target="vanna")
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, "http://mpcai.mpc.mil.tw:8084")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("http://mpcai.mpc.mil.tw:8084", response.content.decode("utf-8"))
+        self.assertIn("window.location.replace", response.content.decode("utf-8"))
 
     def test_redirect_unknown_target_404(self):
         request = self.rf.get("/redirect/unknown/")
@@ -75,7 +77,7 @@ class TestExternalRedirectLoggingIntegration(SimpleTestCase):
         request.login_user_name = "RedirectTester"
 
         response = middleware(request)
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
 
         mock_create.assert_called_once()
         kwargs = mock_create.call_args.kwargs
@@ -105,7 +107,7 @@ class TestExternalRedirectLoggingIntegration(SimpleTestCase):
         request.login_user_name = "VannaTester"
 
         response = middleware(request)
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
 
         mock_create.assert_called_once()
         kwargs = mock_create.call_args.kwargs
