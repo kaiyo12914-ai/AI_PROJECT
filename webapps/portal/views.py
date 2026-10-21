@@ -108,8 +108,14 @@ def whoami(request: HttpRequest) -> JsonResponse:
         "login_user_org": getattr(request, "login_user_org", "") or "",
         "login_user_org_label": getattr(request, "login_user_org_label", "") or "",
         "login_user_factory_plant": getattr(request, "login_user_factory_plant", "") or "",
+        "login_user_dep": getattr(request, "login_user_dep", "") or "",
         "session_login_user_org": (
             (request.session.get("login_user_org") or "").strip()
+            if hasattr(request, "session")
+            else ""
+        ),
+        "session_dep": (
+            (request.session.get("dep") or "").strip()
             if hasattr(request, "session")
             else ""
         ),

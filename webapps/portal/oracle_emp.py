@@ -102,7 +102,8 @@ SELECT
     TRIM(E.NAME) AS EMP_NAME,
     TRIM(E.FACTORY_PLANT) AS PLANT,
     TRIM(D.DEPT_NAME) AS DEPT,
-    TRIM(E.EMP_TITLE) AS TITLE
+    TRIM(E.EMP_TITLE) AS TITLE,
+    TRIM(E.DEPNO) AS DEPTNO
 FROM CT_EMPLOY E
 LEFT JOIN CT_DEPARTMENT D ON E.DEPNO = D.CIN2000_CODE AND E.FACTORY_PLANT = D.FACTORY_PLANT
 WHERE TRIM(E.IDNO) = :emp_id
@@ -200,6 +201,9 @@ def _match_mock_emp_from_section(section: Any, emp_id: str) -> Dict[str, str]:
     def _norm(v: Any) -> str:
         return str(v or "").strip()
 
+    def _pick_dep(d: dict) -> str:
+        return _norm(d.get("dep") or d.get("dept") or d.get("deptno") or d.get("depno") or d.get("login_user_dep"))
+
     # Case A: {"login_user":"F...","login_user_name":"姚承佑","login_user_org":"401"}
     if isinstance(section, dict):
         lu = _norm(section.get("login_user")).upper()
@@ -207,16 +211,18 @@ def _match_mock_emp_from_section(section: Any, emp_id: str) -> Dict[str, str]:
             return {
                 "name": _norm(section.get("login_user_name") or section.get("name")),
                 "plant": _norm(section.get("login_user_org") or section.get("factory_plant") or section.get("plant")),
+                "dep": _pick_dep(section),
             }
 
         # Case B: {"F129...":"姚承佑"} or {"F129...":{"login_user_name":"姚承佑","plant":"401"}}
         direct = section.get(emp_id) or section.get(uid) or section.get(uid.lower())
         if isinstance(direct, str):
-            return {"name": _norm(direct), "plant": ""}
+            return {"name": _norm(direct), "plant": "", "dep": ""}
         if isinstance(direct, dict):
             return {
                 "name": _norm(direct.get("login_user_name") or direct.get("name")),
                 "plant": _norm(direct.get("login_user_org") or direct.get("factory_plant") or direct.get("plant")),
+                "dep": _pick_dep(direct),
             }
 
         # Case C: {"users":[{"login_user":"F...","login_user_name":"姚承佑"}]}
@@ -229,6 +235,7 @@ def _match_mock_emp_from_section(section: Any, emp_id: str) -> Dict[str, str]:
                     return {
                         "name": _norm(item.get("login_user_name") or item.get("name")),
                         "plant": _norm(item.get("login_user_org") or item.get("factory_plant") or item.get("plant")),
+                        "dep": _pick_dep(item),
                     }
 
     # Case D: [{"login_user":"F...","login_user_name":"姚承佑"}, ...]
@@ -240,6 +247,7 @@ def _match_mock_emp_from_section(section: Any, emp_id: str) -> Dict[str, str]:
                 return {
                     "name": _norm(item.get("login_user_name") or item.get("name")),
                     "plant": _norm(item.get("login_user_org") or item.get("factory_plant") or item.get("plant")),
+                    "dep": _pick_dep(item),
                 }
     return {}
 
@@ -252,8 +260,10 @@ def _mock_emp_info(emp_id: str) -> Dict[str, str]:
     hit: Dict[str, str] = {}
     for sec in _iter_oracle_emp_sections(data):
         matched = _match_mock_emp_from_section(sec, emp_id)
-        if matched and (matched.get("name") or matched.get("plant")):
+        if matched and (matched.get("name") or matched.get("plant") or matched.get("dep")):
             hit = matched
+            if hit.get("name") and hit.get("plant") and hit.get("dep"):
+                break
     return hit
 
 
@@ -581,22 +591,30 @@ def get_emp_full_info(emp_id: str, *, refresh: bool = False) -> Dict[str, str]:
         try:
             info = _pg_query_one(EMP_FULL_INFO_SQL, {"emp_id": emp_id})
             if info and isinstance(info, dict):
+                dep_code = str(info.get("DEPTNO") or info.get("DEPNO") or "").strip()
                 res_dict = {
                     "EMP_NAME": str(info.get("EMP_NAME") or "").strip(),
                     "PLANT": str(info.get("PLANT") or "").strip(),
                     "DEPT": str(info.get("DEPT") or "").strip(),
                     "TITLE": str(info.get("TITLE") or "").strip(),
+                    "DEPTNO": dep_code,
+                    "DEPNO": dep_code,
                 }
                 _cache_put(emp_id, res_dict["EMP_NAME"], _emp_cache_ttl_sec(), full_info=res_dict)
                 return res_dict
             
             hit = _mock_emp_info(emp_id)
             if hit:
+                dep_val = str(hit.get("dep") or hit.get("deptno") or hit.get("depno") or "").strip()
+                if not dep_val and getattr(settings, "DEBUG", False):
+                    dep_val = (os.getenv("DEV_LOGIN_DEP") or os.getenv("DEV_LOGIN_DEPT") or "").strip()
                 res_dict = {
                     "EMP_NAME": str(hit.get("name") or "").strip(),
                     "PLANT": str(hit.get("plant") or "").strip(),
-                    "DEPT": "",
+                    "DEPT": str(hit.get("dep") or "").strip(),
                     "TITLE": "",
+                    "DEPTNO": dep_val,
+                    "DEPNO": dep_val,
                 }
                 _cache_put(emp_id, res_dict["EMP_NAME"], _emp_cache_ttl_sec(), full_info=res_dict)
                 return res_dict
@@ -604,13 +622,16 @@ def get_emp_full_info(emp_id: str, *, refresh: bool = False) -> Dict[str, str]:
         except Exception as e:
             logger.warning(f"PostgreSQL get_emp_full_info failed: {e}")
             hit = _mock_emp_info(emp_id)
-            if not hit:
-                return {}
+            dep_val = str(hit.get("dep") or hit.get("deptno") or hit.get("depno") or "").strip()
+            if not dep_val and getattr(settings, "DEBUG", False):
+                dep_val = (os.getenv("DEV_LOGIN_DEP") or os.getenv("DEV_LOGIN_DEPT") or "").strip()
             res_dict = {
                 "EMP_NAME": str(hit.get("name") or "").strip(),
                 "PLANT": str(hit.get("plant") or "").strip(),
-                "DEPT": "",
+                "DEPT": str(hit.get("dep") or "").strip(),
                 "TITLE": "",
+                "DEPTNO": dep_val,
+                "DEPNO": dep_val,
             }
             _cache_put(emp_id, res_dict["EMP_NAME"], _emp_cache_ttl_sec(), full_info=res_dict)
             return res_dict
@@ -622,8 +643,17 @@ def get_emp_full_info(emp_id: str, *, refresh: bool = False) -> Dict[str, str]:
     try:
         info = _oracle_query_one_with_fallback(EMP_FULL_INFO_SQL, {"emp_id": emp_id})
         if info and isinstance(info, dict):
-            _cache_put(emp_id, info.get("EMP_NAME", ""), _emp_cache_ttl_sec(), full_info=info)
-            return info
+            dep_code = str(info.get("DEPTNO") or info.get("DEPNO") or "").strip()
+            res_dict = {
+                "EMP_NAME": str(info.get("EMP_NAME") or "").strip(),
+                "PLANT": str(info.get("PLANT") or "").strip(),
+                "DEPT": str(info.get("DEPT") or "").strip(),
+                "TITLE": str(info.get("TITLE") or "").strip(),
+                "DEPTNO": dep_code,
+                "DEPNO": dep_code,
+            }
+            _cache_put(emp_id, res_dict["EMP_NAME"], _emp_cache_ttl_sec(), full_info=res_dict)
+            return res_dict
         return {}
     except Exception as e:
         _LAST_ERR = str(e)

@@ -852,6 +852,12 @@ def _parse_search_args(request: HttpRequest) -> Tuple[str, str, str, int, str, s
             end_date = dt.date.fromisoformat(end_date_raw).isoformat()
     except Exception:
         end_date = ""
+    # 當使用者未輸入承辦人姓名、相關號或主旨子字串時，改以查詢結束日期當日之內容
+    if not grsno and not subject and not handler_name:
+        target_date = end_date or start_date or dt.date.today().isoformat()
+        start_date = target_date
+        end_date = target_date
+
     if start_date and end_date and start_date > end_date:
         start_date, end_date = end_date, start_date
     if start_date and end_date:
@@ -1324,12 +1330,7 @@ def api_sybase_query_search(request: HttpRequest):
         return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
 
     grsno, subject, handler_name, limit, plant, start_date, end_date, doc_category = _parse_search_args(request)
-    if not grsno and not subject and not handler_name:
-        return JsonResponse(
-            {"ok": False, "error": "need handler_name or grsno or subject"},
-            status=400,
-            json_dumps_params={"ensure_ascii": False},
-        )
+    # 當使用者未輸入承辦人姓名、相關號或主旨子字串時，改以查詢結束日期當日之內容（於 _parse_search_args 處理起訖日期）
 
     authorized_ip = True
     restricted_to_self = False

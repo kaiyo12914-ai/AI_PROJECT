@@ -198,6 +198,18 @@
       var handlerName = String(elHandlerName && elHandlerName.value ? elHandlerName.value : "").trim();
       var plant = String(elPlant && elPlant.value ? elPlant.value : defaultPlant).trim();
       var docCategory = String(elDocCategory && elDocCategory.value ? elDocCategory.value : "all").trim();
+      // 當使用者未輸入承辦人姓名、相關號或主旨子字串，改以查詢結束日期當日之內容
+      var isSingleDayFallback = (!grsno && !subject && !handlerName);
+      if (isSingleDayFallback) {
+        var endVal = String(elDateEnd && elDateEnd.value ? elDateEnd.value : "").trim();
+        if (!endVal) {
+          var now = new Date();
+          endVal = toIsoDate(new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())));
+          if (elDateEnd) elDateEnd.value = endVal;
+        }
+        if (elDateStart) elDateStart.value = endVal;
+      }
+
       var range = autoAdjustLimit();
       if (!range || !range.ok) {
         setStatus(elStatus, "請輸入有效起始日期與結束日期", true);
@@ -212,13 +224,11 @@
       var startDate = range.startDate;
       var endDate = range.endDate;
 
-      if (!grsno && !subject && !handlerName) {
-        setStatus(elStatus, "請至少輸入：承辦人姓名、相關號或主旨子字串。", true);
-        return;
-      }
-
       if (btnSearch) btnSearch.disabled = true;
-      setStatus(elStatus, "查詢中...", false);
+      var loadingText = isSingleDayFallback
+        ? "未輸入承辦人、相關號或主旨，改以查詢結束日期（" + endDate + "）當日資料中..."
+        : "查詢中...";
+      setStatus(elStatus, loadingText, false);
       clearTables();
 
       try {
@@ -307,8 +317,9 @@
         bindRowActions(tbDraftDocs, previewBlob, downloadBlob);
         bindRowActions(tbDraftAttach, previewBlob, downloadBlob);
         bindRowActions(tbIncomingAttach, previewBlob, downloadBlob);
+        var prefix = isSingleDayFallback ? "【結束日期當日查詢】" : "";
         var statusMsg = (
-          "查詢完成：簽稿主檔 " + String(counts.draft_docs || 0) + " 筆、" +
+          prefix + "查詢完成：簽稿主檔 " + String(counts.draft_docs || 0) + " 筆、" +
           "簽稿附件 " + String(counts.draft_attachments || 0) + " 筆、" +
           "來文主旨 " + String(counts.incoming_docs || 0) + " 筆、" +
           "來文附件 " + String(counts.incoming_attachments || 0) + " 筆" +

@@ -288,22 +288,31 @@ class IISRemoteUserBridgeMiddleware:
                 if sess_login: login_user = sess_login
             except Exception: pass
 
+        if not login_user:
+            existing = getattr(request, "login_user", None)
+            if existing:
+                login_user = _strip_domain(str(existing))
+
         request.login_user = login_user or ""
         if login_user:
             request.META["REMOTE_USER"] = login_user
         emp_id = (request.login_user or "").strip()
         emp_name = ""
         sess_org = ""
+        sess_dep = ""
         try:
             sess_emp_id = (request.session.get("login_user") or "").strip()
             sess_emp_name = (request.session.get("login_user_name") or "").strip()
             sess_org = (request.session.get("login_user_org") or "").strip()
+            sess_dep = (request.session.get("dep") or request.session.get("login_user_dep") or "").strip()
         except Exception:
-            sess_emp_id, sess_emp_name, sess_org = "", "", ""
+            sess_emp_id, sess_emp_name, sess_org, sess_dep = "", "", "", ""
 
-        if sess_emp_name in ("未取得姓名", "雿輻??"):
+        if sess_emp_name in ("未取得姓名", "使用者"):
             sess_emp_name = ""
 
+        emp_dep = ""
+        employ: Dict[str, Any] = {}
         if emp_id:
             # Intranet rule: aaa decode -> USER_ID -> CT_EMPLOY (FACTORY_PLANT + NAME)
             if from_aaa and _env_bool("EMP_NAME_LOOKUP", default=True):
@@ -315,12 +324,32 @@ class IISRemoteUserBridgeMiddleware:
             if (not emp_name) and _env_bool("EMP_NAME_LOOKUP", default=True):
                 emp_name = _cache_get_emp_name(emp_id)
 
+            if _env_bool("EMP_NAME_LOOKUP", default=True):
+                try:
+                    from webapps.portal.oracle_emp import get_emp_full_info
+                    employ = get_emp_full_info(emp_id, refresh=from_aaa) or {}
+                except Exception as e:
+                    logger.warning("[emp_full_info] lookup failed for emp_id=%s: %s", emp_id, e)
+                    employ = {}
+
+            if employ:
+                emp_dep = str(employ.get("DEPTNO") or employ.get("DEPNO") or employ.get("DEPT") or "").strip()
+
+            if (not emp_dep) and sess_dep and sess_emp_id == emp_id:
+                emp_dep = sess_dep
+
+            if (not emp_dep) and getattr(settings, "DEBUG", False):
+                emp_dep = (os.getenv("DEV_LOGIN_DEP") or os.getenv("DEV_LOGIN_DEPT") or "").strip()
+
             try:
                 request.session["login_user"] = emp_id
                 if emp_name:
                     request.session["login_user_name"] = emp_name
             except Exception:
                 pass
+
+        if (not emp_dep) and sess_dep:
+            emp_dep = sess_dep
 
         if (not emp_name) and emp_id and getattr(settings, "DEBUG", False):
             emp_name = (os.getenv("DEV_LOGIN_NAME") or "").strip()
@@ -344,6 +373,7 @@ class IISRemoteUserBridgeMiddleware:
         request.login_user_name = emp_name or ""
         request.login_user_org = org_code or ""
         request.login_user_org_label = org_label or ""
+        request.login_user_dep = emp_dep or ""
         if org_code:
             request.login_user_factory_plant = org_code
         else:
@@ -354,6 +384,9 @@ class IISRemoteUserBridgeMiddleware:
                 request.session["login_user_factory_plant"] = org_code
             if emp_name:
                 request.session["login_user_name"] = emp_name
+            if emp_dep:
+                request.session["dep"] = emp_dep
+                request.session["login_user_dep"] = emp_dep
         except Exception:
             pass
         return self.get_response(request)
@@ -515,11 +548,17 @@ def _get_whoami_debug_info(
             getattr(request, "login_user_name", "") or "",
         ),
         "login_user_factory_plant": (getattr(request, "login_user_factory_plant", "") or ""),
+        "login_user_dep": (getattr(request, "login_user_dep", "") or ""),
         "aaa_decoded": (getattr(request, "aaa_decoded", "") or ""),
         "REMOTE_USER": request.META.get("REMOTE_USER", ""),
         "AUTH_USER": request.META.get("AUTH_USER", ""),
         "session_login_user_org": (
             (request.session.get("login_user_org") or "").strip()
+            if hasattr(request, "session")
+            else ""
+        ),
+        "session_dep": (
+            (request.session.get("dep") or "").strip()
             if hasattr(request, "session")
             else ""
         ),

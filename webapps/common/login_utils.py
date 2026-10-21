@@ -196,3 +196,39 @@ def get_login_user_org(request: HttpRequest) -> str:
         return normalize_org_code((get_factory_plant_by_id(emp_id) or "").strip(), default="")
     except Exception:
         return ""
+
+
+def get_login_user_dep(request: HttpRequest) -> str:
+    """
+    取得登入使用者單位代碼 (dep / DEPTNO)。
+    - 優先從 request.login_user_dep
+    - 次選從 session['dep'] / session['login_user_dep']
+    - 備選透過 get_emp_full_info(emp_id) 查詢
+    """
+    try:
+        v = getattr(request, "login_user_dep", None)
+        if v is not None:
+            s = str(v).strip()
+            if s:
+                return s
+    except Exception:
+        pass
+
+    try:
+        s = str(request.session.get("dep") or request.session.get("login_user_dep") or "").strip()
+        if s:
+            return s
+    except Exception:
+        pass
+
+    emp_id = get_login_user_idno(request)
+    if not emp_id:
+        return ""
+
+    try:
+        from webapps.portal.oracle_emp import get_emp_full_info
+
+        info = get_emp_full_info(emp_id) or {}
+        return str(info.get("DEPTNO") or info.get("DEPNO") or info.get("DEPT") or "").strip()
+    except Exception:
+        return ""
