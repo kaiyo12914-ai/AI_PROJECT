@@ -504,7 +504,28 @@ class docService:
                 clauses.append(f"AND TRIM(COALESCE(IM.IM_PSID, EM.EM_PSID)) IN ({binds})")
                 params.update(bparams)
             params["limit"] = n
-            sql = f"SELECT * FROM (SELECT TRIM(COALESCE(IM.IM_GRSNO, EM.EM_GRSNO)) AS IM_GRSNO, TRIM(COALESCE(IM.IM_PSID, EM.EM_PSID)) AS IM_PSID, TRIM(COALESCE(EM.EM_SUBJ, IM.IM_SUBJ)) AS TD_SUBJ, TRIM(EF.EF_ID) AS EF_ID, TRIM(EF.EF_NAME) AS EF_NAME, TRIM(EF.EF_PAGE) AS EF_PAGE FROM {em} EM LEFT JOIN {im} IM ON EM.EM_GRSNO = IM.IM_GRSNO LEFT JOIN {ef} EF ON EM.EM_FID = EF.EF_ID WHERE 1=1 {' '.join(clauses)} ORDER BY 1 DESC) WHERE ROWNUM <= :limit"
+            sql = (
+                f"SELECT TRIM(COALESCE(IM.IM_GRSNO, EM.EM_GRSNO)) AS IM_GRSNO, "
+                f"TRIM(COALESCE(IM.IM_PSID, EM.EM_PSID)) AS IM_PSID, "
+                f"TRIM(COALESCE(EM.EM_SUBJ, IM.IM_SUBJ)) AS TD_SUBJ, "
+                f"TRIM(EF.EF_ID) AS EF_ID, "
+                f"TRIM(EF.EF_NAME) AS EF_NAME, "
+                f"TRIM(EF.EF_PAGE) AS EF_PAGE "
+                f"FROM ("
+                f"SELECT * FROM ("
+                f"SELECT COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) AS TOP_GRSNO "
+                f"FROM {em} EM "
+                f"LEFT JOIN {im} IM ON EM.EM_GRSNO = IM.IM_GRSNO "
+                f"WHERE 1=1 {' '.join(clauses)} "
+                f"GROUP BY COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) "
+                f"ORDER BY COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) DESC"
+                f") WHERE ROWNUM <= :limit"
+                f") TOP_DOCS "
+                f"JOIN {em} EM ON EM.EM_GRSNO = TOP_DOCS.TOP_GRSNO "
+                f"LEFT JOIN {im} IM ON EM.EM_GRSNO = IM.IM_GRSNO "
+                f"LEFT JOIN {ef} EF ON EM.EM_FID = EF.EF_ID "
+                f"ORDER BY 1 DESC, EF.EF_PAGE"
+            )
             return self._query_all(sql, params)
         # Sybase
         clauses: list[str] = []
@@ -527,17 +548,25 @@ class docService:
             clauses.append(f"AND CONVERT(VARCHAR(64), COALESCE(IM.IM_PSID, EM.EM_PSID)) IN ({placeholders})")
             params.extend(normalized_psids)
         sql = (
-            f"SELECT TOP {n} "
+            f"SELECT "
             f"COALESCE(IM.IM_GRSNO, EM.EM_GRSNO), "
             f"COALESCE(IM.IM_PSID, EM.EM_PSID), "
             f"CONVERT(VARBINARY(4000), COALESCE(EM.EM_SUBJ, IM.IM_SUBJ)), "
             f"EF.EF_ID, "
             f"CONVERT(VARBINARY(4000), EF.EF_NAME), "
             f"EF.EF_PAGE "
+            f"FROM ("
+            f"SELECT TOP {n} "
+            f"COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) AS TOP_GRSNO "
             f"FROM {em} EM "
             f"LEFT JOIN {im} IM ON EM.EM_GRSNO = IM.IM_GRSNO "
-            f"LEFT JOIN {ef} EF ON EM.EM_FID = EF.EF_ID "
             f"WHERE 1=1 {' '.join(clauses)} "
+            f"GROUP BY COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) "
+            f"ORDER BY COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) DESC"
+            f") TOP_DOCS "
+            f"JOIN {em} EM ON EM.EM_GRSNO = TOP_DOCS.TOP_GRSNO "
+            f"LEFT JOIN {im} IM ON EM.EM_GRSNO = IM.IM_GRSNO "
+            f"LEFT JOIN {ef} EF ON EM.EM_FID = EF.EF_ID "
             f"ORDER BY COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) DESC, EF.EF_PAGE"
         )
         return self._query_all(sql, params)
@@ -573,7 +602,27 @@ class docService:
                 clauses.append(f"AND TRIM(TM.TM_PSID) IN ({binds})")
                 params.update(bparams)
             params["limit"] = n
-            sql = f"SELECT * FROM (SELECT TRIM(TM.TM_GRSNO), TM.TM_DATE, TRIM(TM.TM_PSID), TRIM(TM.TM_NAME), TRIM(TM.TM_RSTP), TRIM(TD.TD_FORMAT), TRIM(TD.TD_SUBJ), TRIM(TD.TD_PATH), TRIM(DF.DF_NAME), NVL(DBMS_LOB.GETLENGTH(DF.DF_DATA), 0) FROM {tm} TM JOIN {td} TD ON TM.TM_SNO = TD.TD_SNO LEFT JOIN {df} DF ON TRIM(DF.DF_PATH) = TRIM(TD.TD_PATH) WHERE 1=1 {' '.join(clauses)} ORDER BY TM.TM_DATE DESC) WHERE ROWNUM <= :limit"
+            sql = (
+                f"SELECT * FROM ("
+                f"SELECT TRIM(TM.TM_GRSNO), TM.TM_DATE, TRIM(TM.TM_PSID), TRIM(TM.TM_NAME), TRIM(TM.TM_RSTP), "
+                f"TRIM(TD.TD_FORMAT), TRIM(TD.TD_SUBJ), TRIM(TD.TD_PATH), TRIM(DF.DF_NAME), "
+                f"NVL(DBMS_LOB.GETLENGTH(DF.DF_DATA), 0) "
+                f"FROM ("
+                f"SELECT * FROM ("
+                f"SELECT TM.TM_SNO, TM.TM_DATE "
+                f"FROM {tm} TM "
+                f"JOIN {td} TD ON TM.TM_SNO = TD.TD_SNO "
+                f"WHERE 1=1 {' '.join(clauses)} "
+                f"GROUP BY TM.TM_SNO, TM.TM_DATE "
+                f"ORDER BY TM.TM_DATE DESC, TM.TM_SNO DESC"
+                f") WHERE ROWNUM <= :limit"
+                f") TOP_TM "
+                f"JOIN {tm} TM ON TM.TM_SNO = TOP_TM.TM_SNO "
+                f"JOIN {td} TD ON TM.TM_SNO = TD.TD_SNO "
+                f"LEFT JOIN {df} DF ON TRIM(DF.DF_PATH) = TRIM(TD.TD_PATH) "
+                f"ORDER BY TM.TM_DATE DESC, TM.TM_SNO DESC, TD.TD_PATH"
+                f")"
+            )
             return self._query_all(sql, params)
         # Sybase
         clauses: list[str] = []
@@ -596,7 +645,7 @@ class docService:
             clauses.append(f"AND CONVERT(VARCHAR(64), TM.TM_PSID) IN ({placeholders})")
             params.extend(normalized_psids)
         sql = (
-            f"SELECT TOP {n} "
+            f"SELECT "
             f"TM.TM_GRSNO, TM.TM_DATE, TM.TM_PSID, "
             f"CONVERT(VARBINARY(400), TM.TM_NAME), "
             f"CONVERT(VARBINARY(400), TM.TM_RSTP), "
@@ -605,10 +654,17 @@ class docService:
             f"TD.TD_PATH, "
             f"CONVERT(VARBINARY(400), DF.DF_NAME), "
             f"DATALENGTH(DF.DF_DATA) "
+            f"FROM ("
+            f"SELECT TOP {n} TM.TM_SNO, TM.TM_DATE "
             f"FROM {tm} TM "
             f"JOIN {td} TD ON TM.TM_SNO = TD.TD_SNO "
-            f"LEFT JOIN {df} DF ON DF.DF_PATH = TD.TD_PATH "
             f"WHERE 1=1 {' '.join(clauses)} "
+            f"GROUP BY TM.TM_SNO, TM.TM_DATE "
+            f"ORDER BY TM.TM_DATE DESC, TM.TM_SNO DESC"
+            f") TOP_TM "
+            f"JOIN {tm} TM ON TM.TM_SNO = TOP_TM.TM_SNO "
+            f"JOIN {td} TD ON TM.TM_SNO = TD.TD_SNO "
+            f"LEFT JOIN {df} DF ON DF.DF_PATH = TD.TD_PATH "
             f"ORDER BY TM.TM_DATE DESC, TM.TM_SNO DESC, TD.TD_PATH"
         )
         return self._query_all(sql, params)
