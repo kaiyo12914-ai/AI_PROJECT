@@ -95,19 +95,44 @@ WHERE TRIM(IDNO) = :emp_id
 """,
 )
 
-# ✅ 修正：根據使用者提供之關聯性 (CT_EMPLOY E JOIN CT_DEPARTMENT D) 提取資訊
-# 欄位說明：E.IDNO=身分證, E.DEPNO=單位代碼(CIN2000), D.DEPT_NAME=單位名稱, E.EMP_TITLE=職稱
-EMP_FULL_INFO_SQL = """
+# ✅ 人員完整資訊 (CT_EMPLOY E JOIN CT_DEPARTMENT D)
+# 欄位說明：E.IDNO=身分證, E.DEPNO/E.DEPTNO=單位代碼, D.DEPT_NAME=單位名稱, E.TITLECODE=職稱代碼
+EMP_FULL_INFO_SQLS = (
+    """
 SELECT 
     TRIM(E.NAME) AS EMP_NAME,
     TRIM(E.FACTORY_PLANT) AS PLANT,
     TRIM(D.DEPT_NAME) AS DEPT,
-    TRIM(E.EMP_TITLE) AS TITLE,
-    TRIM(E.DEPNO) AS DEPTNO
+    TRIM(E.TITLECODE) AS TITLE,
+    TRIM(COALESCE(E.DEPTNO, E.DEPNO)) AS DEPTNO
 FROM CT_EMPLOY E
-LEFT JOIN CT_DEPARTMENT D ON E.DEPNO = D.CIN2000_CODE AND E.FACTORY_PLANT = D.FACTORY_PLANT
+LEFT JOIN CT_DEPARTMENT D ON (TRIM(E.DEPNO) = TRIM(D.CIM2000_CODE) OR TRIM(E.DEPNO) = TRIM(D.CODE))
+                         AND TRIM(E.FACTORY_PLANT) = TRIM(D.FACTORY_PLANT)
 WHERE TRIM(E.IDNO) = :emp_id
-"""
+""",
+    """
+SELECT 
+    TRIM(E.NAME) AS EMP_NAME,
+    TRIM(E.FACTORY_PLANT) AS PLANT,
+    TRIM(D.DEPT_NAME) AS DEPT,
+    TRIM(E.TITLECODE) AS TITLE,
+    TRIM(E.DEPTNO) AS DEPTNO
+FROM CT_EMPLOY E
+LEFT JOIN CT_DEPARTMENT D ON TRIM(E.DEPNO) = TRIM(D.CODE) AND TRIM(E.FACTORY_PLANT) = TRIM(D.FACTORY_PLANT)
+WHERE TRIM(E.IDNO) = :emp_id
+""",
+    """
+SELECT 
+    TRIM(E.NAME) AS EMP_NAME,
+    TRIM(E.FACTORY_PLANT) AS PLANT,
+    '' AS DEPT,
+    TRIM(E.TITLECODE) AS TITLE,
+    TRIM(COALESCE(E.DEPTNO, E.DEPNO)) AS DEPTNO
+FROM CT_EMPLOY E
+WHERE TRIM(E.IDNO) = :emp_id
+""",
+)
+EMP_FULL_INFO_SQL = EMP_FULL_INFO_SQLS[0]
 
 
 # ============================================================
@@ -589,7 +614,7 @@ def get_emp_full_info(emp_id: str, *, refresh: bool = False) -> Dict[str, str]:
 
     if not _is_oracle_emp_enabled():
         try:
-            info = _pg_query_one(EMP_FULL_INFO_SQL, {"emp_id": emp_id})
+            info = _pg_query_one(EMP_FULL_INFO_SQLS, {"emp_id": emp_id})
             if info and isinstance(info, dict):
                 dep_code = str(info.get("DEPTNO") or info.get("DEPNO") or "").strip()
                 res_dict = {
@@ -641,7 +666,7 @@ def get_emp_full_info(emp_id: str, *, refresh: bool = False) -> Dict[str, str]:
         return _cache_get_full_if_valid(emp_id) or {}
 
     try:
-        info = _oracle_query_one_with_fallback(EMP_FULL_INFO_SQL, {"emp_id": emp_id})
+        info = _oracle_query_one_with_fallback(EMP_FULL_INFO_SQLS, {"emp_id": emp_id})
         if info and isinstance(info, dict):
             dep_code = str(info.get("DEPTNO") or info.get("DEPNO") or "").strip()
             res_dict = {
