@@ -98,8 +98,8 @@
     if (!Number.isFinite(limitMax) || limitMax <= 0) limitMax = 500;
     var limitMin = Number.parseInt(String(elLimit && elLimit.min ? elLimit.min : "100"), 10);
     if (!Number.isFinite(limitMin) || limitMin <= 0) limitMin = 100;
-    var limitDefault = Number.parseInt(String(elLimit && elLimit.value ? elLimit.value : "390"), 10);
-    if (!Number.isFinite(limitDefault) || limitDefault <= 0) limitDefault = 390;
+    var limitDefault = Number.parseInt(String(elLimit && elLimit.value ? elLimit.value : "400"), 10);
+    if (!Number.isFinite(limitDefault) || limitDefault <= 0) limitDefault = 400;
 
     function parseDateOnly(value) {
       var s = String(value || "").trim();
@@ -349,7 +349,7 @@
         if (elDateEnd) {
           var now = new Date();
           var end = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-          var start = new Date(end.getTime() - 29 * 86400000);
+          var start = new Date(end.getTime() - 30 * 86400000);
           if (elDateStart) elDateStart.value = toIsoDate(start);
           elDateEnd.value = toIsoDate(end);
         }

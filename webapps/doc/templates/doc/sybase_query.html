@@ -179,7 +179,7 @@
   </style>
 
   <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
-  <script defer src="{% custom_static 'doc/js/sybase_query.js' %}?v=20261012"></script>
+  <script defer src="{% custom_static 'doc/js/sybase_query.js' %}?v=20261021_01"></script>
 </head>
 <body data-base-url="{{ app_base_url }}" data-default-plant="{{ default_plant|default:'MPC' }}">
   <div class="wrap">
@@ -210,7 +210,7 @@
 
       <div class="form-row">
         <label for="qLimit">筆數上限</label>
-        <input id="qLimit" class="input-limit" type="number" min="100" step="10" max="{{ query_limit_max|default:500 }}" value="{{ query_limit_default|default:390 }}" />
+        <input id="qLimit" class="input-limit" type="number" min="100" step="10" max="{{ query_limit_max|default:500 }}" value="{{ query_limit_default|default:400 }}" />
         <label for="qDateStart">起始日期</label>
         <input id="qDateStart" class="input-limit" type="date" value="{{ query_start_default }}" />
         <label for="qDateEnd">結束日期</label>

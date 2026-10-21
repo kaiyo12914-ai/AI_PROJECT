@@ -114,7 +114,7 @@ DOC_CATEGORY_DRAFT_DOCS = "draft_docs"
 DOC_CATEGORY_DRAFT_ATTACHMENTS = "draft_attachments"
 DOC_CATEGORY_INCOMING_ALL = "incoming_all"
 QUERY_LIMIT_MAX = 500
-QUERY_LIMIT_DEFAULT = 390
+QUERY_LIMIT_DEFAULT = 400
 DOC_CATEGORY_ALLOWED = {
     DOC_CATEGORY_ALL,
     DOC_CATEGORY_DRAFT_DOCS,
@@ -1299,7 +1299,7 @@ def sybase_query_page(request: HttpRequest):
         "restricted_to_self": (not authorized_ip),
         "query_limit_max": QUERY_LIMIT_MAX,
         "query_limit_default": QUERY_LIMIT_DEFAULT,
-        "query_start_default": (today - dt.timedelta(days=29)).isoformat(),
+        "query_start_default": (today - dt.timedelta(days=30)).isoformat(),
         "query_end_default": today.isoformat(),
         "plants": ["MPC", "202", "205", "209", "401"],
         "default_plant": svc.target.plant or "MPC",
