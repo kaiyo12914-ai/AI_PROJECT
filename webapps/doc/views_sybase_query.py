@@ -1346,8 +1346,13 @@ def api_sybase_query_search(request: HttpRequest):
     incoming_python_subject = use_python_subject_filter
     trst_python_subject = use_python_subject_filter
     subject_sql = "" if use_python_subject_filter else subject
-    # Single limit policy: backend uses the same limit value as UI parameter.
-    fetch_limit = limit
+    # 方案三：docService 內部採二階段拆分查詢（先查主檔清單再批次查附件明細），
+    # 故傳入的 fetch_limit 即為實質「公文件數」。
+    # 若需在 Python 端二次過濾主旨或承辦人，放寬母集公文件數為 QUERY_LIMIT_MAX (500)；否則直接使用 limit。
+    if use_python_subject_filter or (handler_name and not handler_psids):
+        fetch_limit = QUERY_LIMIT_MAX
+    else:
+        fetch_limit = limit
 
     svc = _build_doc_service(request, plant=plant)
 
@@ -1426,7 +1431,7 @@ def api_sybase_query_search(request: HttpRequest):
         return out
 
     if subject and (not use_python_subject_filter):
-        fetch_limit_fb = limit
+        fetch_limit_fb = fetch_limit
 
         if need_incoming and not incoming_rows:
             incoming_python_subject = True

@@ -504,29 +504,45 @@ class docService:
                 clauses.append(f"AND TRIM(COALESCE(IM.IM_PSID, EM.EM_PSID)) IN ({binds})")
                 params.update(bparams)
             params["limit"] = n
-            sql = (
-                f"SELECT TRIM(COALESCE(IM.IM_GRSNO, EM.EM_GRSNO)) AS IM_GRSNO, "
+            # Phase 1: 取得符合條件的前 n 份來文文號
+            sql_p1 = (
+                f"SELECT * FROM ("
+                f"SELECT DISTINCT COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) AS GRSNO "
+                f"FROM {em} EM "
+                f"LEFT JOIN {im} IM ON EM.EM_GRSNO = IM.IM_GRSNO "
+                f"WHERE 1=1 {' '.join(clauses)} "
+                f"ORDER BY COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) DESC"
+                f") WHERE ROWNUM <= :limit"
+            )
+            rows_p1 = self._query_all(sql_p1, params)
+            ordered_grsnos = []
+            seen = set()
+            for r in rows_p1 or []:
+                g = str(r[0] if len(r) > 0 and r[0] is not None else "").strip()
+                if g and g not in seen:
+                    seen.add(g)
+                    ordered_grsnos.append(g)
+            if not ordered_grsnos:
+                return []
+
+            # Phase 2: 依文號批次取得本文與附件明細
+            binds_g, bparams_g = self._oracle_in_clause_params("g", ordered_grsnos)
+            sql_p2 = (
+                f"SELECT "
+                f"TRIM(COALESCE(IM.IM_GRSNO, EM.EM_GRSNO)) AS IM_GRSNO, "
                 f"TRIM(COALESCE(IM.IM_PSID, EM.EM_PSID)) AS IM_PSID, "
                 f"TRIM(COALESCE(EM.EM_SUBJ, IM.IM_SUBJ)) AS TD_SUBJ, "
                 f"TRIM(EF.EF_ID) AS EF_ID, "
                 f"TRIM(EF.EF_NAME) AS EF_NAME, "
                 f"TRIM(EF.EF_PAGE) AS EF_PAGE "
-                f"FROM ("
-                f"SELECT * FROM ("
-                f"SELECT COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) AS TOP_GRSNO "
                 f"FROM {em} EM "
                 f"LEFT JOIN {im} IM ON EM.EM_GRSNO = IM.IM_GRSNO "
-                f"WHERE 1=1 {' '.join(clauses)} "
-                f"GROUP BY COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) "
-                f"ORDER BY COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) DESC"
-                f") WHERE ROWNUM <= :limit"
-                f") TOP_DOCS "
-                f"JOIN {em} EM ON EM.EM_GRSNO = TOP_DOCS.TOP_GRSNO "
-                f"LEFT JOIN {im} IM ON EM.EM_GRSNO = IM.IM_GRSNO "
                 f"LEFT JOIN {ef} EF ON EM.EM_FID = EF.EF_ID "
+                f"WHERE COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) IN ({binds_g}) "
                 f"ORDER BY 1 DESC, EF.EF_PAGE"
             )
-            return self._query_all(sql, params)
+            return self._query_all(sql_p2, bparams_g)
+
         # Sybase
         clauses: list[str] = []
         params: list[Any] = []
@@ -547,7 +563,30 @@ class docService:
             placeholders = ",".join(["?"] * len(normalized_psids))
             clauses.append(f"AND CONVERT(VARCHAR(64), COALESCE(IM.IM_PSID, EM.EM_PSID)) IN ({placeholders})")
             params.extend(normalized_psids)
-        sql = (
+
+        # Phase 1: 取得符合條件的前 n 份來文文號
+        sql_p1 = (
+            f"SELECT DISTINCT TOP {n} "
+            f"COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) "
+            f"FROM {em} EM "
+            f"LEFT JOIN {im} IM ON EM.EM_GRSNO = IM.IM_GRSNO "
+            f"WHERE 1=1 {' '.join(clauses)} "
+            f"ORDER BY COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) DESC"
+        )
+        rows_p1 = self._query_all(sql_p1, params)
+        ordered_grsnos = []
+        seen = set()
+        for r in rows_p1 or []:
+            g = str(r[0] if len(r) > 0 and r[0] is not None else "").strip()
+            if g and g not in seen:
+                seen.add(g)
+                ordered_grsnos.append(g)
+        if not ordered_grsnos:
+            return []
+
+        # Phase 2: 依文號批次取得本文與附件明細
+        placeholders_g = ",".join(["?"] * len(ordered_grsnos))
+        sql_p2 = (
             f"SELECT "
             f"COALESCE(IM.IM_GRSNO, EM.EM_GRSNO), "
             f"COALESCE(IM.IM_PSID, EM.EM_PSID), "
@@ -555,21 +594,13 @@ class docService:
             f"EF.EF_ID, "
             f"CONVERT(VARBINARY(4000), EF.EF_NAME), "
             f"EF.EF_PAGE "
-            f"FROM ("
-            f"SELECT TOP {n} "
-            f"COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) AS TOP_GRSNO "
             f"FROM {em} EM "
             f"LEFT JOIN {im} IM ON EM.EM_GRSNO = IM.IM_GRSNO "
-            f"WHERE 1=1 {' '.join(clauses)} "
-            f"GROUP BY COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) "
-            f"ORDER BY COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) DESC"
-            f") TOP_DOCS "
-            f"JOIN {em} EM ON EM.EM_GRSNO = TOP_DOCS.TOP_GRSNO "
-            f"LEFT JOIN {im} IM ON EM.EM_GRSNO = IM.IM_GRSNO "
             f"LEFT JOIN {ef} EF ON EM.EM_FID = EF.EF_ID "
+            f"WHERE COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) IN ({placeholders_g}) "
             f"ORDER BY COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) DESC, EF.EF_PAGE"
         )
-        return self._query_all(sql, params)
+        return self._query_all(sql_p2, ordered_grsnos)
 
     def search_trst_advanced(
         self,
@@ -602,28 +633,53 @@ class docService:
                 clauses.append(f"AND TRIM(TM.TM_PSID) IN ({binds})")
                 params.update(bparams)
             params["limit"] = n
-            sql = (
-                f"SELECT * FROM ("
-                f"SELECT TRIM(TM.TM_GRSNO), TM.TM_DATE, TRIM(TM.TM_PSID), TRIM(TM.TM_NAME), TRIM(TM.TM_RSTP), "
+
+            # Phase 1: 取得符合條件的前 n 份公文 TM_SNO
+            if subject:
+                sql_p1 = (
+                    f"SELECT * FROM ("
+                    f"SELECT DISTINCT TM.TM_SNO, TM.TM_DATE "
+                    f"FROM {tm} TM "
+                    f"JOIN {td} TD ON TM.TM_SNO = TD.TD_SNO "
+                    f"WHERE 1=1 {' '.join(clauses)} "
+                    f"ORDER BY TM.TM_DATE DESC, TM.TM_SNO DESC"
+                    f") WHERE ROWNUM <= :limit"
+                )
+            else:
+                sql_p1 = (
+                    f"SELECT * FROM ("
+                    f"SELECT TM.TM_SNO, TM.TM_DATE "
+                    f"FROM {tm} TM "
+                    f"WHERE 1=1 {' '.join(clauses)} "
+                    f"ORDER BY TM.TM_DATE DESC, TM.TM_SNO DESC"
+                    f") WHERE ROWNUM <= :limit"
+                )
+            rows_p1 = self._query_all(sql_p1, params)
+            ordered_snos = []
+            seen = set()
+            for r in rows_p1 or []:
+                sno = str(r[0] if len(r) > 0 and r[0] is not None else "").strip()
+                if sno and sno not in seen:
+                    seen.add(sno)
+                    ordered_snos.append(sno)
+            if not ordered_snos:
+                return []
+
+            # Phase 2: 依 SNO 批次取得簽稿與附件明細
+            binds_s, bparams_s = self._oracle_in_clause_params("sno", ordered_snos)
+            sql_p2 = (
+                f"SELECT "
+                f"TRIM(TM.TM_GRSNO), TM.TM_DATE, TRIM(TM.TM_PSID), TRIM(TM.TM_NAME), TRIM(TM.TM_RSTP), "
                 f"TRIM(TD.TD_FORMAT), TRIM(TD.TD_SUBJ), TRIM(TD.TD_PATH), TRIM(DF.DF_NAME), "
                 f"NVL(DBMS_LOB.GETLENGTH(DF.DF_DATA), 0) "
-                f"FROM ("
-                f"SELECT * FROM ("
-                f"SELECT TM.TM_SNO, TM.TM_DATE "
                 f"FROM {tm} TM "
                 f"JOIN {td} TD ON TM.TM_SNO = TD.TD_SNO "
-                f"WHERE 1=1 {' '.join(clauses)} "
-                f"GROUP BY TM.TM_SNO, TM.TM_DATE "
-                f"ORDER BY TM.TM_DATE DESC, TM.TM_SNO DESC"
-                f") WHERE ROWNUM <= :limit"
-                f") TOP_TM "
-                f"JOIN {tm} TM ON TM.TM_SNO = TOP_TM.TM_SNO "
-                f"JOIN {td} TD ON TM.TM_SNO = TD.TD_SNO "
                 f"LEFT JOIN {df} DF ON TRIM(DF.DF_PATH) = TRIM(TD.TD_PATH) "
+                f"WHERE TM.TM_SNO IN ({binds_s}) "
                 f"ORDER BY TM.TM_DATE DESC, TM.TM_SNO DESC, TD.TD_PATH"
-                f")"
             )
-            return self._query_all(sql, params)
+            return self._query_all(sql_p2, bparams_s)
+
         # Sybase
         clauses: list[str] = []
         params: list[Any] = []
@@ -644,7 +700,37 @@ class docService:
             placeholders = ",".join(["?"] * len(normalized_psids))
             clauses.append(f"AND CONVERT(VARCHAR(64), TM.TM_PSID) IN ({placeholders})")
             params.extend(normalized_psids)
-        sql = (
+
+        # Phase 1: 取得符合條件的前 n 份公文 TM_SNO
+        if subject:
+            sql_p1 = (
+                f"SELECT DISTINCT TOP {n} TM.TM_SNO, TM.TM_DATE "
+                f"FROM {tm} TM "
+                f"JOIN {td} TD ON TM.TM_SNO = TD.TD_SNO "
+                f"WHERE 1=1 {' '.join(clauses)} "
+                f"ORDER BY TM.TM_DATE DESC, TM.TM_SNO DESC"
+            )
+        else:
+            sql_p1 = (
+                f"SELECT TOP {n} TM.TM_SNO, TM.TM_DATE "
+                f"FROM {tm} TM "
+                f"WHERE 1=1 {' '.join(clauses)} "
+                f"ORDER BY TM.TM_DATE DESC, TM.TM_SNO DESC"
+            )
+        rows_p1 = self._query_all(sql_p1, params)
+        ordered_snos = []
+        seen = set()
+        for r in rows_p1 or []:
+            sno = str(r[0] if len(r) > 0 and r[0] is not None else "").strip()
+            if sno and sno not in seen:
+                seen.add(sno)
+                ordered_snos.append(sno)
+        if not ordered_snos:
+            return []
+
+        # Phase 2: 依 SNO 批次取得簽稿與附件明細
+        placeholders_s = ",".join(["?"] * len(ordered_snos))
+        sql_p2 = (
             f"SELECT "
             f"TM.TM_GRSNO, TM.TM_DATE, TM.TM_PSID, "
             f"CONVERT(VARBINARY(400), TM.TM_NAME), "
@@ -654,18 +740,11 @@ class docService:
             f"TD.TD_PATH, "
             f"CONVERT(VARBINARY(400), DF.DF_NAME), "
             f"DATALENGTH(DF.DF_DATA) "
-            f"FROM ("
-            f"SELECT TOP {n} TM.TM_SNO, TM.TM_DATE "
             f"FROM {tm} TM "
             f"JOIN {td} TD ON TM.TM_SNO = TD.TD_SNO "
-            f"WHERE 1=1 {' '.join(clauses)} "
-            f"GROUP BY TM.TM_SNO, TM.TM_DATE "
-            f"ORDER BY TM.TM_DATE DESC, TM.TM_SNO DESC"
-            f") TOP_TM "
-            f"JOIN {tm} TM ON TM.TM_SNO = TOP_TM.TM_SNO "
-            f"JOIN {td} TD ON TM.TM_SNO = TD.TD_SNO "
             f"LEFT JOIN {df} DF ON DF.DF_PATH = TD.TD_PATH "
+            f"WHERE TM.TM_SNO IN ({placeholders_s}) "
             f"ORDER BY TM.TM_DATE DESC, TM.TM_SNO DESC, TD.TD_PATH"
         )
-        return self._query_all(sql, params)
+        return self._query_all(sql_p2, ordered_snos)
 
