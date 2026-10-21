@@ -318,6 +318,8 @@
         bindRowActions(tbDraftDocs, previewBlob, downloadBlob);
         bindRowActions(tbDraftAttach, previewBlob, downloadBlob);
         bindRowActions(tbIncomingAttach, previewBlob, downloadBlob);
+        renderSqlQueries(data.sql_queries);
+
         var prefix = isSingleDayFallback ? "【結束日期當日查詢】" : "";
         var statusMsg = (
           prefix + "查詢完成：簽稿主檔 " + String(counts.draft_docs || 0) + " 筆、" +
@@ -334,6 +336,129 @@
       } finally {
         if (btnSearch) btnSearch.disabled = false;
       }
+    }
+
+    var sqlDraftDocs = document.getElementById("sqlDraftDocs");
+    var sqlDraftAttach = document.getElementById("sqlDraftAttach");
+    var sqlIncomingDocs = document.getElementById("sqlIncomingDocs");
+    var sqlIncomingAttach = document.getElementById("sqlIncomingAttach");
+    var btnCopySql = document.getElementById("btnCopySql");
+    var sqlTabBtns = document.querySelectorAll(".sql-tab-btn");
+    var sqlTabPanels = document.querySelectorAll(".sql-tab-panel");
+    var currentSqlTab = "tabSqlDraftDocs";
+
+    function renderSqlQueries(sq) {
+      if (!sq) return;
+      if (sqlDraftDocs && sq.draft_docs && sq.draft_docs.full_text) {
+        sqlDraftDocs.value = sq.draft_docs.full_text;
+      }
+      if (sqlDraftAttach && sq.draft_attachments && sq.draft_attachments.full_text) {
+        sqlDraftAttach.value = sq.draft_attachments.full_text;
+      }
+      if (sqlIncomingDocs && sq.incoming_docs && sq.incoming_docs.full_text) {
+        sqlIncomingDocs.value = sq.incoming_docs.full_text;
+      }
+      if (sqlIncomingAttach && sq.incoming_attachments && sq.incoming_attachments.full_text) {
+        sqlIncomingAttach.value = sq.incoming_attachments.full_text;
+      }
+    }
+
+    function switchSqlTab(targetTab) {
+      currentSqlTab = targetTab;
+      sqlTabBtns.forEach(function (btn) {
+        if (btn.getAttribute("data-tab") === targetTab) {
+          btn.classList.add("active");
+        } else {
+          btn.classList.remove("active");
+        }
+      });
+
+      if (targetTab === "tabSqlAll") {
+        sqlTabPanels.forEach(function (p) {
+          p.style.display = "block";
+        });
+      } else {
+        sqlTabPanels.forEach(function (p) {
+          if (p.id === targetTab) {
+            p.style.display = "block";
+          } else {
+            p.style.display = "none";
+          }
+        });
+      }
+    }
+
+    sqlTabBtns.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var t = this.getAttribute("data-tab");
+        if (t) switchSqlTab(t);
+      });
+    });
+
+    function copyToClipboard(text, cb) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          cb(true);
+        }).catch(function () {
+          fallbackCopy(text, cb);
+        });
+      } else {
+        fallbackCopy(text, cb);
+      }
+    }
+
+    function fallbackCopy(text, cb) {
+      var t = document.createElement("textarea");
+      t.value = text;
+      t.style.position = "fixed";
+      t.style.left = "-9999px";
+      t.style.top = "-9999px";
+      document.body.appendChild(t);
+      t.focus();
+      t.select();
+      try {
+        var ok = document.execCommand("copy");
+        document.body.removeChild(t);
+        cb(ok);
+      } catch (e) {
+        document.body.removeChild(t);
+        cb(false);
+      }
+    }
+
+    if (btnCopySql) {
+      btnCopySql.addEventListener("click", function () {
+        var textToCopy = "";
+        if (currentSqlTab === "tabSqlAll") {
+          var chunks = [];
+          if (sqlDraftDocs && sqlDraftDocs.value) chunks.push(sqlDraftDocs.value);
+          if (sqlDraftAttach && sqlDraftAttach.value) chunks.push(sqlDraftAttach.value);
+          if (sqlIncomingDocs && sqlIncomingDocs.value) chunks.push(sqlIncomingDocs.value);
+          if (sqlIncomingAttach && sqlIncomingAttach.value) chunks.push(sqlIncomingAttach.value);
+          textToCopy = chunks.join("\n\n" + "=".repeat(80) + "\n\n");
+        } else {
+          var activePanel = document.getElementById(currentSqlTab);
+          var ta = activePanel ? activePanel.querySelector("textarea") : null;
+          textToCopy = (ta && ta.value) ? ta.value : "";
+        }
+
+        if (!textToCopy.trim()) {
+          alert("目前無 SQL 語法可複製，請先執行查詢。");
+          return;
+        }
+
+        copyToClipboard(textToCopy, function (ok) {
+          if (ok) {
+            var orig = btnCopySql.textContent;
+            btnCopySql.textContent = "已複製！";
+            setTimeout(function () {
+              btnCopySql.textContent = orig;
+            }, 1500);
+          } else {
+            alert("複製失敗，請手動反白複製。");
+          }
+        });
+      });
     }
 
     if (btnSearch) btnSearch.addEventListener("click", doSearch);
@@ -355,6 +480,10 @@
         }
         autoAdjustLimit();
         clearTables();
+        if (sqlDraftDocs) sqlDraftDocs.value = "";
+        if (sqlDraftAttach) sqlDraftAttach.value = "";
+        if (sqlIncomingDocs) sqlIncomingDocs.value = "";
+        if (sqlIncomingAttach) sqlIncomingAttach.value = "";
         setStatus(elStatus, "", false);
       });
     }

@@ -162,6 +162,46 @@
       white-space: pre-wrap;
       background: #fafcff;
     }
+    .sql-tab-btn {
+      appearance: none;
+      -webkit-appearance: none;
+      background: #f1f5f9;
+      color: #334155;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s ease;
+    }
+    .sql-tab-btn:hover {
+      background: #e2e8f0;
+      color: #1e293b;
+    }
+    .sql-tab-btn.active {
+      background: #2563eb;
+      color: #ffffff;
+      border-color: #1d4ed8;
+      font-weight: 700;
+      box-shadow: 0 1px 3px rgba(37, 99, 235, 0.3);
+    }
+    .sql-tab-panel {
+      margin-top: 8px;
+    }
+    .sql-tab-header {
+      font-size: 13px;
+      font-weight: 700;
+      color: #1e3a8a;
+      margin: 8px 0 4px;
+    }
+    .sql-box {
+      min-height: 220px;
+      height: 260px;
+      resize: vertical;
+      white-space: pre;
+      overflow-x: auto;
+    }
     @media (max-width: 1100px) {
       .form-row {
         grid-template-columns: 1fr;
@@ -179,7 +219,7 @@
   </style>
 
   <script defer src="{% custom_static 'portal/js/apiurl_factory.js' %}"></script>
-  <script defer src="{% custom_static 'doc/js/sybase_query.js' %}?v=20261021_01"></script>
+  <script defer src="{% custom_static 'doc/js/sybase_query.js' %}?v=20261021_02"></script>
 </head>
 <body data-base-url="{{ app_base_url }}" data-default-plant="{{ default_plant|default:'MPC' }}">
   <div class="wrap">
@@ -331,6 +371,42 @@
     <div class="card">
       <h2 class="section-title">BLOB 內容預覽</h2>
       <textarea id="previewText" class="preview-box" placeholder="點選上方清單的「預覽」後，這裡會顯示擷取文字內容。" readonly></textarea>
+    </div>
+
+    <div class="card" id="cardSqlQuery">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+        <h2 class="section-title" style="margin: 0;">查詢 SQL 語法檢視</h2>
+        <div>
+          <button type="button" class="secondary" id="btnCopySql" style="padding: 6px 14px; font-size: 13px;">複製目前 SQL</button>
+        </div>
+      </div>
+      <div class="sql-tab-bar" style="display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap;">
+        <button type="button" class="sql-tab-btn active" data-tab="tabSqlDraftDocs">1) 簽、稿主檔清單（DF BLOB）</button>
+        <button type="button" class="sql-tab-btn" data-tab="tabSqlDraftAttach">2) 簽、稿附件清單（DF BLOB）</button>
+        <button type="button" class="sql-tab-btn" data-tab="tabSqlIncomingDocs">3) 來文主旨清單</button>
+        <button type="button" class="sql-tab-btn" data-tab="tabSqlIncomingAttach">4) 來文附件清單（EF BLOB）</button>
+        <button type="button" class="sql-tab-btn" data-tab="tabSqlAll">全部展開</button>
+      </div>
+
+      <div id="tabSqlDraftDocs" class="sql-tab-panel">
+        <div class="sql-tab-header">1) 簽、稿主檔清單（DF BLOB）查詢 SQL</div>
+        <textarea id="sqlDraftDocs" class="preview-box sql-box" readonly placeholder="點選查詢後，此處將呈現 1) 簽、稿主檔清單 之查詢 SQL 語法與條件。"></textarea>
+      </div>
+
+      <div id="tabSqlDraftAttach" class="sql-tab-panel" style="display: none;">
+        <div class="sql-tab-header">2) 簽、稿附件清單（DF BLOB）查詢 SQL</div>
+        <textarea id="sqlDraftAttach" class="preview-box sql-box" readonly placeholder="點選查詢後，此處將呈現 2) 簽、稿附件清單 之查詢 SQL 語法與條件。"></textarea>
+      </div>
+
+      <div id="tabSqlIncomingDocs" class="sql-tab-panel" style="display: none;">
+        <div class="sql-tab-header">3) 來文主旨清單 查詢 SQL</div>
+        <textarea id="sqlIncomingDocs" class="preview-box sql-box" readonly placeholder="點選查詢後，此處將呈現 3) 來文主旨清單 之查詢 SQL 語法與條件。"></textarea>
+      </div>
+
+      <div id="tabSqlIncomingAttach" class="sql-tab-panel" style="display: none;">
+        <div class="sql-tab-header">4) 來文附件清單（EF BLOB）查詢 SQL</div>
+        <textarea id="sqlIncomingAttach" class="preview-box sql-box" readonly placeholder="點選查詢後，此處將呈現 4) 來文附件清單 之查詢 SQL 語法與條件。"></textarea>
+      </div>
     </div>
   </div>
 </body>

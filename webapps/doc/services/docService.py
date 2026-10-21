@@ -748,3 +748,437 @@ class docService:
         )
         return self._query_all(sql_p2, ordered_snos)
 
+    def get_debug_sql_statements(
+        self,
+        *,
+        grsno: str = "",
+        subject: str = "",
+        psids: Sequence[str] | None = None,
+        limit: int = 200,
+        start_date: str = "",
+        end_date: str = "",
+        executed_snos: Sequence[str] | None = None,
+        executed_grsnos: Sequence[str] | None = None,
+        handler_name: str = "",
+    ) -> dict[str, Any]:
+        """
+        為四大類別產生查詢 SQL 語法與執行說明，供前端驗證與手動排查使用：
+        1) 簽、稿主檔清單（DF BLOB）
+        2) 簽、稿附件清單（DF BLOB）
+        3) 來文主旨清單
+        4) 來文附件清單（EF BLOB）
+        """
+        n = self._safe_limit(limit)
+        target_obj = getattr(self, "target", None)
+        plant_name = getattr(target_obj, "plant", "MPC") if target_obj else "MPC"
+        db_type = "Oracle" if self.is_oracle else "Sybase ASE"
+        
+        tm = self._tbl("DCS3_TRST_MST")
+        td = self._tbl("DCS3_TRST_DAT")
+        df = self._tbl("DCS0_DOC_FILE")
+        em = self._tbl("DCS3_EDOC_MST")
+        im = self._tbl("DCS3_INCOMING_MST")
+        ef = self._tbl("DCS3_EDOC_FILE")
+
+        norm_psids = self._normalize_psids(psids)
+        psids_display = ", ".join(norm_psids) if norm_psids else "(未指定工號)"
+        handler_desc = f"{handler_name} (工號: {psids_display})" if handler_name else psids_display
+        date_desc = f"{start_date} ~ {end_date}" if (start_date or end_date) else "(未指定)"
+
+        # --- 組裝 簽、稿 (Trst) Phase 1 SQL ---
+        trst_clauses_exec: list[str] = []
+        trst_clauses_prep: list[str] = []
+        trst_prep_params: list[Any] = []
+
+        if self.is_oracle:
+            if grsno:
+                trst_clauses_exec.append(f"AND TRIM(TM.TM_GRSNO) LIKE '%{grsno}%' ESCAPE '\\'")
+                trst_clauses_prep.append("AND TRIM(TM.TM_GRSNO) LIKE :g ESCAPE '\\'")
+                trst_prep_params.append(f"%{grsno}%")
+            if subject:
+                trst_clauses_exec.append(f"AND TRIM(TD.TD_SUBJ) LIKE '%{subject}%' ESCAPE '\\'")
+                trst_clauses_prep.append("AND TRIM(TD.TD_SUBJ) LIKE :s ESCAPE '\\'")
+                trst_prep_params.append(f"%{subject}%")
+            if start_date:
+                trst_clauses_exec.append(f"AND TM.TM_DATE >= TO_DATE('{start_date}', 'YYYY-MM-DD')")
+                trst_clauses_prep.append("AND TM.TM_DATE >= TO_DATE(:start_date, 'YYYY-MM-DD')")
+                trst_prep_params.append(start_date)
+            if end_date:
+                trst_clauses_exec.append(f"AND TM.TM_DATE < TO_DATE('{end_date}', 'YYYY-MM-DD') + 1")
+                trst_clauses_prep.append("AND TM.TM_DATE < TO_DATE(:end_date, 'YYYY-MM-DD') + 1")
+                trst_prep_params.append(end_date)
+            if norm_psids:
+                quoted = ", ".join([f"'{p}'" for p in norm_psids])
+                trst_clauses_exec.append(f"AND TRIM(TM.TM_PSID) IN ({quoted})")
+                binds_p, _ = self._oracle_in_clause_params("p", norm_psids)
+                trst_clauses_prep.append(f"AND TRIM(TM.TM_PSID) IN ({binds_p})")
+                trst_prep_params.extend(norm_psids)
+
+            clauses_trst_str_exec = "\n  ".join(trst_clauses_exec) if trst_clauses_exec else "  -- (無額外過濾條件)"
+            clauses_trst_str_prep = "\n  ".join(trst_clauses_prep) if trst_clauses_prep else "  -- (無額外過濾條件)"
+
+            trst_p1_exec = (
+                f"SELECT * FROM (\n"
+                f"  SELECT DISTINCT TM.TM_SNO, TM.TM_DATE\n"
+                f"  FROM {tm} TM\n"
+                f"  JOIN {td} TD ON TM.TM_SNO = TD.TD_SNO\n"
+                f"  WHERE 1=1\n"
+                f"  {clauses_trst_str_exec}\n"
+                f"  ORDER BY TM.TM_DATE DESC, TM.TM_SNO DESC\n"
+                f") WHERE ROWNUM <= {n};"
+            )
+            trst_p1_prep = (
+                f"SELECT * FROM (\n"
+                f"  SELECT DISTINCT TM.TM_SNO, TM.TM_DATE\n"
+                f"  FROM {tm} TM\n"
+                f"  JOIN {td} TD ON TM.TM_SNO = TD.TD_SNO\n"
+                f"  WHERE 1=1\n"
+                f"  {clauses_trst_str_prep}\n"
+                f"  ORDER BY TM.TM_DATE DESC, TM.TM_SNO DESC\n"
+                f") WHERE ROWNUM <= :limit;"
+            )
+        else:
+            # Sybase ASE
+            if grsno:
+                trst_clauses_exec.append(f"AND CONVERT(VARCHAR(64), TM.TM_GRSNO) LIKE '%{grsno}%' ESCAPE '\\'")
+                trst_clauses_prep.append("AND CONVERT(VARCHAR(64), TM.TM_GRSNO) LIKE ? ESCAPE '\\'")
+                trst_prep_params.append(f"%{grsno}%")
+            if subject:
+                trst_clauses_exec.append(f"AND CONVERT(VARCHAR(4000), TD.TD_SUBJ) LIKE '%{subject}%' ESCAPE '\\'")
+                trst_clauses_prep.append("AND CONVERT(VARCHAR(4000), TD.TD_SUBJ) LIKE ? ESCAPE '\\'")
+                trst_prep_params.append(f"%{subject}%")
+            if start_date:
+                trst_clauses_exec.append(f"AND TM.TM_DATE >= '{start_date}'")
+                trst_clauses_prep.append("AND TM.TM_DATE >= ?")
+                trst_prep_params.append(start_date)
+            if end_date:
+                trst_clauses_exec.append(f"AND TM.TM_DATE < DATEADD(day, 1, '{end_date}')")
+                trst_clauses_prep.append("AND TM.TM_DATE < DATEADD(day, 1, ?)")
+                trst_prep_params.append(end_date)
+            if norm_psids:
+                quoted = ", ".join([f"'{p}'" for p in norm_psids])
+                trst_clauses_exec.append(f"AND CONVERT(VARCHAR(64), TM.TM_PSID) IN ({quoted})")
+                ph = ",".join(["?"] * len(norm_psids))
+                trst_clauses_prep.append(f"AND CONVERT(VARCHAR(64), TM.TM_PSID) IN ({ph})")
+                trst_prep_params.extend(norm_psids)
+
+            clauses_trst_str_exec = "\n  ".join(trst_clauses_exec) if trst_clauses_exec else "  -- (無額外過濾條件)"
+            clauses_trst_str_prep = "\n  ".join(trst_clauses_prep) if trst_clauses_prep else "  -- (無額外過濾條件)"
+
+            trst_p1_exec = (
+                f"SELECT DISTINCT TOP {n} TM.TM_SNO, TM.TM_DATE\n"
+                f"FROM {tm} TM\n"
+                f"JOIN {td} TD ON TM.TM_SNO = TD.TD_SNO\n"
+                f"WHERE 1=1\n"
+                f"  {clauses_trst_str_exec}\n"
+                f"ORDER BY TM.TM_DATE DESC, TM.TM_SNO DESC;"
+            )
+            trst_p1_prep = (
+                f"SELECT DISTINCT TOP {n} TM.TM_SNO, TM.TM_DATE\n"
+                f"FROM {tm} TM\n"
+                f"JOIN {td} TD ON TM.TM_SNO = TD.TD_SNO\n"
+                f"WHERE 1=1\n"
+                f"  {clauses_trst_str_prep}\n"
+                f"ORDER BY TM.TM_DATE DESC, TM.TM_SNO DESC;"
+            )
+
+        # Trst Phase 2
+        snos_sample = list(executed_snos[:5]) if executed_snos else ["<Phase 1 取得之 TM_SNO 清單>"]
+        snos_in_sql = ", ".join([f"'{s}'" for s in snos_sample])
+
+        if self.is_oracle:
+            trst_p2_exec = (
+                f"SELECT \n"
+                f"    TRIM(TM.TM_GRSNO) AS TM_GRSNO, TM.TM_DATE, TRIM(TM.TM_PSID) AS TM_PSID, \n"
+                f"    TRIM(TM.TM_NAME) AS TM_NAME, TRIM(TM.TM_RSTP) AS TM_RSTP, \n"
+                f"    TRIM(TD.TD_FORMAT) AS TD_FORMAT, TRIM(TD.TD_SUBJ) AS TD_SUBJ, \n"
+                f"    TRIM(TD.TD_PATH) AS TD_PATH, TRIM(DF.DF_NAME) AS DF_NAME, \n"
+                f"    NVL(DBMS_LOB.GETLENGTH(DF.DF_DATA), 0) AS BLOB_SIZE\n"
+                f"FROM {tm} TM\n"
+                f"JOIN {td} TD ON TM.TM_SNO = TD.TD_SNO\n"
+                f"LEFT JOIN {df} DF ON TRIM(DF.DF_PATH) = TRIM(TD.TD_PATH)\n"
+                f"WHERE TM.TM_SNO IN ({snos_in_sql})\n"
+                f"ORDER BY TM.TM_DATE DESC, TM.TM_SNO DESC, TD.TD_PATH;"
+            )
+        else:
+            trst_p2_exec = (
+                f"SELECT \n"
+                f"    TM.TM_GRSNO, TM.TM_DATE, TM.TM_PSID,\n"
+                f"    CONVERT(VARBINARY(400), TM.TM_NAME) AS TM_NAME,\n"
+                f"    CONVERT(VARBINARY(400), TM.TM_RSTP) AS TM_RSTP,\n"
+                f"    CONVERT(VARBINARY(400), TD.TD_FORMAT) AS TD_FORMAT,\n"
+                f"    CONVERT(VARBINARY(4000), TD.TD_SUBJ) AS TD_SUBJ,\n"
+                f"    TD.TD_PATH,\n"
+                f"    CONVERT(VARBINARY(400), DF.DF_NAME) AS DF_NAME,\n"
+                f"    DATALENGTH(DF.DF_DATA) AS BLOB_SIZE\n"
+                f"FROM {tm} TM\n"
+                f"JOIN {td} TD ON TM.TM_SNO = TD.TD_SNO\n"
+                f"LEFT JOIN {df} DF ON DF.DF_PATH = TD.TD_PATH\n"
+                f"WHERE TM.TM_SNO IN ({snos_in_sql})\n"
+                f"ORDER BY TM.TM_DATE DESC, TM.TM_SNO DESC, TD.TD_PATH;"
+            )
+
+        # --- 組裝 來文 (Incoming) Phase 1 SQL ---
+        inc_clauses_exec: list[str] = []
+        inc_clauses_prep: list[str] = []
+        inc_prep_params: list[Any] = []
+
+        if self.is_oracle:
+            if grsno:
+                inc_clauses_exec.append(f"AND TRIM(COALESCE(IM.IM_GRSNO, EM.EM_GRSNO)) LIKE '%{grsno}%' ESCAPE '\\'")
+                inc_clauses_prep.append("AND TRIM(COALESCE(IM.IM_GRSNO, EM.EM_GRSNO)) LIKE :g ESCAPE '\\'")
+                inc_prep_params.append(f"%{grsno}%")
+            if subject:
+                inc_clauses_exec.append(f"AND TRIM(COALESCE(EM.EM_SUBJ, IM.IM_SUBJ)) LIKE '%{subject}%' ESCAPE '\\'")
+                inc_clauses_prep.append("AND TRIM(COALESCE(EM.EM_SUBJ, IM.IM_SUBJ)) LIKE :s ESCAPE '\\'")
+                inc_prep_params.append(f"%{subject}%")
+            if start_date:
+                inc_clauses_exec.append(f"AND COALESCE(IM.IM_DATE, EM.EM_DATE) >= TO_DATE('{start_date}', 'YYYY-MM-DD')")
+                inc_clauses_prep.append("AND COALESCE(IM.IM_DATE, EM.EM_DATE) >= TO_DATE(:start_date, 'YYYY-MM-DD')")
+                inc_prep_params.append(start_date)
+            if end_date:
+                inc_clauses_exec.append(f"AND COALESCE(IM.IM_DATE, EM.EM_DATE) < TO_DATE('{end_date}', 'YYYY-MM-DD') + 1")
+                inc_clauses_prep.append("AND COALESCE(IM.IM_DATE, EM.EM_DATE) < TO_DATE(:end_date, 'YYYY-MM-DD') + 1")
+                inc_prep_params.append(end_date)
+            if norm_psids:
+                quoted = ", ".join([f"'{p}'" for p in norm_psids])
+                inc_clauses_exec.append(f"AND TRIM(COALESCE(IM.IM_PSID, EM.EM_PSID)) IN ({quoted})")
+                binds_p, _ = self._oracle_in_clause_params("p", norm_psids)
+                inc_clauses_prep.append(f"AND TRIM(COALESCE(IM.IM_PSID, EM.EM_PSID)) IN ({binds_p})")
+                inc_prep_params.extend(norm_psids)
+
+            clauses_inc_str_exec = "\n  ".join(inc_clauses_exec) if inc_clauses_exec else "  -- (無額外過濾條件)"
+            clauses_inc_str_prep = "\n  ".join(inc_clauses_prep) if inc_clauses_prep else "  -- (無額外過濾條件)"
+
+            inc_p1_exec = (
+                f"SELECT * FROM (\n"
+                f"  SELECT DISTINCT COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) AS GRSNO\n"
+                f"  FROM {em} EM\n"
+                f"  LEFT JOIN {im} IM ON EM.EM_GRSNO = IM.IM_GRSNO\n"
+                f"  WHERE 1=1\n"
+                f"  {clauses_inc_str_exec}\n"
+                f"  ORDER BY COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) DESC\n"
+                f") WHERE ROWNUM <= {n};"
+            )
+            inc_p1_prep = (
+                f"SELECT * FROM (\n"
+                f"  SELECT DISTINCT COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) AS GRSNO\n"
+                f"  FROM {em} EM\n"
+                f"  LEFT JOIN {im} IM ON EM.EM_GRSNO = IM.IM_GRSNO\n"
+                f"  WHERE 1=1\n"
+                f"  {clauses_inc_str_prep}\n"
+                f"  ORDER BY COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) DESC\n"
+                f") WHERE ROWNUM <= :limit;"
+            )
+        else:
+            # Sybase ASE
+            if grsno:
+                inc_clauses_exec.append(f"AND CONVERT(VARCHAR(64), COALESCE(IM.IM_GRSNO, EM.EM_GRSNO)) LIKE '%{grsno}%' ESCAPE '\\'")
+                inc_clauses_prep.append("AND CONVERT(VARCHAR(64), COALESCE(IM.IM_GRSNO, EM.EM_GRSNO)) LIKE ? ESCAPE '\\'")
+                inc_prep_params.append(f"%{grsno}%")
+            if subject:
+                inc_clauses_exec.append(f"AND CONVERT(VARCHAR(4000), COALESCE(EM.EM_SUBJ, IM.IM_SUBJ)) LIKE '%{subject}%' ESCAPE '\\'")
+                inc_clauses_prep.append("AND CONVERT(VARCHAR(4000), COALESCE(EM.EM_SUBJ, IM.IM_SUBJ)) LIKE ? ESCAPE '\\'")
+                inc_prep_params.append(f"%{subject}%")
+            if start_date:
+                inc_clauses_exec.append(f"AND COALESCE(IM.IM_DATE, EM.EM_DATE) >= '{start_date}'")
+                inc_clauses_prep.append("AND COALESCE(IM.IM_DATE, EM.EM_DATE) >= ?")
+                inc_prep_params.append(start_date)
+            if end_date:
+                inc_clauses_exec.append(f"AND COALESCE(IM.IM_DATE, EM.EM_DATE) < DATEADD(day, 1, '{end_date}')")
+                inc_clauses_prep.append("AND COALESCE(IM.IM_DATE, EM.EM_DATE) < DATEADD(day, 1, ?)")
+                inc_prep_params.append(end_date)
+            if norm_psids:
+                quoted = ", ".join([f"'{p}'" for p in norm_psids])
+                inc_clauses_exec.append(f"AND CONVERT(VARCHAR(64), COALESCE(IM.IM_PSID, EM.EM_PSID)) IN ({quoted})")
+                ph = ",".join(["?"] * len(norm_psids))
+                inc_clauses_prep.append(f"AND CONVERT(VARCHAR(64), COALESCE(IM.IM_PSID, EM.EM_PSID)) IN ({ph})")
+                inc_prep_params.extend(norm_psids)
+
+            clauses_inc_str_exec = "\n  ".join(inc_clauses_exec) if inc_clauses_exec else "  -- (無額外過濾條件)"
+            clauses_inc_str_prep = "\n  ".join(inc_clauses_prep) if inc_clauses_prep else "  -- (無額外過濾條件)"
+
+            inc_p1_exec = (
+                f"SELECT DISTINCT TOP {n}\n"
+                f"    COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) AS GRSNO\n"
+                f"FROM {em} EM\n"
+                f"LEFT JOIN {im} IM ON EM.EM_GRSNO = IM.IM_GRSNO\n"
+                f"WHERE 1=1\n"
+                f"  {clauses_inc_str_exec}\n"
+                f"ORDER BY COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) DESC;"
+            )
+            inc_p1_prep = (
+                f"SELECT DISTINCT TOP {n}\n"
+                f"    COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) AS GRSNO\n"
+                f"FROM {em} EM\n"
+                f"LEFT JOIN {im} IM ON EM.EM_GRSNO = IM.IM_GRSNO\n"
+                f"WHERE 1=1\n"
+                f"  {clauses_inc_str_prep}\n"
+                f"ORDER BY COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) DESC;"
+            )
+
+        # Incoming Phase 2
+        grsnos_sample = list(executed_grsnos[:5]) if executed_grsnos else ["<Phase 1 取得之 GRSNO 清單>"]
+        grsnos_in_sql = ", ".join([f"'{g}'" for g in grsnos_sample])
+
+        if self.is_oracle:
+            inc_p2_exec = (
+                f"SELECT \n"
+                f"    TRIM(COALESCE(IM.IM_GRSNO, EM.EM_GRSNO)) AS IM_GRSNO, \n"
+                f"    TRIM(COALESCE(IM.IM_PSID, EM.EM_PSID)) AS IM_PSID, \n"
+                f"    TRIM(COALESCE(EM.EM_SUBJ, IM.IM_SUBJ)) AS TD_SUBJ, \n"
+                f"    TRIM(EF.EF_ID) AS EF_ID, \n"
+                f"    TRIM(EF.EF_NAME) AS EF_NAME, \n"
+                f"    TRIM(EF.EF_PAGE) AS EF_PAGE \n"
+                f"FROM {em} EM\n"
+                f"LEFT JOIN {im} IM ON EM.EM_GRSNO = IM.IM_GRSNO\n"
+                f"LEFT JOIN {ef} EF ON EM.EM_FID = EF.EF_ID\n"
+                f"WHERE COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) IN ({grsnos_in_sql})\n"
+                f"ORDER BY 1 DESC, EF.EF_PAGE;"
+            )
+        else:
+            inc_p2_exec = (
+                f"SELECT \n"
+                f"    COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) AS GRSNO,\n"
+                f"    COALESCE(IM.IM_PSID, EM.EM_PSID) AS PSID,\n"
+                f"    CONVERT(VARBINARY(4000), COALESCE(EM.EM_SUBJ, IM.IM_SUBJ)) AS SUBJ,\n"
+                f"    EF.EF_ID,\n"
+                f"    CONVERT(VARBINARY(4000), EF.EF_NAME) AS EF_NAME,\n"
+                f"    EF.EF_PAGE\n"
+                f"FROM {em} EM\n"
+                f"LEFT JOIN {im} IM ON EM.EM_GRSNO = IM.IM_GRSNO\n"
+                f"LEFT JOIN {ef} EF ON EM.EM_FID = EF.EF_ID\n"
+                f"WHERE COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) IN ({grsnos_in_sql})\n"
+                f"ORDER BY COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) DESC, EF.EF_PAGE;"
+            )
+
+        # BLOB SQLs
+        sql_df_blob = (
+            f"-- 讀取簽稿檔案二進位內容 (DF BLOB)\n"
+            f"SELECT DF_DATA \n"
+            f"FROM {df} DF \n"
+            f"WHERE DF.DF_PATH = '<點選預覽之TD_PATH，例如 /doc/archive/.../doc.di>';"
+        )
+        sql_ef_blob = (
+            f"-- 讀取來文電子附件二進位內容 (EF BLOB)\n"
+            f"SELECT EF_DATA \n"
+            f"FROM {ef} EF \n"
+            f"WHERE EF.EF_ID = '<點選預覽之EF_ID>' AND EF.EF_PAGE = <頁次，例如 1>;"
+        )
+
+        header_common = (
+            f"-- 資料庫核心：{db_type} | 廠別代碼：{plant_name}\n"
+            f"-- 查詢條件：相關號={grsno or '(未指定)'} | 主旨={subject or '(未指定)'}\n"
+            f"-- 承辦人員：{handler_desc}\n"
+            f"-- 日期區間：{date_desc} | 筆數上限：{n}\n"
+        )
+
+        # 1) 簽、稿主檔清單 (DF BLOB)
+        text_draft_docs = (
+            f"-- ============================================================================\n"
+            f"-- 【1) 簽、稿主檔清單（DF BLOB）查詢語法】\n"
+            f"-- 業務定義：簽稿主體公文（簽、呈、令、函、便等本文）。\n"
+            f"-- 資料來源：{tm} 關聯 {td}，電子主檔關聯 {df} (TD.TD_PATH = DF.DF_PATH)。\n"
+            f"-- 篩選原則：由 TD_FORMAT 符合本文主檔格式篩選出主檔列。\n"
+            f"{header_common}"
+            f"-- ============================================================================\n\n"
+            f"-- [Phase 1: 依條件篩選前 {n} 筆簽稿案號清單 (TM_SNO)]\n"
+            f"{trst_p1_exec}\n\n"
+            f"-- [Phase 2: 依 TM_SNO 批次擷取簽稿主檔與本文關聯 (平坦查詢，無衍生表限制)]\n"
+            f"{trst_p2_exec}\n\n"
+            f"-- [Phase 1 參數化 Prepared SQL 參考]\n"
+            f"{trst_p1_prep}\n"
+            f"-- 參數值: {trst_prep_params}\n\n"
+            f"-- [BLOB 實體檔案內容提取語法]\n"
+            f"{sql_df_blob}\n"
+        )
+
+        # 2) 簽、稿附件清單 (DF BLOB)
+        text_draft_attach = (
+            f"-- ============================================================================\n"
+            f"-- 【2) 簽、稿附件清單（DF BLOB）查詢語法】\n"
+            f"-- 業務定義：簽稿案件所掛載之參考附件或非主文格式檔案。\n"
+            f"-- 資料來源：{tm} 關聯 {td}，附件檔名與實體檔案存於 {df}。\n"
+            f"-- 篩選原則：具有 DF_NAME 或 TD_FORMAT 屬於非主文附件格式。\n"
+            f"{header_common}"
+            f"-- ============================================================================\n\n"
+            f"-- [Phase 1: 依條件篩選前 {n} 筆簽稿案號清單 (TM_SNO)]\n"
+            f"{trst_p1_exec}\n\n"
+            f"-- [Phase 2: 依 TM_SNO 批次擷取簽稿附件明細]\n"
+            f"{trst_p2_exec}\n\n"
+            f"-- [Phase 1 參數化 Prepared SQL 參考]\n"
+            f"{trst_p1_prep}\n"
+            f"-- 參數值: {trst_prep_params}\n\n"
+            f"-- [BLOB 實體檔案內容提取語法]\n"
+            f"{sql_df_blob}\n"
+        )
+
+        # 3) 來文主旨清單
+        text_incoming_docs = (
+            f"-- ============================================================================\n"
+            f"-- 【3) 來文主旨清單 查詢語法】\n"
+            f"-- 業務定義：外機關來文之收文登記案情、主旨、承辦人與案件摘要。\n"
+            f"-- 資料來源：{em} (電子公文主表) LEFT JOIN {im} (收文主表)。\n"
+            f"-- 核心欄位：COALESCE(IM_GRSNO, EM_GRSNO), COALESCE(EM_SUBJ, IM_SUBJ), COALESCE(IM_PSID, EM_PSID)\n"
+            f"{header_common}"
+            f"-- ============================================================================\n\n"
+            f"-- [Phase 1: 依條件篩選前 {n} 筆來文文號清單 (GRSNO)]\n"
+            f"{inc_p1_exec}\n\n"
+            f"-- [Phase 2: 依 GRSNO 批次擷取來文主旨與摘要明細]\n"
+            f"{inc_p2_exec}\n\n"
+            f"-- [Phase 1 參數化 Prepared SQL 參考]\n"
+            f"{inc_p1_prep}\n"
+            f"-- 參數值: {inc_prep_params}\n"
+        )
+
+        # 4) 來文附件清單 (EF BLOB)
+        text_incoming_attach = (
+            f"-- ============================================================================\n"
+            f"-- 【4) 來文附件清單（EF BLOB）查詢語法】\n"
+            f"-- 業務定義：外機關來文夾帶之電子附件（PDF、圖檔、公文本文附件等）。\n"
+            f"-- 資料來源：{em} (電子公文主表) LEFT JOIN {ef} (電子檔案表) ON EM.EM_FID = EF.EF_ID。\n"
+            f"-- 核心欄位：EF_ID (附件代碼), EF_NAME (附件檔名), EF_PAGE (頁次)\n"
+            f"{header_common}"
+            f"-- ============================================================================\n\n"
+            f"-- [Phase 1: 依條件篩選前 {n} 筆來文文號清單 (GRSNO)]\n"
+            f"{inc_p1_exec}\n\n"
+            f"-- [Phase 2: 依 GRSNO 批次擷取來文夾帶之電子附件清單]\n"
+            f"{inc_p2_exec}\n\n"
+            f"-- [Phase 1 參數化 Prepared SQL 參考]\n"
+            f"{inc_p1_prep}\n"
+            f"-- 參數值: {inc_prep_params}\n\n"
+            f"-- [BLOB 實體檔案內容提取語法 (依 EF_ID 與 EF_PAGE)]\n"
+            f"{sql_ef_blob}\n"
+        )
+
+        return {
+            "draft_docs": {
+                "title": "1) 簽、稿主檔清單（DF BLOB）",
+                "phase1_sql": trst_p1_exec,
+                "phase2_sql": trst_p2_exec,
+                "blob_sql": sql_df_blob,
+                "full_text": text_draft_docs,
+            },
+            "draft_attachments": {
+                "title": "2) 簽、稿附件清單（DF BLOB）",
+                "phase1_sql": trst_p1_exec,
+                "phase2_sql": trst_p2_exec,
+                "blob_sql": sql_df_blob,
+                "full_text": text_draft_attach,
+            },
+            "incoming_docs": {
+                "title": "3) 來文主旨清單",
+                "phase1_sql": inc_p1_exec,
+                "phase2_sql": inc_p2_exec,
+                "full_text": text_incoming_docs,
+            },
+            "incoming_attachments": {
+                "title": "4) 來文附件清單（EF BLOB）",
+                "phase1_sql": inc_p1_exec,
+                "phase2_sql": inc_p2_exec,
+                "blob_sql": sql_ef_blob,
+                "full_text": text_incoming_attach,
+            },
+        }
+
+

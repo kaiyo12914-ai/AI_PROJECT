@@ -117,3 +117,50 @@ def test_search_incoming_advanced_oracle_two_phase_success():
     assert "WHERE COALESCE(IM.IM_GRSNO, EM.EM_GRSNO) IN (:g0)" in sql2
     assert params2.get("g0") == "GRS_IN_01"
     assert len(rows) == 1
+
+
+def test_get_debug_sql_statements_structure_and_categories():
+    svc, _ = _make_service(db_type="sybase")
+    res = svc.get_debug_sql_statements(
+        grsno="1150000712",
+        subject="測試公文",
+        psids=["108012", "108013"],
+        limit=100,
+        start_date="2026-09-01",
+        end_date="2026-09-10",
+        handler_name="王小明",
+        executed_snos=["SNO_1", "SNO_2"],
+        executed_grsnos=["GRS_1"],
+    )
+    # 必須包含四個指定類別
+    assert "draft_docs" in res
+    assert "draft_attachments" in res
+    assert "incoming_docs" in res
+    assert "incoming_attachments" in res
+
+    # 1) 簽、稿主檔
+    cat1 = res["draft_docs"]
+    assert "1) 簽、稿主檔清單（DF BLOB）" in cat1["title"]
+    assert "DCS3_TRST_MST" in cat1["phase1_sql"]
+    assert "DCS0_DOC_FILE" in cat1["phase2_sql"]
+    assert "SNO_1" in cat1["phase2_sql"]
+    assert "SELECT DF_DATA" in cat1["blob_sql"]
+    assert "王小明" in cat1["full_text"]
+
+    # 2) 簽、稿附件
+    cat2 = res["draft_attachments"]
+    assert "2) 簽、稿附件清單（DF BLOB）" in cat2["title"]
+    assert "SELECT DF_DATA" in cat2["blob_sql"]
+
+    # 3) 來文主旨
+    cat3 = res["incoming_docs"]
+    assert "3) 來文主旨清單" in cat3["title"]
+    assert "COALESCE(IM.IM_GRSNO, EM.EM_GRSNO)" in cat3["phase1_sql"]
+    assert "GRS_1" in cat3["phase2_sql"]
+
+    # 4) 來文附件
+    cat4 = res["incoming_attachments"]
+    assert "4) 來文附件清單（EF BLOB）" in cat4["title"]
+    assert "DCS3_EDOC_FILE" in cat4["phase2_sql"]
+    assert "SELECT EF_DATA" in cat4["blob_sql"]
+

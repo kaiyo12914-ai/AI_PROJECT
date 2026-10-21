@@ -1381,8 +1381,21 @@ def api_sybase_query_search(request: HttpRequest):
             end_date=end_date,
         ) if need_trst else []
     except Exception as e:
+        debug_sqls = {}
+        try:
+            debug_sqls = svc.get_debug_sql_statements(
+                grsno=grsno,
+                subject=subject_sql,
+                psids=handler_psids or trst_sql_psids or incoming_sql_psids,
+                limit=fetch_limit,
+                start_date=start_date,
+                end_date=end_date,
+                handler_name=handler_name,
+            )
+        except Exception:
+            debug_sqls = {}
         return JsonResponse(
-            {"ok": False, "error": "doc query failed", "detail": str(e)},
+            {"ok": False, "error": "doc query failed", "detail": str(e), "sql_queries": debug_sqls},
             status=500,
             json_dumps_params={"ensure_ascii": False},
         )
@@ -1798,6 +1811,22 @@ def api_sybase_query_search(request: HttpRequest):
                 seen_draft_attach.add(attach_dedup_key)
                 draft_attachments.append(row)
 
+    debug_sqls = {}
+    try:
+        debug_sqls = svc.get_debug_sql_statements(
+            grsno=grsno,
+            subject=subject_sql,
+            psids=handler_psids or trst_sql_psids or incoming_sql_psids,
+            limit=fetch_limit,
+            start_date=start_date,
+            end_date=end_date,
+            executed_snos=[_parse_trst_row(r).get("grsno", "") for r in (trst_rows or []) if _parse_trst_row(r).get("grsno")],
+            executed_grsnos=merged_grsnos,
+            handler_name=handler_name,
+        )
+    except Exception:
+        debug_sqls = {}
+
     return JsonResponse({
         "ok": True,
         "query": {
@@ -1830,6 +1859,7 @@ def api_sybase_query_search(request: HttpRequest):
         "incoming_attachments": incoming_attachments,
         "draft_docs": draft_docs,
         "draft_attachments": draft_attachments,
+        "sql_queries": debug_sqls,
         **({"warning": handler_warning} if handler_warning else {}),
     }, status=200, json_dumps_params={"ensure_ascii": False})
 
