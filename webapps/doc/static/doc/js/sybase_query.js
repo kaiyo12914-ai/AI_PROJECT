@@ -94,12 +94,12 @@
     var urlPreview = api("api/sybase/query/preview/");
     var urlFile = api("api/sybase/query/file/");
     var defaultPlant = String((document.body && document.body.dataset && document.body.dataset.defaultPlant) || "").trim() || "MPC";
-    var limitMax = Number.parseInt(String(elLimit && elLimit.max ? elLimit.max : "5000"), 10);
-    if (!Number.isFinite(limitMax) || limitMax <= 0) limitMax = 5000;
+    var limitMax = Number.parseInt(String(elLimit && elLimit.max ? elLimit.max : "500"), 10);
+    if (!Number.isFinite(limitMax) || limitMax <= 0) limitMax = 500;
     var limitMin = Number.parseInt(String(elLimit && elLimit.min ? elLimit.min : "100"), 10);
     if (!Number.isFinite(limitMin) || limitMin <= 0) limitMin = 100;
-    var limitDefault = Number.parseInt(String(elLimit && elLimit.value ? elLimit.value : "3000"), 10);
-    if (!Number.isFinite(limitDefault) || limitDefault <= 0) limitDefault = 3000;
+    var limitDefault = Number.parseInt(String(elLimit && elLimit.value ? elLimit.value : "390"), 10);
+    if (!Number.isFinite(limitDefault) || limitDefault <= 0) limitDefault = 390;
 
     function parseDateOnly(value) {
       var s = String(value || "").trim();
@@ -151,7 +151,8 @@
     function autoAdjustLimit() {
       var range = normalizeDateRange();
       if (!range.ok) return null;
-      var next = range.days * 100;
+      var intervalDays = Math.max(0, range.days - 1);
+      var next = 100 + intervalDays * 10;
       if (!Number.isFinite(next) || next <= 0) next = limitDefault;
       if (next > limitMax) next = limitMax;
       if (next < limitMin) next = limitMin;

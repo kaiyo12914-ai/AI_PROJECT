@@ -113,8 +113,8 @@ DOC_CATEGORY_ALL = "all"
 DOC_CATEGORY_DRAFT_DOCS = "draft_docs"
 DOC_CATEGORY_DRAFT_ATTACHMENTS = "draft_attachments"
 DOC_CATEGORY_INCOMING_ALL = "incoming_all"
-QUERY_LIMIT_MAX = 5000
-QUERY_LIMIT_DEFAULT = 3000
+QUERY_LIMIT_MAX = 500
+QUERY_LIMIT_DEFAULT = 390
 DOC_CATEGORY_ALLOWED = {
     DOC_CATEGORY_ALL,
     DOC_CATEGORY_DRAFT_DOCS,
@@ -864,10 +864,10 @@ def _parse_search_args(request: HttpRequest) -> Tuple[str, str, str, int, str, s
         try:
             start_obj = dt.date.fromisoformat(start_date)
             end_obj = dt.date.fromisoformat(end_date)
-            total_days = (end_obj - start_obj).days + 1
-            if total_days < 1:
-                total_days = 1
-            auto_limit = total_days * 100
+            interval_days = (end_obj - start_obj).days
+            if interval_days < 0:
+                interval_days = 0
+            auto_limit = 100 + interval_days * 10
             if auto_limit > QUERY_LIMIT_MAX:
                 auto_limit = QUERY_LIMIT_MAX
             if auto_limit < 100:

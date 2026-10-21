@@ -24,7 +24,38 @@ def test_parse_search_args_with_handler_keeps_range():
     assert handler_name == "王小明"
     assert start_date == "2026-09-01"
     assert end_date == "2026-09-10"
-    assert limit == 1000
+    assert limit == 190
+
+
+def test_parse_search_args_limit_cap_at_500():
+    rf = RequestFactory()
+    req = rf.post(
+        "/doc/api/sybase/query/search/",
+        data=json.dumps({
+            "handler_name": "王小明",
+            "start_date": "2026-08-01",
+            "end_date": "2026-09-30",
+        }),
+        content_type="application/json",
+    )
+    grsno, subject, handler_name, limit, plant, start_date, end_date, doc_category = _parse_search_args(req)
+    assert handler_name == "王小明"
+    assert limit == 500
+
+
+def test_parse_search_args_same_day_limit_is_100():
+    rf = RequestFactory()
+    req = rf.post(
+        "/doc/api/sybase/query/search/",
+        data=json.dumps({
+            "handler_name": "王小明",
+            "start_date": "2026-09-01",
+            "end_date": "2026-09-01",
+        }),
+        content_type="application/json",
+    )
+    grsno, subject, handler_name, limit, plant, start_date, end_date, doc_category = _parse_search_args(req)
+    assert limit == 100
 
 
 def test_parse_search_args_empty_criteria_falls_back_to_end_date():
