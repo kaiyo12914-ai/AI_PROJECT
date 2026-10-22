@@ -1353,9 +1353,9 @@ def api_sybase_query_search(request: HttpRequest):
         try:
             debug_sqls = svc.get_debug_sql_statements(
                 grsno=grsno,
-                subject=subject_sql,
+                subject=subject,
                 psids=handler_psids or trst_sql_psids or incoming_sql_psids,
-                limit=fetch_limit,
+                limit=limit,
                 start_date=start_date,
                 end_date=end_date,
                 handler_name=trst_handler_name,
@@ -1765,9 +1765,9 @@ def api_sybase_query_search(request: HttpRequest):
     try:
         debug_sqls = svc.get_debug_sql_statements(
             grsno=grsno,
-            subject=subject_sql,
+            subject=subject,
             psids=handler_psids or trst_sql_psids or incoming_sql_psids,
-            limit=fetch_limit,
+            limit=limit,
             start_date=start_date,
             end_date=end_date,
             executed_snos=[_parse_trst_row(r).get("grsno", "") for r in (trst_rows or []) if _parse_trst_row(r).get("grsno")],
