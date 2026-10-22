@@ -608,6 +608,7 @@ class docService:
         grsno="",
         subject="",
         psids=None,
+        handler_name: str = "",
         limit=200,
         start_date: str = "",
         end_date: str = "",
@@ -628,6 +629,9 @@ class docService:
             if end_date:
                 clauses.append("AND TM.TM_DATE < TO_DATE(:end_date, 'YYYY-MM-DD') + 1")
                 params["end_date"] = end_date
+            if handler_name:
+                clauses.append("AND TRIM(TM.TM_NAME) LIKE :handler_name ESCAPE '\\'")
+                params["handler_name"] = self._like_value(handler_name)
             if psids:
                 binds, bparams = self._oracle_in_clause_params("p", psids)
                 clauses.append(f"AND TRIM(TM.TM_PSID) IN ({binds})")
@@ -695,6 +699,9 @@ class docService:
         if end_date:
             clauses.append("AND TM.TM_DATE < DATEADD(day, 1, ?)")
             params.append(end_date)
+        if handler_name:
+            clauses.append("AND CONVERT(VARCHAR(64), TM.TM_NAME) LIKE ? ESCAPE '\\'")
+            params.append(self._like_value(handler_name))
         normalized_psids = self._normalize_psids(psids)
         if normalized_psids:
             placeholders = ",".join(["?"] * len(normalized_psids))
@@ -782,7 +789,12 @@ class docService:
 
         norm_psids = self._normalize_psids(psids)
         psids_display = ", ".join(norm_psids) if norm_psids else "(未指定工號)"
-        handler_desc = f"{handler_name} (工號: {psids_display})" if handler_name else psids_display
+        if handler_name and norm_psids:
+            handler_desc = f"{handler_name} (姓名: TM.TM_NAME, 工號: {psids_display})"
+        elif handler_name:
+            handler_desc = f"{handler_name} (直接篩選 TM.TM_NAME)"
+        else:
+            handler_desc = psids_display
         date_desc = f"{start_date} ~ {end_date}" if (start_date or end_date) else "(未指定)"
 
         # --- 組裝 簽、稿 (Trst) Phase 1 SQL ---
@@ -807,6 +819,10 @@ class docService:
                 trst_clauses_exec.append(f"AND TM.TM_DATE < TO_DATE('{end_date}', 'YYYY-MM-DD') + 1")
                 trst_clauses_prep.append("AND TM.TM_DATE < TO_DATE(:end_date, 'YYYY-MM-DD') + 1")
                 trst_prep_params.append(end_date)
+            if handler_name:
+                trst_clauses_exec.append(f"AND TRIM(TM.TM_NAME) LIKE '%{handler_name}%' ESCAPE '\\'")
+                trst_clauses_prep.append("AND TRIM(TM.TM_NAME) LIKE :handler_name ESCAPE '\\'")
+                trst_prep_params.append(f"%{handler_name}%")
             if norm_psids:
                 quoted = ", ".join([f"'{p}'" for p in norm_psids])
                 trst_clauses_exec.append(f"AND TRIM(TM.TM_PSID) IN ({quoted})")
@@ -855,6 +871,10 @@ class docService:
                 trst_clauses_exec.append(f"AND TM.TM_DATE < DATEADD(day, 1, '{end_date}')")
                 trst_clauses_prep.append("AND TM.TM_DATE < DATEADD(day, 1, ?)")
                 trst_prep_params.append(end_date)
+            if handler_name:
+                trst_clauses_exec.append(f"AND CONVERT(VARCHAR(64), TM.TM_NAME) LIKE '%{handler_name}%' ESCAPE '\\'")
+                trst_clauses_prep.append("AND CONVERT(VARCHAR(64), TM.TM_NAME) LIKE ? ESCAPE '\\'")
+                trst_prep_params.append(f"%{handler_name}%")
             if norm_psids:
                 quoted = ", ".join([f"'{p}'" for p in norm_psids])
                 trst_clauses_exec.append(f"AND CONVERT(VARCHAR(64), TM.TM_PSID) IN ({quoted})")

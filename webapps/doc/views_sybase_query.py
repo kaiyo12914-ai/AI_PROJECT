@@ -913,22 +913,8 @@ def _resolve_handler_psids(handler_name: str) -> List[str]:
     if _looks_like_psid(name):
         return [name.upper()]
 
-    try:
-        from webapps.portal.oracle_emp import find_emp_ids_by_name
-
-        ids = find_emp_ids_by_name(name, limit=50)
-    except Exception:
-        ids = []
-
-    out = []
-    seen = set()
-    for x in ids or []:
-        v = (str(x or "").strip() or "").upper()
-        if not v or v in seen:
-            continue
-        seen.add(v)
-        out.append(v)
-    return out
+    # DOC 系統與 Oracle CT_EMPLOY 無關，中文姓名不依賴 CT_EMPLOY 反查，直接交由 TM_NAME 篩選
+    return []
 
 
 def _fetch_blob_by_attach_key(svc: docService, attach_key: str) -> Tuple[str, bytes]:
@@ -1045,23 +1031,6 @@ def _build_oracle_three_block_payload(
 ) -> Dict[str, Any]:
     subject_needle = (subject or "").strip().casefold()
     handler_needle = (handler_name or "").strip().casefold()
-    emp_name_cache: Dict[str, str] = {}
-
-    def _resolve_emp_name(emp_id: str) -> str:
-        key = (emp_id or "").strip()
-        if not key:
-            return ""
-        if key in emp_name_cache:
-            return emp_name_cache[key]
-        name = ""
-        try:
-            from webapps.portal.oracle_emp import get_emp_name
-            name = (get_emp_name(key) or "").strip()
-        except Exception:
-            name = ""
-        emp_name_cache[key] = name
-        return name
-
     def _match_subject(s: str) -> bool:
         if not subject_needle:
             return True
@@ -1076,8 +1045,7 @@ def _build_oracle_three_block_payload(
             return True
         if n and handler_needle in n.casefold():
             return True
-        resolved = _resolve_emp_name(p) if p else ""
-        return bool(resolved and handler_needle in resolved.casefold())
+        return False
 
     need_draft_docs = doc_category in (DOC_CATEGORY_ALL, DOC_CATEGORY_DRAFT_DOCS)
     need_draft_attach = doc_category in (DOC_CATEGORY_ALL, DOC_CATEGORY_DRAFT_ATTACHMENTS)
@@ -1118,7 +1086,7 @@ def _build_oracle_three_block_payload(
             "date": tm_date,
             "psid": tm_psid,
             "sender": tm_name,
-            "handler_name": (tm_name or _resolve_emp_name(tm_psid) or tm_psid),
+            "handler_name": (tm_name or tm_psid),
             "flow_info": tm_rstp,
             "format": td_format,
             "subject": td_subj,
@@ -1165,7 +1133,7 @@ def _build_oracle_three_block_payload(
             "date": tm_date,
             "psid": tm_psid,
             "sender": tm_name,
-            "handler_name": (tm_name or _resolve_emp_name(tm_psid) or tm_psid),
+            "handler_name": (tm_name or tm_psid),
             "flow_info": tm_rstp,
             "format": td_format,
             "subject": td_subj,
@@ -1202,7 +1170,7 @@ def _build_oracle_three_block_payload(
             incoming_bucket[bucket_key] = {
                 "grsno": im_grsno,
                 "psid": im_psid,
-                "handler_name": (_resolve_emp_name(im_psid) or im_psid),
+                "handler_name": im_psid,
                 "subject": im_subj,
                 "attach_count": 0,
                 "has_attachment": False,
@@ -1338,9 +1306,8 @@ def api_sybase_query_search(request: HttpRequest):
     handler_psids = _resolve_handler_psids(handler_name) if handler_name else []
     handler_warning = ""
     handler_filter_disabled = False
-    if handler_name and not handler_psids:
-        handler_warning = "handler id not found; skip handler filter to avoid empty results"
-        handler_filter_disabled = True
+    # 若輸入的是純工號，以 psids 篩選；若輸入的是中文姓名，直接以 TM.TM_NAME 欄位篩選
+    trst_handler_name = "" if handler_psids else handler_name
 
     use_python_subject_filter = bool(subject and _contains_non_ascii(subject))
     incoming_python_subject = use_python_subject_filter
@@ -1348,8 +1315,8 @@ def api_sybase_query_search(request: HttpRequest):
     subject_sql = "" if use_python_subject_filter else subject
     # 方案三：docService 內部採二階段拆分查詢（先查主檔清單再批次查附件明細），
     # 故傳入的 fetch_limit 即為實質「公文件數」。
-    # 若需在 Python 端二次過濾主旨或承辦人，放寬母集公文件數為 QUERY_LIMIT_MAX (500)；否則直接使用 limit。
-    if use_python_subject_filter or (handler_name and not handler_psids):
+    # 若需在 Python 端二次過濾主旨，放寬母集公文件數為 QUERY_LIMIT_MAX (500)；否則直接使用 limit。
+    if use_python_subject_filter:
         fetch_limit = QUERY_LIMIT_MAX
     else:
         fetch_limit = limit
@@ -1361,8 +1328,8 @@ def api_sybase_query_search(request: HttpRequest):
     need_draft_docs = doc_category in (DOC_CATEGORY_ALL, DOC_CATEGORY_DRAFT_DOCS)
     need_draft_attach = doc_category in (DOC_CATEGORY_ALL, DOC_CATEGORY_DRAFT_ATTACHMENTS)
 
-    incoming_sql_psids = None if handler_name else handler_psids
-    trst_sql_psids = None if handler_name else handler_psids
+    incoming_sql_psids = handler_psids if handler_psids else None
+    trst_sql_psids = handler_psids if handler_psids else None
     try:
         incoming_rows = svc.search_incoming_advanced(
             grsno=grsno,
@@ -1376,6 +1343,7 @@ def api_sybase_query_search(request: HttpRequest):
             grsno=grsno,
             subject=subject_sql,
             psids=trst_sql_psids,
+            handler_name=trst_handler_name,
             limit=fetch_limit,
             start_date=start_date,
             end_date=end_date,
@@ -1390,8 +1358,10 @@ def api_sybase_query_search(request: HttpRequest):
                 limit=fetch_limit,
                 start_date=start_date,
                 end_date=end_date,
-                handler_name=handler_name,
+                handler_name=trst_handler_name,
             )
+            if not isinstance(debug_sqls, dict):
+                debug_sqls = {}
         except Exception:
             debug_sqls = {}
         return JsonResponse(
@@ -1467,6 +1437,7 @@ def api_sybase_query_search(request: HttpRequest):
                     grsno=grsno,
                     subject="",
                     psids=trst_sql_psids,
+                    handler_name=trst_handler_name,
                     limit=fetch_limit_fb,
                     start_date=start_date,
                     end_date=end_date,
@@ -1496,28 +1467,12 @@ def api_sybase_query_search(request: HttpRequest):
                 grsno=g,
                 subject="",
                 psids=trst_sql_psids,
+                handler_name=trst_handler_name,
                 limit=limit,
                 start_date=start_date,
                 end_date=end_date,
             ),
         )
-
-    emp_name_cache: Dict[str, str] = {}
-
-    def _resolve_emp_name(emp_id: str) -> str:
-        key = (emp_id or "").strip()
-        if not key:
-            return ""
-        if key in emp_name_cache:
-            return emp_name_cache[key]
-        name = ""
-        try:
-            from webapps.portal.oracle_emp import get_emp_name
-            name = (get_emp_name(key) or "").strip()
-        except Exception:
-            name = ""
-        emp_name_cache[key] = name
-        return name
 
     handler_psid_set = {str(x or "").strip().upper() for x in (handler_psids or []) if str(x or "").strip()}
     handler_needle = (handler_name or "").strip().casefold()
@@ -1534,10 +1489,6 @@ def api_sybase_query_search(request: HttpRequest):
             return False
         if im_psid and handler_needle in im_psid.casefold():
             return True
-        if im_psid:
-            resolved = _resolve_emp_name(im_psid)
-            if resolved and handler_needle in resolved.casefold():
-                return True
         return False
 
     def _trst_match_handler(r: Any) -> bool:
@@ -1553,10 +1504,8 @@ def api_sybase_query_search(request: HttpRequest):
             return False
         if tm_name and handler_needle in tm_name.casefold():
             return True
-        if tm_psid:
-            resolved = _resolve_emp_name(tm_psid)
-            if resolved and handler_needle in resolved.casefold():
-                return True
+        if tm_psid and handler_needle in tm_psid.casefold():
+            return True
         return False
 
     if handler_name and not handler_filter_disabled:
@@ -1568,7 +1517,7 @@ def api_sybase_query_search(request: HttpRequest):
                 incoming_rows_fb = svc.search_incoming_advanced(
                     grsno=grsno,
                     subject="" if incoming_python_subject else subject_sql,
-                    psids=None,
+                    psids=incoming_sql_psids,
                     limit=fallback_limit,
                     start_date=start_date,
                     end_date=end_date,
@@ -1579,7 +1528,7 @@ def api_sybase_query_search(request: HttpRequest):
                     incoming_rows_fb or [],
                     subject_idx=2,
                     fetch_by_grsno=lambda g: svc.search_incoming_advanced(
-                        grsno=g, subject="", psids=None, limit=limit, start_date=start_date, end_date=end_date
+                        grsno=g, subject="", psids=incoming_sql_psids, limit=limit, start_date=start_date, end_date=end_date
                     ),
                 )
             matched_incoming = [r for r in (incoming_rows_fb or []) if _incoming_match_handler(r)]
@@ -1591,7 +1540,8 @@ def api_sybase_query_search(request: HttpRequest):
                 trst_rows_fb = svc.search_trst_advanced(
                     grsno=grsno,
                     subject="" if trst_python_subject else subject_sql,
-                    psids=None,
+                    psids=trst_sql_psids,
+                    handler_name=trst_handler_name,
                     limit=fallback_limit,
                     start_date=start_date,
                     end_date=end_date,
@@ -1602,7 +1552,7 @@ def api_sybase_query_search(request: HttpRequest):
                     trst_rows_fb or [],
                     subject_idx=6,
                     fetch_by_grsno=lambda g: svc.search_trst_advanced(
-                        grsno=g, subject="", psids=None, limit=limit, start_date=start_date, end_date=end_date
+                        grsno=g, subject="", psids=trst_sql_psids, handler_name=trst_handler_name, limit=limit, start_date=start_date, end_date=end_date
                     ),
                 )
             matched_trst = [r for r in (trst_rows_fb or []) if _trst_match_handler(r)]
@@ -1710,7 +1660,7 @@ def api_sybase_query_search(request: HttpRequest):
             incoming_bucket[key] = {
                 "grsno": im_grsno,
                 "psid": im_psid,
-                "handler_name": (_resolve_emp_name(im_psid) or im_psid),
+                "handler_name": im_psid,
                 "subject": td_subj,
                 "attach_count": 0,
                 "has_attachment": False,
@@ -1781,7 +1731,7 @@ def api_sybase_query_search(request: HttpRequest):
             "date": tm_date,
             "psid": tm_psid,
             "sender": tm_name,
-            "handler_name": (tm_name or _resolve_emp_name(tm_psid) or tm_psid),
+            "handler_name": (tm_name or tm_psid),
             "flow_info": tm_rstp,
             "format": td_format,
             "subject": td_subj,
@@ -1822,8 +1772,10 @@ def api_sybase_query_search(request: HttpRequest):
             end_date=end_date,
             executed_snos=[_parse_trst_row(r).get("grsno", "") for r in (trst_rows or []) if _parse_trst_row(r).get("grsno")],
             executed_grsnos=merged_grsnos,
-            handler_name=handler_name,
+            handler_name=trst_handler_name,
         )
+        if not isinstance(debug_sqls, dict):
+            debug_sqls = {}
     except Exception:
         debug_sqls = {}
 

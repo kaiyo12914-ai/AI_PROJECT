@@ -142,6 +142,7 @@ def test_get_debug_sql_statements_structure_and_categories():
     cat1 = res["draft_docs"]
     assert "1) 簽、稿主檔清單（DF BLOB）" in cat1["title"]
     assert "DCS3_TRST_MST" in cat1["phase1_sql"]
+    assert "CONVERT(VARCHAR(64), TM.TM_NAME) LIKE '%王小明%'" in cat1["phase1_sql"]
     assert "DCS0_DOC_FILE" in cat1["phase2_sql"]
     assert "SNO_1" in cat1["phase2_sql"]
     assert "SELECT DF_DATA" in cat1["blob_sql"]
@@ -150,6 +151,7 @@ def test_get_debug_sql_statements_structure_and_categories():
     # 2) 簽、稿附件
     cat2 = res["draft_attachments"]
     assert "2) 簽、稿附件清單（DF BLOB）" in cat2["title"]
+    assert "CONVERT(VARCHAR(64), TM.TM_NAME) LIKE '%王小明%'" in cat2["phase1_sql"]
     assert "SELECT DF_DATA" in cat2["blob_sql"]
 
     # 3) 來文主旨
@@ -163,4 +165,37 @@ def test_get_debug_sql_statements_structure_and_categories():
     assert "4) 來文附件清單（EF BLOB）" in cat4["title"]
     assert "DCS3_EDOC_FILE" in cat4["phase2_sql"]
     assert "SELECT EF_DATA" in cat4["blob_sql"]
+
+
+def test_search_trst_advanced_handler_name_direct_filter_sybase():
+    svc, calls = _make_service(
+        db_type="sybase",
+        responses=[
+            [("SNO_100", "2026-09-05")],
+            [("GRS_100", "2026-09-05", "U1", b"\xc0\x5c\xa4\x70\xa9\xfa", b"R", b"F", b"S", "p", b"f.pdf", 50)]
+        ]
+    )
+    rows = svc.search_trst_advanced(handler_name="王小明", limit=20)
+    assert len(calls) == 2
+    sql1, params1 = calls[0]
+    assert "CONVERT(VARCHAR(64), TM.TM_NAME) LIKE ? ESCAPE '\\'" in sql1
+    assert "%王小明%" in params1
+    assert len(rows) == 1
+
+
+def test_search_trst_advanced_handler_name_direct_filter_oracle():
+    svc, calls = _make_service(
+        db_type="oracle",
+        responses=[
+            [("SNO_200", "2026-09-05")],
+            [("GRS_200", "2026-09-05", "U2", "王小明", "R", "F", "S", "p", "f.pdf", 60)]
+        ]
+    )
+    rows = svc.search_trst_advanced(handler_name="王小明", limit=20)
+    assert len(calls) == 2
+    sql1, params1 = calls[0]
+    assert "TRIM(TM.TM_NAME) LIKE :handler_name ESCAPE '\\'" in sql1
+    assert params1.get("handler_name") == "%王小明%"
+    assert len(rows) == 1
+
 
