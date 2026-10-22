@@ -109,3 +109,19 @@ def test_parse_search_args_empty_criteria_no_dates_defaults_to_today():
     assert start_date == today
     assert end_date == today
     assert limit == 100
+
+
+def test_normalize_name_for_match_variants():
+    from webapps.doc.views_sybase_query import _normalize_name_for_match
+
+    # 1. 祐 vs 佑 (常見承辦人同音異體字)
+    assert _normalize_name_for_match("姚承祐") == _normalize_name_for_match("姚承佑")
+    assert _normalize_name_for_match("姚承祐") in _normalize_name_for_match("姚承佑/組員")
+
+    # 2. 臺 vs 台
+    assert _normalize_name_for_match("臺北") == _normalize_name_for_match("台北")
+
+    # 3. 包含空格與特殊標點
+    assert _normalize_name_for_match(" 姚 承 祐 ") == "姚承佑"
+    assert _normalize_name_for_match("姚承佑（組員）") == "姚承佑組員"
+

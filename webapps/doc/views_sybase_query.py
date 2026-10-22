@@ -905,6 +905,28 @@ def _looks_like_psid(s: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z][A-Za-z0-9]{5,15}", t))
 
 
+def _normalize_name_for_match(s: str) -> str:
+    if not s:
+        return ""
+    t = re.sub(r"[\s\-_/\\()（）\[\]【】\.]+", "", str(s))
+    # 常見姓名異體字 / 同音字正規化對應
+    variants = {
+        "祐": "佑",
+        "臺": "台",
+        "峯": "峰",
+        "羣": "群",
+        "恆": "恒",
+        "眞": "真",
+        "硏": "研",
+        "啓": "啟",
+        "温": "溫",
+        "黄": "黃",
+    }
+    for k, v in variants.items():
+        t = t.replace(k, v)
+    return t.casefold()
+
+
 def _resolve_handler_psids(handler_name: str) -> List[str]:
     name = (handler_name or "").strip()
     if not name:
@@ -1476,6 +1498,7 @@ def api_sybase_query_search(request: HttpRequest):
 
     handler_psid_set = {str(x or "").strip().upper() for x in (handler_psids or []) if str(x or "").strip()}
     handler_needle = (handler_name or "").strip().casefold()
+    norm_handler_needle = _normalize_name_for_match(handler_needle)
 
     def _incoming_match_handler(r: Any) -> bool:
         if handler_filter_disabled:
@@ -1502,8 +1525,13 @@ def api_sybase_query_search(request: HttpRequest):
             return True
         if not handler_needle:
             return False
-        if tm_name and handler_needle in tm_name.casefold():
-            return True
+        if tm_name:
+            if handler_needle in tm_name.casefold():
+                return True
+            # 正規化異體字 / 同音字比對（如 姚承祐 vs 姚承佑）
+            norm_tm_name = _normalize_name_for_match(tm_name)
+            if norm_handler_needle and norm_tm_name and (norm_handler_needle in norm_tm_name or norm_tm_name in norm_handler_needle):
+                return True
         if tm_psid and handler_needle in tm_psid.casefold():
             return True
         return False
@@ -1536,13 +1564,16 @@ def api_sybase_query_search(request: HttpRequest):
 
         matched_trst = [r for r in (trst_rows or []) if _trst_match_handler(r)] if need_trst else []
         if need_trst and not matched_trst:
+            # 第一階段 SQL 端（因 Sybase 字元集/LIKE 比對或同音字）若查無資料，
+            # 觸發 Fallback：放寬 SQL 承辦人條件 (handler_name="")，由 Python 端進行記憶體容錯比對
+            fallback_fetch_limit = max(fallback_limit, QUERY_LIMIT_MAX)
             try:
                 trst_rows_fb = svc.search_trst_advanced(
                     grsno=grsno,
                     subject="" if trst_python_subject else subject_sql,
                     psids=trst_sql_psids,
-                    handler_name=trst_handler_name,
-                    limit=fallback_limit,
+                    handler_name="",
+                    limit=fallback_fetch_limit,
                     start_date=start_date,
                     end_date=end_date,
                 )
@@ -1552,7 +1583,7 @@ def api_sybase_query_search(request: HttpRequest):
                     trst_rows_fb or [],
                     subject_idx=6,
                     fetch_by_grsno=lambda g: svc.search_trst_advanced(
-                        grsno=g, subject="", psids=trst_sql_psids, handler_name=trst_handler_name, limit=limit, start_date=start_date, end_date=end_date
+                        grsno=g, subject="", psids=trst_sql_psids, handler_name="", limit=limit, start_date=start_date, end_date=end_date
                     ),
                 )
             matched_trst = [r for r in (trst_rows_fb or []) if _trst_match_handler(r)]
@@ -1608,7 +1639,8 @@ def api_sybase_query_search(request: HttpRequest):
                     end_date=end_date,
                 )
             except Exception: rows_fb = []
-            rows_fb = [r for r in (rows_fb or []) if _incoming_match_handler(r)]
+            if handler_psids:
+                rows_fb = [r for r in (rows_fb or []) if _incoming_match_handler(r)]
             rows_fb = _dedupe_rows(rows_fb)
             if rows_fb: incoming_by_grsno[g] = rows_fb
 
