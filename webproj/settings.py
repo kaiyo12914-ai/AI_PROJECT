@@ -355,6 +355,7 @@ PORTAL_ACL = {
     "videolearning": ["ALL_AUTHENTICATED"],
     "open_notebook": ["ALL_AUTHENTICATED"],
     "openwebui": ["ALL_AUTHENTICATED"],
+    "fkerp": ["網頁系統管理員"],
 }
 
 # ============================================================
@@ -503,6 +504,7 @@ TTS_API_TIMEOUT = env_int("TTS_API_TIMEOUT", 60)
 OPEN_NOTEBOOK_PORTAL_URL = env_str("OPEN_NOTEBOOK_PORTAL_URL", "http://127.0.0.1:8502")
 OPENWEBUI_PORTAL_URL = env_str("OPENWEBUI_PORTAL_URL", "http://mpcai.mpc.mil.tw:8080/auth")
 VANNA_PORTAL_URL = env_str("VANNA_PORTAL_URL", "http://mpcai.mpc.mil.tw:8084")
+FKERP_PORTAL_URL = env_str("FKERP_PORTAL_URL", "http://127.0.0.1:5173/#/login")
 
 # ============================================================
 # Sybase query workstation whitelist
@@ -573,6 +575,7 @@ PORTAL_USAGE_CODE_MAP = [
     ("/nl2sql/", "NL2SQL"),
     ("/redirect/openwebui/", "OPENWEBUI"),
     ("/redirect/vanna/", "VANNA"),
+    ("/redirect/fkerp/", "FKERP"),
 ]
 
 # ============================================================

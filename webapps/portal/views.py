@@ -4,7 +4,9 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import re
 from typing import Any, Dict, Optional, Tuple, List
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from django.conf import settings
 from django.db.models import Count
@@ -14,6 +16,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET
 
 from webapps.portal.decorators import require_node
+from webapps.portal.identity import resolve_effective_user_id
 from webapps.portal.models import PortalUsageLog
 from webapps.database.db_factory import db_query_all
 
@@ -51,6 +54,7 @@ def index(request: HttpRequest) -> HttpResponse:
         "login_user_name": getattr(request, "login_user_name", "") or "",
         "open_notebook_url": getattr(settings, "OPEN_NOTEBOOK_PORTAL_URL", "") or "http://127.0.0.1:8502",
         "openwebui_url": getattr(settings, "OPENWEBUI_PORTAL_URL", "") or "http://mpcai.mpc.mil.tw:8000/auth",
+        "fkerp_url": getattr(settings, "FKERP_PORTAL_URL", "") or "http://127.0.0.1:5173/#/login",
     }
 
     try:
@@ -171,9 +175,77 @@ def whoami(request: HttpRequest) -> JsonResponse:
 # - 依專案規範：透過內部路由做跳轉並記錄使用日誌
 # - 檢查權限後以 HTML meta refresh / location.replace 即時跳轉，徹底免疫 IIS ARR 302 Location 改寫導致 Port 遺失問題
 # =========================================================
+def _normalize_fkerp_factory_plant(raw_plant: str) -> str:
+    p = (raw_plant or "").strip().upper()
+    if not p:
+        return ""
+    if "MPC" in p or "生製中心" in p or "中心" in p:
+        return "MPC"
+    for code in ("202", "205", "209", "401"):
+        if code in p:
+            return code
+    p = re.sub(r"DB$", "", p)
+    if p.startswith("T") and p[1:].isdigit():
+        p = p[1:]
+    return re.sub(r"[^A-Z0-9_]+", "", p)
+
+
+def _append_query_params_to_url(base_url: str, extra_params: Dict[str, str]) -> str:
+    clean_params = {k: v for k, v in extra_params.items() if str(v or "").strip()}
+    if not clean_params:
+        return base_url
+
+    parts = urlsplit(base_url)
+    if parts.fragment:
+        frag_path, sep, frag_query = parts.fragment.partition("?")
+        merged_pairs = dict(parse_qsl(frag_query, keep_blank_values=True))
+        merged_pairs.update(clean_params)
+        new_fragment = f"{frag_path}?{urlencode(merged_pairs)}"
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, parts.query, new_fragment))
+
+    merged_pairs = dict(parse_qsl(parts.query, keep_blank_values=True))
+    merged_pairs.update(clean_params)
+    new_query = urlencode(merged_pairs)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, new_query, parts.fragment))
+
+
+def _resolve_fkerp_redirect_url(request: HttpRequest, base_url: str) -> str:
+    login_user = (
+        resolve_effective_user_id(request)
+        or str(getattr(request, "login_user", "") or "").strip()
+    )
+
+    session = getattr(request, "session", None)
+    raw_plant = (
+        str(getattr(request, "login_user_factory_plant", "") or "").strip()
+        or str(getattr(request, "login_user_org", "") or "").strip()
+    )
+    if not raw_plant and session is not None:
+        raw_plant = (
+            str(session.get("login_user_factory_plant") or "").strip()
+            or str(session.get("login_user_org") or "").strip()
+        )
+    if not raw_plant and login_user:
+        try:
+            raw_plant = (get_factory_plant_by_id(login_user) or "").strip()
+        except Exception:
+            raw_plant = ""
+
+    factory_plant = _normalize_fkerp_factory_plant(raw_plant)
+    params: Dict[str, str] = {}
+    if login_user:
+        params["login_user"] = login_user
+    if factory_plant:
+        params["factory_plant"] = factory_plant
+        params["profile"] = factory_plant
+
+    return _append_query_params_to_url(base_url, params)
+
+
 @require_GET
 def external_redirect(request: HttpRequest, target: str) -> HttpResponse:
     target_key = (target or "").strip().lower()
+    fkerp_base_url = getattr(settings, "FKERP_PORTAL_URL", "") or "http://127.0.0.1:5173/#/login"
     targets = {
         "openwebui": {
             "node": "openwebui",
@@ -182,6 +254,10 @@ def external_redirect(request: HttpRequest, target: str) -> HttpResponse:
         "vanna": {
             "node": "vanna",
             "url": getattr(settings, "VANNA_PORTAL_URL", "") or "http://mpcai.mpc.mil.tw:8084",
+        },
+        "fkerp": {
+            "node": "fkerp",
+            "url": _resolve_fkerp_redirect_url(request, fkerp_base_url) if target_key == "fkerp" else fkerp_base_url,
         },
     }
 

@@ -61,10 +61,16 @@
       {% allow "videolearning" as can_videolearning %}
       {% allow "digital_twin_kb" as can_digital_twin_kb %}
       {% allow "openwebui" as can_openwebui %}
+      {% allow "fkerp" as can_fkerp %}
 
       {% if can_openwebui %}
         {% url 'portal:external_redirect' 'openwebui' as openwebui_redirect_href %}
         {% include "portal/_svg_card.html" with href=openwebui_redirect_href title="OpenWeb UI" subtitle="對話入口 / 模型互動" tone="cyan" icon="chat" variant=card_variant new_tab=True %}
+      {% endif %}
+
+      {% if can_fkerp %}
+        {% url 'portal:external_redirect' 'fkerp' as fkerp_redirect_href %}
+        {% include "portal/_svg_card.html" with href=fkerp_redirect_href title="FK ERP" subtitle="CIM2000 資訊系統 / 廠別自動帶入" tone="blue" icon="erp" variant=card_variant new_tab=True %}
       {% endif %}
 
       {% if can_chatbotui %}
