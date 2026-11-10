@@ -68,11 +68,6 @@
         {% include "portal/_svg_card.html" with href=openwebui_redirect_href title="OpenWeb UI" subtitle="對話入口 / 模型互動" tone="cyan" icon="chat" variant=card_variant new_tab=True %}
       {% endif %}
 
-      {% if can_fkerp %}
-        {% url 'portal:external_redirect' 'fkerp' as fkerp_redirect_href %}
-        {% include "portal/_svg_card.html" with href=fkerp_redirect_href title="FK ERP" subtitle="CIM2000 資訊系統 / 廠別自動帶入" tone="blue" icon="erp" variant=card_variant new_tab=True %}
-      {% endif %}
-
       {% if can_chatbotui %}
         {% url 'chatbotui:page' as chatbotui_href %}
         {% include "portal/_svg_card.html" with href=chatbotui_href title="AI 對話助手" subtitle="類 Open WebUI 對話入口" tone="cyan" icon="chat" variant=card_variant %}
@@ -153,6 +148,11 @@
       {% if can_vanna %}
         {% url 'portal:external_redirect' 'vanna' as vanna_redirect_href %}
         {% include "portal/_svg_card.html" with href=vanna_redirect_href title="Vanna" subtitle="SQL 產生 / 問答" tone="cyan" icon="vanna" variant=card_variant new_tab=True %}
+      {% endif %}
+
+      {% if can_fkerp %}
+        {% url 'portal:external_redirect' 'fkerp' as fkerp_redirect_href %}
+        {% include "portal/_svg_card.html" with href=fkerp_redirect_href title="FK ERP" subtitle="CIM2000 資訊系統 / 廠別自動帶入" tone="blue" icon="erp" variant=card_variant new_tab=True %}
       {% endif %}
     </div>
 
