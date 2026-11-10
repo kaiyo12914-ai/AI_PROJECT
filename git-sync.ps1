@@ -3,6 +3,10 @@ param(
     [string]$Remote = "upstream"
 )
 
+if ($Branch -in @("go", "-go", "/go")) {
+    $Branch = "main"
+}
+
 $ErrorActionPreference = "Stop"
 
 function Fail($Message) {
